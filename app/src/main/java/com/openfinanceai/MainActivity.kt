@@ -55,7 +55,7 @@ private val Muted = Color(0xFF71818A)
 private val Page = Color(0xFFF3F7F8)
 private val Money = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
 
-private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "")
+private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "")
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0)
 
 class MainActivity : ComponentActivity() {
@@ -262,8 +262,8 @@ private fun FinanceApp() {
             if (showAdd) {
                 AddTransactionDialog(
                     onDismiss = { showAdd = false },
-                    onSave = { title, amount, isIncome, category ->
-                        transactions = listOf(Transaction(title, category, "Just now", amount, isIncome)) + transactions
+                    onSave = { title, amount, isIncome, category, date, paymentMethod, notes ->
+                        transactions = listOf(Transaction(title, category, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes)) + transactions
                         saveTransactions(context, transactions)
                         showAdd = false
                     }
@@ -1103,11 +1103,14 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
 @Composable
 private fun AddTransactionDialog(
     onDismiss: () -> Unit,
-    onSave: (String, Long, Boolean, String) -> Unit
+    onSave: (String, Long, Boolean, String, String, String, String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("Food & groceries") }
+    var date by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
+    var paymentMethod by remember { mutableStateOf("UPI") }
+    var notes by remember { mutableStateOf("") }
     var isIncome by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
 
@@ -1123,18 +1126,29 @@ private fun AddTransactionDialog(
                 OutlinedTextField(title, { title = it }, label = { Text("Description") }, singleLine = true)
                 OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text("Amount (₹)") }, singleLine = true)
                 OutlinedTextField(category, { category = it }, label = { Text("Category") }, singleLine = true)
+                OutlinedTextField(date, { date = it }, label = { Text("Date (YYYY-MM-DD)") }, singleLine = true)
+                Text("Payment method", color = Muted, fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("UPI", "Cash", "Card", "Bank").forEach { method ->
+                        FilterChip(selected = paymentMethod == method, onClick = { paymentMethod = method }, label = { Text(method) })
+                    }
+                }
+                OutlinedTextField(notes, { notes = it }, label = { Text("Notes (optional)") }, minLines = 2)
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
             }
         },
         confirmButton = {
-            TextButton(onClick = {
+            Button(onClick = {
                 val parsed = amount.toLongOrNull()
+                val validDate = runCatching { java.time.LocalDate.parse(date); true }.getOrDefault(false)
                 if (title.isBlank() || parsed == null || parsed <= 0) {
                     error = "Enter a description and valid amount."
+                } else if (!validDate) {
+                    error = "Enter the date as YYYY-MM-DD."
                 } else {
-                    onSave(title.trim(), parsed, isIncome, if (isIncome) "Income" else category.ifBlank { "Other" })
+                    onSave(title.trim(), parsed, isIncome, if (isIncome) "Income" else category.ifBlank { "Other" }, date, paymentMethod, notes.trim())
                 }
-            }) { Text("Save") }
+            }, colors = ButtonDefaults.buttonColors(containerColor = Green), modifier = Modifier.fillMaxWidth()) { Text("Save transaction") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
@@ -1160,6 +1174,8 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("source", transaction.source)
             put("notificationKey", transaction.notificationKey)
             put("captureStatus", transaction.captureStatus)
+            put("paymentMethod", transaction.paymentMethod)
+            put("notes", transaction.notes)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -1180,7 +1196,9 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optBoolean("income", false),
             item.optString("source", ""),
             item.optString("notificationKey", ""),
-            item.optString("captureStatus", "")
+            item.optString("captureStatus", ""),
+            item.optString("paymentMethod", "Not set"),
+            item.optString("notes", "")
         )
     }
 }.getOrNull()
