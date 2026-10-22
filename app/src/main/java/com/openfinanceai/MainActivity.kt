@@ -723,20 +723,72 @@ private fun InfoScreen(title: String, body: String, icon: ImageVector) {
 
 @Composable
 private fun CategoriesScreen() {
-    val categories = listOf("Food & groceries", "Housing", "Transport", "Bills & utilities", "Health", "Shopping", "Entertainment", "Education", "Loan repayment", "Salary", "Other income")
-    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+    var categories by remember { mutableStateOf(listOf(
+        "Food & groceries", "Housing", "Transport", "Bills & utilities", "Health",
+        "Shopping", "Entertainment", "Education", "Loan repayment", "Salary", "Other income"
+    )) }
+    var showAdd by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<String?>(null) }
+    var draft by remember { mutableStateOf("") }
+    var pendingDelete by remember { mutableStateOf<String?>(null) }
+    val categoryColors = listOf(Green, ExpenseRed, SavingsBlue, Color(0xFF9B6AD6), Color(0xFFE99B51))
+    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Text("Categories", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Income and expense groups", color = Muted)
-        }
-        items(categories) { category ->
-            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Label, null, tint = Green)
-                Spacer(Modifier.width(12.dp))
-                Text(category, color = Ink)
+            Text("Manage the labels used to organize your money", color = Muted)
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = { draft = ""; editing = null; showAdd = true }, modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Green)) {
+                Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Add category")
             }
         }
-        item { Text("Editing and saved custom categories are not implemented yet.", color = Muted, fontSize = 11.sp) }
+        item { InfoCard("Keep reports organized", "Use consistent category names so spending patterns and recommendations are easier to understand.", Icons.Default.Insights) }
+        items(categories, key = { it }) { category ->
+            val tint = categoryColors[(categories.indexOf(category)).mod(categoryColors.size)]
+            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp)).padding(start = 13.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(40.dp).background(tint.copy(alpha = .12f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Label, null, tint = tint)
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(category, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
+                IconButton(onClick = { draft = category; editing = category; showAdd = true }) {
+                    Icon(Icons.Default.Edit, "Edit category", tint = Green)
+                }
+                IconButton(onClick = { pendingDelete = category }) {
+                    Icon(Icons.Default.DeleteOutline, "Delete category", tint = ExpenseRed)
+                }
+            }
+        }
+        item { Text("Category changes apply to this screen in the current session. Renaming existing transaction categories and persistent custom-category storage are not yet connected.", color = Muted, fontSize = 11.sp) }
+    }
+    if (showAdd) {
+        AlertDialog(
+            onDismissRequest = { showAdd = false },
+            title = { Text(if (editing == null) "Add category" else "Edit category") },
+            text = { OutlinedTextField(draft, { draft = it }, label = { Text("Category name") }, singleLine = true) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val name = draft.trim()
+                    if (name.isNotBlank()) {
+                        categories = if (editing == null) {
+                            if (categories.any { it.equals(name, ignoreCase = true) }) categories else categories + name
+                        } else categories.map { if (it == editing) name else it }.distinctBy { it.lowercase(Locale.ROOT) }
+                        showAdd = false
+                    }
+                }) { Text("Save", color = Green) }
+            },
+            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Cancel") } }
+        )
+    }
+    pendingDelete?.let { category ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete category?") },
+            text = { Text("Remove \"$category\" from this category list? Existing transactions are not changed.") },
+            confirmButton = { TextButton(onClick = { categories = categories - category; pendingDelete = null }) { Text("Delete", color = ExpenseRed) } },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } }
+        )
     }
 }
 
