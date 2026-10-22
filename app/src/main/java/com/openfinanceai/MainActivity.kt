@@ -1,6 +1,9 @@
 package com.openfinanceai
 
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -40,6 +43,12 @@ private data class Loan(val lender: String, val balance: Long, val emi: Long, va
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9001)
+        }
+        EmiReminderReceiver.scheduleMonthly(this, "Fibe", 6200L, 5, 1005)
+        EmiReminderReceiver.scheduleMonthly(this, "KreditBee", 4800L, 8, 1008)
+        EmiReminderReceiver.scheduleMonthly(this, "Pocketly", 3200L, 10, 1010)
         setContent { FinanceApp() }
     }
 }
