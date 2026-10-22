@@ -564,7 +564,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
             Text("Settings", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
             Text("Personalize your workspace", color = Muted)
         }
-        item { InfoCard("Preferences", "Currency: Indian Rupee (₹)\nTheme: Light\nStorage: demo in memory", Icons.Default.Tune) }
+        item { InfoCard("Preferences", "Reference palette: forest green, mint, white and slate. Transactions and loans are saved locally on this device. Open Appearance to save display preferences.", Icons.Default.Tune) }
         item { Button(onClick = { onOpen("Categories") }, modifier = Modifier.fillMaxWidth()) { Text("Category management") } }
         item { OutlinedButton(onClick = { onOpen("Appearance") }, modifier = Modifier.fillMaxWidth()) { Text("Settings appearance") } }
         item { OutlinedButton(onClick = { onOpen("Backup & security") }, modifier = Modifier.fillMaxWidth()) { Text("Backup & security") } }
@@ -601,7 +601,7 @@ private fun CreditHealthScreen() {
 private fun BackupSecurityScreen() {
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Backup & Security", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold) }
-        item { InfoCard("Local data", "Demo data may reset when the app closes. Persistent encrypted storage is not connected yet.", Icons.Default.Lock) }
+        item { InfoCard("Local data", "Transactions and loans are saved in app-private local preferences and remain after app restarts on this device. Uninstalling the app or clearing its data can remove them; cloud backup is not enabled.", Icons.Default.Lock) }
         item { InfoCard("Cloud backup", "Google Drive / OneDrive backup is not connected in this build.", Icons.Default.CloudUpload) }
         item { InfoCard("Restore & export", "Restore, CSV export and scheduled backups are not implemented yet.", Icons.Default.Restore) }
         item { InfoCard("Privacy", "Do not enter banking passwords, card PINs or other secrets into this prototype.", Icons.Default.PrivacyTip) }
@@ -666,8 +666,10 @@ private fun CredSyncScreen() {
 
 @Composable
 private fun AppearanceScreen() {
-    var theme by remember { mutableStateOf("Light") }
-    var currency by remember { mutableStateOf("INR (₹)") }
+    val context = LocalContext.current
+    val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
+    var theme by remember { mutableStateOf(preferences.getString("appearance_theme", "Light") ?: "Light") }
+    var currency by remember { mutableStateOf(preferences.getString("appearance_currency", "INR (₹)") ?: "INR (₹)") }
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Settings · Appearance", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold) }
         item {
@@ -675,11 +677,11 @@ private fun AppearanceScreen() {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Theme", color = Ink, fontWeight = FontWeight.Bold)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Light", "Dark", "System").forEach { value -> FilterChip(selected = theme == value, onClick = { theme = value }, label = { Text(value) }) }
+                        listOf("Light", "Dark", "System").forEach { value -> FilterChip(selected = theme == value, onClick = { theme = value; preferences.edit().putString("appearance_theme", value).apply() }, label = { Text(value) }) }
                     }
                     Text("Currency", color = Ink, fontWeight = FontWeight.Bold)
-                    listOf("INR (₹)", "USD ($)", "EUR (€)").forEach { value -> Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = currency == value, onClick = { currency = value }); Text(value, color = Ink) } }
-                    Text("Preferences are a preview and are not saved between app launches yet.", color = Muted, fontSize = 12.sp)
+                    listOf("INR (₹)", "USD ($)", "EUR (€)").forEach { value -> Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = currency == value, onClick = { currency = value; preferences.edit().putString("appearance_currency", value).apply() }); Text(value, color = Ink) } }
+                    Text("Your theme and currency selections are saved on this device. The reference palette remains forest green, mint, white and slate; dark-theme rendering and currency-wide amount conversion are not yet applied across every screen.", color = Muted, fontSize = 12.sp)
                 }
             }
         }
@@ -781,7 +783,7 @@ private fun AddTransactionDialog(
 
 
 private fun transactionKey(transaction: Transaction): String =
-    "${transaction.title.trim().lowercase(Locale.ROOT)}|${transaction.category.trim().lowercase(Locale.ROOT)}|${transaction.date.trim().lowercase(Locale.ROOT)}|${transaction.amount}|${transaction.income}"
+    "${transaction.title.trim().replace(Regex("\\\\s+"), " ").lowercase(Locale.ROOT)}|${transaction.date.trim().lowercase(Locale.ROOT)}|${transaction.amount}|${transaction.income}"
 
 private fun saveTransactions(context: android.content.Context, transactions: List<Transaction>) {
     val array = JSONArray()
