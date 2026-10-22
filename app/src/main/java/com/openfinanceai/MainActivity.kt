@@ -135,6 +135,9 @@ private fun FinanceApp() {
     }
     val income = transactions.filter { it.income }.sumOf { it.amount }
     val expenses = transactions.filterNot { it.income }.sumOf { it.amount }
+    val selectedMonthTransactions = transactions.filter { transactionBelongsToMonth(it, selectedOverviewMonth) }
+    val selectedMonthIncome = selectedMonthTransactions.filter { it.income }.sumOf { it.amount }
+    val selectedMonthExpenses = selectedMonthTransactions.filterNot { it.income }.sumOf { it.amount }
 
     MaterialTheme(colorScheme = lightColorScheme(primary = Green, background = Page, surface = Color.White, onSurface = Ink)) {
         Scaffold(
@@ -183,9 +186,9 @@ private fun FinanceApp() {
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 when (tab) {
-                    "Home" -> HomeScreen(income, expenses, transactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = "Activity" }, { showAdd = true }, { tab = it }, { transactionForActions = it })
+                    "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = "Activity" }, { showAdd = true }, { tab = it }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
-                    "Reports" -> ReportsScreen(income, expenses, transactions, selectedOverviewMonth, { selectedOverviewMonth = it })
+                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it })
                     "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" }, { loanForActions = it })
                     "Coach" -> CoachScreen(income, expenses, loans.sumOf { it.emi })
                     "Calendar" -> CalendarScreen(loans, transactions)
@@ -278,6 +281,7 @@ private fun HomeScreen(
     income: Long,
     expenses: Long,
     transactions: List<Transaction>,
+    monthTransactions: List<Transaction>,
     selectedMonth: YearMonth,
     onMonthChange: (YearMonth) -> Unit,
     onAll: () -> Unit,
@@ -338,7 +342,7 @@ private fun HomeScreen(
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Spending this month", color = Muted)
+                    Text("Spending in " + selectedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH), color = Muted)
                     Text(Money.format(expenses), fontSize = 25.sp, fontWeight = FontWeight.Bold, color = Ink)
                     LinearProgressIndicator(
                         progress = { if (income > 0) (expenses.toFloat() / income).coerceIn(0f, 1f) else 0f },
@@ -352,7 +356,7 @@ private fun HomeScreen(
             }
         }
         item { SectionHeading("Recent transactions", "See all", onAll) }
-        items(transactions.take(4)) { transaction -> TransactionRow(transaction, onLongPress = { onTransactionLongPress(transaction) }) }
+        items((monthTransactions.ifEmpty { transactions }).take(4)) { transaction -> TransactionRow(transaction, onLongPress = { onTransactionLongPress(transaction) }) }
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFEEF2FF)),
@@ -488,7 +492,7 @@ private fun ReportsScreen(
                 }
                 IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }) { Icon(Icons.Default.ChevronRight, "Next month") }
             }
-            Text("Report totals currently use all saved transactions; month-specific filtering needs normalized transaction dates.", color = Muted, fontSize = 11.sp)
+            Text("Showing transactions dated within the selected month. Older entries without a recognizable date are excluded.", color = Muted, fontSize = 11.sp)
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1154,6 +1158,28 @@ private fun AddTransactionDialog(
     )
 }
 
+
+
+private fun transactionBelongsToMonth(transaction: Transaction, month: YearMonth, today: java.time.LocalDate = java.time.LocalDate.now()): Boolean {
+    val raw = transaction.date.trim()
+    val date = runCatching {
+        when {
+            raw.equals("today", ignoreCase = true) || raw.equals("just now", ignoreCase = true) -> today
+            raw.equals("yesterday", ignoreCase = true) -> today.minusDays(1)
+            Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(raw) -> java.time.LocalDate.parse(raw)
+            Regex("^\\d{1,2} [A-Za-z]{3,9}$").matches(raw) -> {
+                val parsed = java.time.format.DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("d MMM").toFormatter(Locale.ENGLISH).parse(raw)
+                java.time.LocalDate.of(today.year, parsed.get(java.time.temporal.ChronoField.MONTH_OF_YEAR), parsed.get(java.time.temporal.ChronoField.DAY_OF_MONTH))
+            }
+            Regex("^[A-Za-z]{3,9} \\d{1,2}$").matches(raw) -> {
+                val parsed = java.time.format.DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("MMM d").toFormatter(Locale.ENGLISH).parse(raw)
+                java.time.LocalDate.of(today.year, parsed.get(java.time.temporal.ChronoField.MONTH_OF_YEAR), parsed.get(java.time.temporal.ChronoField.DAY_OF_MONTH))
+            }
+            else -> null
+        }
+    }.getOrNull() ?: return false
+    return YearMonth.from(date) == month
+}
 
 private fun transactionKey(transaction: Transaction): String {
     fun normalize(value: String): String = value.trim()
