@@ -91,11 +91,13 @@ private fun FinanceApp() {
             }
         }
     }
-    val loans = listOf(
-        Loan("Fibe", 31000, 6200, "5 Nov"),
-        Loan("KreditBee", 24000, 4800, "8 Nov"),
-        Loan("Pocketly", 12800, 3200, "10 Nov")
-    )
+    var loans by remember {
+        mutableStateOf(loadLoans(context) ?: listOf(
+            Loan("Fibe", 31000, 6200, "5 Nov"),
+            Loan("KreditBee", 24000, 4800, "8 Nov"),
+            Loan("Pocketly", 12800, 3200, "10 Nov")
+        ).also { saveLoans(context, it) })
+    }
     val income = transactions.filter { it.income }.sumOf { it.amount }
     val expenses = transactions.filterNot { it.income }.sumOf { it.amount }
 
@@ -149,7 +151,7 @@ private fun FinanceApp() {
                     "Home" -> HomeScreen(income, expenses, transactions, { tab = "Activity" }, { showAdd = true }, { tab = it })
                     "Activity" -> ActivityScreen(transactions)
                     "Reports" -> ReportsScreen(income, expenses, transactions)
-                    "Loans" -> LoansScreen(loans)
+                    "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { tab = "Loan details" })
                     "Coach" -> CoachScreen(income, expenses, loans.sumOf { it.emi })
                     "Calendar" -> CalendarScreen(loans, transactions)
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance })
@@ -165,7 +167,7 @@ private fun FinanceApp() {
                     })
                     "Appearance" -> AppearanceScreen()
                     "Loan details" -> LoanDetailsScreen(loans.first())
-                    "Add loan" -> AddLoanScreen()
+                    "Add loan" -> AddLoanScreen { lender, principal, rate, emi ->\n                        val newLoan = Loan(lender, principal, emi, "Set due date")\n                        loans = listOf(newLoan) + loans\n                        saveLoans(context, loans)\n                        tab = "Loans"\n                    }
                     else -> SettingsScreen { tab = it }
                 }
             }
@@ -367,11 +369,12 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun LoansScreen(loans: List<Loan>) {
+private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: () -> Unit) {
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
             Text("Loans & EMIs", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
             Text("Keep every repayment in view", color = Muted)
+            Button(onClick = onAddLoan, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Add loan") }
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Green), shape = RoundedCornerShape(20.dp)) {
@@ -383,7 +386,7 @@ private fun LoansScreen(loans: List<Loan>) {
             }
         }
         items(loans) { loan ->
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Card(modifier = Modifier.clickable { onDetails() }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AccountBalance, null, tint = Green)
@@ -397,7 +400,7 @@ private fun LoansScreen(loans: List<Loan>) {
                 }
             }
         }
-        item { Text("Sample values for UI demonstration. Replace them with your actual loan balances and EMI details.", color = Muted, fontSize = 11.sp) }
+        item { Text("Tap a loan to open details and repayment information.", color = Muted, fontSize = 11.sp) }
     }
 }
 
@@ -688,7 +691,7 @@ private fun LoanDetailsScreen(loan: Loan) {
     }
 }
 @Composable
-private fun AddLoanScreen() {
+private fun AddLoanScreen(onSave: (String, Long, Double, Long) -> Unit) {
     var lender by remember { mutableStateOf("") }
     var principal by remember { mutableStateOf("") }
     var rate by remember { mutableStateOf("12") }
@@ -703,8 +706,16 @@ private fun AddLoanScreen() {
                     OutlinedTextField(principal, { principal = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Principal amount (₹)") }, singleLine = true)
                     OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' } }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true)
                     OutlinedTextField(emi, { emi = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true)
-                    Button(onClick = { saved = lender.isNotBlank() && (principal.toLongOrNull() ?: 0L) > 0 }, modifier = Modifier.fillMaxWidth()) { Text("Save Loan") }
-                    if (saved) Text("Loan form validated. Persistent saving is not connected yet.", color = IncomeGreen)
+                    Button(onClick = {
+                        val amount = principal.toLongOrNull() ?: 0L
+                        val monthly = emi.toLongOrNull() ?: 0L
+                        val annualRate = rate.toDoubleOrNull() ?: 0.0
+                        if (lender.isNotBlank() && amount > 0 && monthly > 0 && annualRate >= 0) {
+                            onSave(lender.trim(), amount, annualRate, monthly)
+                            saved = true
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Save Loan") }
+                    if (saved) Text("Loan saved on this device.", color = IncomeGreen)
                 }
             }
         }
@@ -870,3 +881,28 @@ private fun ImportTransactionsScreen(
         item { Text("Privacy: the selected file is read on this device. Imported transactions are stored locally in app preferences. Review your statement before importing; bank CSV formats can vary.", color = Muted, fontSize = 12.sp) }
     }
 }
+
+
+private fun saveLoans(context: android.content.Context, loans: List<Loan>) {
+    val array = JSONArray()
+    loans.forEach { loan ->
+        array.put(JSONObject().apply {
+            put("lender", loan.lender)
+            put("balance", loan.balance)
+            put("emi", loan.emi)
+            put("due", loan.due)
+        })
+    }
+    context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+        .edit().putString("loans", array.toString()).apply()
+}
+
+private fun loadLoans(context: android.content.Context): List<Loan>? = runCatching {
+    val raw = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+        .getString("loans", null) ?: return null
+    val array = JSONArray(raw)
+    (0 until array.length()).map { index ->
+        val item = array.getJSONObject(index)
+        Loan(item.getString("lender"), item.getLong("balance"), item.getLong("emi"), item.optString("due", "Not set"))
+    }
+}.getOrNull()
