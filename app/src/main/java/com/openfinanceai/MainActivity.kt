@@ -1178,7 +1178,7 @@ private fun CreditHealthScreen() {
                         else -> "Needs attention"
                     }, color = Green, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     Button(onClick = { scoreDraft = scoreText; showScoreEditor = true }, modifier = Modifier.fillMaxWidth()) { Text(if (enteredScore == null) "Enter score from your report" else "Update reported score") }
-                    Text("This is a score you enter from your own credit report, saved only on this device. It is not fetched or verified by CIBIL.", color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
+                    Text("User-reported only. This score is entered from your own credit report and saved on this device; it is not fetched from or verified by TransUnion CIBIL.", color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
                     if (scoreMessage.isNotBlank()) Text(scoreMessage, color = Green, fontSize = 12.sp)
                 }
             }
@@ -1345,6 +1345,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
             InfoCard("EMI may not cover interest", "At the entered interest rate, the EMI is not greater than the estimated monthly interest. The balance may not reduce unless the EMI or rate changes.", Icons.Default.Warning)
         }
         item { SectionHeading("Estimated EMI breakdown", "Next 6 months") }
+        item { Text("Schedule status is unconfirmed until you compare each installment with your lender statement. This screen does not automatically mark EMIs as paid, due or overdue.", color = Muted, fontSize = 11.sp) }
         item {
             Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(12.dp)).padding(12.dp)) {
                 Text("Payment", Modifier.weight(1f), color = Muted, fontSize = 11.sp)
@@ -1571,24 +1572,30 @@ private fun AddTransactionDialog(
 
 private fun transactionDateOrNull(transaction: Transaction, today: java.time.LocalDate = java.time.LocalDate.now()): java.time.LocalDate? {
     val raw = transaction.date.trim()
+    if (raw.isBlank()) return null
     return runCatching {
         when {
             raw.equals("today", ignoreCase = true) || raw.equals("just now", ignoreCase = true) -> today
             raw.equals("yesterday", ignoreCase = true) -> today.minusDays(1)
-            Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(raw) -> java.time.LocalDate.parse(raw)
-            Regex("^\\d{1,2} [A-Za-z]{3,9}$").matches(raw) -> {
-                val parsed = java.time.format.DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("d MMM").toFormatter(Locale.ENGLISH).parse(raw)
-                java.time.LocalDate.of(today.year, parsed.get(java.time.temporal.ChronoField.MONTH_OF_YEAR), parsed.get(java.time.temporal.ChronoField.DAY_OF_MONTH))
+            Regex("^\\d{4}-\\d{2}-\\d{2}(?:[T ].*)?$").matches(raw) -> java.time.LocalDate.parse(raw.take(10))
+            Regex("^\\d{4}/\\d{1,2}/\\d{1,2}$").matches(raw) -> { val p = raw.split("/"); java.time.LocalDate.of(p[0].toInt(), p[1].toInt(), p[2].toInt()) }
+            Regex("^\\d{1,2}[/-]\\d{1,2}[/-]\\d{4}$").matches(raw) -> { val p = raw.split(Regex("[/-]")); java.time.LocalDate.of(p[2].toInt(), p[1].toInt(), p[0].toInt()) }
+            Regex("^\\d{1,2} [A-Za-z]{3,9}(?: \\d{4})?$").matches(raw) -> {
+                val p = raw.split(" "); val hasYear = p.size == 3; val monthPattern = if (p[1].length > 3) "MMMM" else "MMM"
+                val fmt = java.time.format.DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("d $monthPattern" + if (hasYear) " yyyy" else "").toFormatter(Locale.ENGLISH)
+                val parsed = fmt.parse(raw); val year = if (hasYear) parsed.get(java.time.temporal.ChronoField.YEAR) else today.year
+                java.time.LocalDate.of(year, parsed.get(java.time.temporal.ChronoField.MONTH_OF_YEAR), parsed.get(java.time.temporal.ChronoField.DAY_OF_MONTH))
             }
-            Regex("^[A-Za-z]{3,9} \\d{1,2}$").matches(raw) -> {
-                val parsed = java.time.format.DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("MMM d").toFormatter(Locale.ENGLISH).parse(raw)
-                java.time.LocalDate.of(today.year, parsed.get(java.time.temporal.ChronoField.MONTH_OF_YEAR), parsed.get(java.time.temporal.ChronoField.DAY_OF_MONTH))
+            Regex("^[A-Za-z]{3,9} \\d{1,2}(?:,? \\d{4})?$").matches(raw) -> {
+                val normalized = raw.replace(",", ""); val p = normalized.split(" "); val hasYear = p.size == 3; val monthPattern = if (p[0].length > 3) "MMMM" else "MMM"
+                val fmt = java.time.format.DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("$monthPattern d" + if (hasYear) " yyyy" else "").toFormatter(Locale.ENGLISH)
+                val parsed = fmt.parse(normalized); val year = if (hasYear) parsed.get(java.time.temporal.ChronoField.YEAR) else today.year
+                java.time.LocalDate.of(year, parsed.get(java.time.temporal.ChronoField.MONTH_OF_YEAR), parsed.get(java.time.temporal.ChronoField.DAY_OF_MONTH))
             }
             else -> null
         }
     }.getOrNull()
 }
-
 private fun transactionBelongsToMonth(transaction: Transaction, month: YearMonth, today: java.time.LocalDate = java.time.LocalDate.now()): Boolean =
     transactionDateOrNull(transaction, today)?.let { YearMonth.from(it) == month } ?: false
 
