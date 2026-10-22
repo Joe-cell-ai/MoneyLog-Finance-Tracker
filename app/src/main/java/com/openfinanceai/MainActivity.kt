@@ -1235,12 +1235,16 @@ private fun AddTransactionDialog(
     var title by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     val context = LocalContext.current
+    val defaultCategories = listOf("Food & groceries", "Housing", "Transport", "Bills & utilities", "Health", "Shopping", "Entertainment", "Education", "Loan repayment", "Salary", "Other income")
     val savedCategories = remember {
         runCatching {
             val raw = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE).getString("custom_categories", null)
-            if (raw.isNullOrBlank()) listOf("Food & groceries", "Housing", "Transport", "Bills & utilities", "Health", "Shopping", "Entertainment", "Education", "Loan repayment", "Salary", "Other income")
-            else (0 until JSONArray(raw).length()).map { JSONArray(raw).getString(it) }
-        }.getOrDefault(listOf("Food & groceries", "Housing", "Transport", "Bills & utilities", "Health", "Shopping", "Entertainment", "Education", "Loan repayment", "Salary", "Other income"))
+            if (raw.isNullOrBlank()) defaultCategories
+            else {
+                val array = JSONArray(raw)
+                (0 until array.length()).map { array.getString(it) }.filter { it.isNotBlank() }.ifEmpty { defaultCategories }
+            }
+        }.getOrDefault(defaultCategories)
     }
     var category by remember { mutableStateOf(savedCategories.firstOrNull() ?: "Other") }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
