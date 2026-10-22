@@ -43,7 +43,7 @@ private val Page = Color(0xFFF3F7F8)
 private val Money = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
 
 private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean)
-private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String)
+private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,6 +72,7 @@ private fun FinanceApp() {
             Transaction("Coffee shop", "Food & drink", "20 Oct", 240, false)
         ).also { saveTransactions(context, it) })
     }
+    var selectedLoan by remember { mutableStateOf<Loan?>(null) }
     var importMessage by remember { mutableStateOf("") }
     var importedPreview by remember { mutableStateOf<List<Transaction>>(emptyList()) }
     val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -151,7 +152,7 @@ private fun FinanceApp() {
                     "Home" -> HomeScreen(income, expenses, transactions, { tab = "Activity" }, { showAdd = true }, { tab = it })
                     "Activity" -> ActivityScreen(transactions)
                     "Reports" -> ReportsScreen(income, expenses, transactions)
-                    "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { tab = "Loan details" })
+                    "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" })
                     "Coach" -> CoachScreen(income, expenses, loans.sumOf { it.emi })
                     "Calendar" -> CalendarScreen(loans, transactions)
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance })
@@ -166,9 +167,9 @@ private fun FinanceApp() {
                         importedPreview = emptyList()
                     })
                     "Appearance" -> AppearanceScreen()
-                    "Loan details" -> LoanDetailsScreen(loans.first())
+                    "Loan details" -> selectedLoan?.let { LoanDetailsScreen(it) } ?: loans.firstOrNull()?.let { LoanDetailsScreen(it) } ?: EmptyLoansScreen { tab = "Add loan" }
                     "Add loan" -> AddLoanScreen { lender, principal, rate, emi ->
-                        val newLoan = Loan(lender, principal, emi, "Set due date")
+                        val newLoan = Loan(lender, principal, emi, "Set due date", rate)
                         loans = listOf(newLoan) + loans
                         saveLoans(context, loans)
                         tab = "Loans"
@@ -374,7 +375,7 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: () -> Unit) {
+private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Loan) -> Unit) {
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
             Text("Loans & EMIs", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
@@ -391,7 +392,7 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: () 
             }
         }
         items(loans) { loan ->
-            Card(modifier = Modifier.clickable { onDetails() }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Card(modifier = Modifier.clickable { onDetails(loan) }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AccountBalance, null, tint = Green)
@@ -690,11 +691,23 @@ private fun LoanDetailsScreen(loan: Loan) {
         item { Text("Loan Details & EMI Schedule", fontSize = 25.sp, color = Ink, fontWeight = FontWeight.Bold) }
         item { MetricCard("Outstanding · ${loan.lender}", Money.format(loan.balance), Modifier.fillMaxWidth()) }
         item { MetricCard("Monthly EMI", Money.format(loan.emi), Modifier.fillMaxWidth()) }
+        item { MetricCard("Annual interest rate", "${loan.annualRate}%", Modifier.fillMaxWidth()) }
         item { InfoCard("Next payment", "Next due: ${loan.due}. Schedule is illustrative; verify dates and amounts from your lender statement.", Icons.Default.CalendarMonth) }
         item { SectionHeading("Upcoming EMIs", "Schedule") }
         items((0..5).toList()) { index -> Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(13.dp)).padding(14.dp)) { Text(if (index == 0) loan.due else "Month ${index + 1}", Modifier.weight(1f), color = Ink); Text(Money.format(loan.emi), color = if (index == 0) ExpenseRed else Ink, fontWeight = FontWeight.Bold) } }
     }
 }
+@Composable
+private fun EmptyLoansScreen(onAddLoan: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("No loans tracked yet", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Ink)
+        Spacer(Modifier.height(12.dp))
+        Text("Add a loan to start tracking outstanding balance and monthly EMIs.", color = Muted)
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = onAddLoan) { Text("Add loan") }
+    }
+}
+
 @Composable
 private fun AddLoanScreen(onSave: (String, Long, Double, Long) -> Unit) {
     var lender by remember { mutableStateOf("") }
@@ -896,6 +909,7 @@ private fun saveLoans(context: android.content.Context, loans: List<Loan>) {
             put("balance", loan.balance)
             put("emi", loan.emi)
             put("due", loan.due)
+            put("annualRate", loan.annualRate)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -908,6 +922,6 @@ private fun loadLoans(context: android.content.Context): List<Loan>? = runCatchi
     val array = JSONArray(raw)
     (0 until array.length()).map { index ->
         val item = array.getJSONObject(index)
-        Loan(item.getString("lender"), item.getLong("balance"), item.getLong("emi"), item.optString("due", "Not set"))
+        Loan(item.getString("lender"), item.getLong("balance"), item.getLong("emi"), item.optString("due", "Not set"), item.optDouble("annualRate", 0.0))
     }
 }.getOrNull()
