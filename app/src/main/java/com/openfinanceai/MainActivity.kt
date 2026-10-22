@@ -529,33 +529,83 @@ private fun CoachScreen(income: Long, expenses: Long, emi: Long) {
 
 @Composable
 private fun CalendarScreen(loans: List<Loan>, transactions: List<Transaction>) {
+    var visibleMonth by remember { mutableStateOf(java.time.YearMonth.now()) }
+    val today = java.time.LocalDate.now()
+    val firstDayOffset = visibleMonth.atDay(1).dayOfWeek.value % 7
+    val totalCells = ((firstDayOffset + visibleMonth.lengthOfMonth() + 6) / 7) * 7
+    val cells = (0 until totalCells).map { index ->
+        val day = index - firstDayOffset + 1
+        if (day in 1..visibleMonth.lengthOfMonth()) day else null
+    }
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("Financial calendar", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("October 2026 · Upcoming reminders", color = Muted)
+            Text("EMI dates and money activity", color = Muted)
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Text("M      T      W      T      F      S      S", color = Muted)
-                    (1..31 step 7).forEach { start ->
-                        Text((start..(start + 6).coerceAtMost(31)).joinToString("      "), color = Ink)
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { visibleMonth = visibleMonth.minusMonths(1) }) {
+                            Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month", tint = Green)
+                        }
+                        Text(visibleMonth.month.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault()) + " " + visibleMonth.year,
+                            Modifier.weight(1f), textAlign = TextAlign.Center, color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        IconButton(onClick = { visibleMonth = visibleMonth.plusMonths(1) }) {
+                            Icon(Icons.Default.ChevronRight, contentDescription = "Next month", tint = Green)
+                        }
                     }
+                    Row(Modifier.fillMaxWidth()) {
+                        listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat").forEach { name ->
+                            Box(Modifier.weight(1f).height(30.dp), contentAlignment = Alignment.Center) {
+                                Text(name, color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                    cells.chunked(7).forEach { week ->
+                        Row(Modifier.fillMaxWidth()) {
+                            week.forEach { day ->
+                                Box(Modifier.weight(1f).height(43.dp).padding(2.dp)
+                                    .background(
+                                        when {
+                                            day == null -> Color.Transparent
+                                            visibleMonth.atDay(day) == today -> Green
+                                            else -> Page
+                                        }, RoundedCornerShape(10.dp)
+                                    ), contentAlignment = Alignment.Center) {
+                                    if (day != null) {
+                                        Text(day.toString(), color = if (visibleMonth.atDay(day) == today) Color.White else Ink,
+                                            fontSize = 13.sp, fontWeight = if (visibleMonth.atDay(day) == today) FontWeight.Bold else FontWeight.Normal)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Text("Weeks and dates are aligned to their correct weekdays. Use the arrows to change month.",
+                        color = Muted, fontSize = 11.sp)
                 }
             }
         }
         item { SectionHeading("Upcoming EMI reminders", "Loans") }
-        items(loans) { loan ->
-            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(14.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text(loan.lender, color = Ink, fontWeight = FontWeight.Bold)
-                    Text("Due ${loan.due}", color = Muted, fontSize = 12.sp)
+        if (loans.isEmpty()) {
+            item { Text("No loans added yet. Add a loan to see EMI reminders here.", color = Muted) }
+        } else {
+            items(loans) { loan ->
+                Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(loan.lender, color = Ink, fontWeight = FontWeight.Bold)
+                        Text("Due ${loan.due}", color = Muted, fontSize = 12.sp)
+                    }
+                    Text(Money.format(loan.emi), color = Ink, fontWeight = FontWeight.Bold)
                 }
-                Text(Money.format(loan.emi), color = Ink, fontWeight = FontWeight.Bold)
             }
         }
         item { SectionHeading("Recent transactions", "") }
-        items(transactions.take(5)) { TransactionRow(it) }
+        if (transactions.isEmpty()) {
+            item { Text("Your recent transactions will appear here.", color = Muted) }
+        } else {
+            items(transactions.take(5)) { TransactionRow(it) }
+        }
     }
 }
 
