@@ -1016,7 +1016,14 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
 
 @Composable
 private fun CreditHealthScreen() {
+    val context = LocalContext.current
+    val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
+    var scoreText by remember { mutableStateOf(preferences.getInt("user_reported_credit_score", 0).takeIf { it in 300..900 }?.toString() ?: "") }
+    var scoreDraft by remember { mutableStateOf(scoreText) }
+    var showScoreEditor by remember { mutableStateOf(false) }
+    var scoreMessage by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf("Credit score") }
+    val enteredScore = scoreText.toIntOrNull()?.takeIf { it in 300..900 }
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("CIBIL & Credit Health", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold) }
         item {
@@ -1033,22 +1040,29 @@ private fun CreditHealthScreen() {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text("Illustrative score preview", color = Muted, fontSize = 13.sp)
+                    Text("Your reported credit score", color = Muted, fontSize = 13.sp)
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(154.dp)) {
                         CircularProgressIndicator(
-                            progress = { 720f / 900f },
+                            progress = { (enteredScore ?: 0).toFloat() / 900f },
                             modifier = Modifier.fillMaxSize(),
                             color = Green,
                             trackColor = Mint,
                             strokeWidth = 11.dp
                         )
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("720", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = Ink)
+                            Text(enteredScore?.toString() ?: "—", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = Ink)
                             Text("of 900", color = Muted, fontSize = 12.sp)
                         }
                     }
-                    Text("Good · Sample only", color = Green, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Text("This is a demonstration value, not your actual CIBIL score. No credit bureau is connected.", color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
+                    Text(if (enteredScore == null) "No score entered" else when {
+                        enteredScore >= 750 -> "Strong reported score"
+                        enteredScore >= 700 -> "Good reported score"
+                        enteredScore >= 650 -> "Fair reported score"
+                        else -> "Needs attention"
+                    }, color = Green, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Button(onClick = { scoreDraft = scoreText; showScoreEditor = true }, modifier = Modifier.fillMaxWidth()) { Text(if (enteredScore == null) "Enter score from your report" else "Update reported score") }
+                    Text("This is a score you enter from your own credit report, saved only on this device. It is not fetched or verified by CIBIL.", color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
+                    if (scoreMessage.isNotBlank()) Text(scoreMessage, color = Green, fontSize = 12.sp)
                 }
             }
             item { InfoCard("What affects your score?", "Repayment history, credit utilisation, length of credit history, credit mix and recent enquiries can influence a credit score. This app cannot assess your actual bureau factors without a verified report.", Icons.Default.Insights) }
@@ -1059,6 +1073,38 @@ private fun CreditHealthScreen() {
             item { InfoCard("Avoid unnecessary applications", "Multiple loan or card applications in a short period can create hard enquiries. Compare total cost and fees before applying.", Icons.Default.Rule) }
             item { InfoCard("Review your report", "Check the official report for accounts you do not recognize, incorrect late payments, and outdated balances. Raise a dispute with the bureau/lender if needed.", Icons.Default.FactCheck) }
         }
+    }
+    if (showScoreEditor) {
+        AlertDialog(
+            onDismissRequest = { showScoreEditor = false },
+            title = { Text("Enter reported credit score") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Enter the score shown on your latest credit report (300–900).", color = Muted, fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = scoreDraft,
+                        onValueChange = { value -> scoreDraft = value.filter { it.isDigit() }.take(3) },
+                        label = { Text("Credit score") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val parsed = scoreDraft.toIntOrNull()
+                    if (parsed != null && parsed in 300..900) {
+                        preferences.edit().putInt("user_reported_credit_score", parsed).apply()
+                        scoreText = parsed.toString()
+                        scoreMessage = "Score saved on this device."
+                        showScoreEditor = false
+                    } else {
+                        scoreMessage = "Enter a whole-number score from 300 to 900."
+                    }
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { showScoreEditor = false }) { Text("Cancel") } }
+        )
     }
 }
 @Composable
