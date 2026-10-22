@@ -179,7 +179,7 @@ private fun FinanceApp() {
                     "Credit health" -> CreditHealthScreen()
                     "Categories" -> CategoriesScreen()
                     "Backup & security" -> BackupSecurityScreen()
-                    "CRED sync" -> CredSyncScreen()
+                    "CRED sync", "Live payment tracking" -> CredSyncScreen()
                     "Import transactions" -> ImportTransactionsScreen(importMessage, importedPreview.size, { csvPicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) }, {
                         transactions = (importedPreview + transactions).distinctBy { transactionKey(it) }
                         saveTransactions(context, transactions)
@@ -588,7 +588,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
         item { Button(onClick = { onOpen("Categories") }, modifier = Modifier.fillMaxWidth()) { Text("Category management") } }
         item { OutlinedButton(onClick = { onOpen("Appearance") }, modifier = Modifier.fillMaxWidth()) { Text("Settings appearance") } }
         item { OutlinedButton(onClick = { onOpen("Backup & security") }, modifier = Modifier.fillMaxWidth()) { Text("Backup & security") } }
-        item { OutlinedButton(onClick = { onOpen("CRED sync") }, modifier = Modifier.fillMaxWidth()) { Text("CRED transaction sync") } }
+        item { OutlinedButton(onClick = { onOpen("CRED sync") }, modifier = Modifier.fillMaxWidth()) { Text("Live payment tracking") } }
         item { OutlinedButton(onClick = { onOpen("Import transactions") }, modifier = Modifier.fillMaxWidth()) { Text("Import bank CSV") } }
         item { OutlinedButton(onClick = { onOpen("Credit health") }, modifier = Modifier.fillMaxWidth()) { Text("CIBIL & credit health") } }
         item { OutlinedButton(onClick = { onOpen("Loan details") }, modifier = Modifier.fillMaxWidth()) { Text("Loan details & EMI schedule") } }
