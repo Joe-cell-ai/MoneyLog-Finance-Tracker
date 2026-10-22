@@ -24,11 +24,14 @@ import androidx.compose.ui.unit.sp
 import java.text.NumberFormat
 import java.util.Locale
 
-private val Green = Color(0xFF236B4D)
-private val Mint = Color(0xFFE4F3E9)
-private val Ink = Color(0xFF14221D)
-private val Muted = Color(0xFF718078)
-private val Page = Color(0xFFF6F8F5)
+private val Green = Color(0xFF087F5B)
+private val Mint = Color(0xFFE0F5EC)
+private val IncomeGreen = Color(0xFF159B72)
+private val ExpenseRed = Color(0xFFE85D68)
+private val SavingsBlue = Color(0xFF2699D6)
+private val Ink = Color(0xFF172A33)
+private val Muted = Color(0xFF71818A)
+private val Page = Color(0xFFF3F7F8)
 private val Money = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
 
 private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean)
@@ -118,9 +121,12 @@ private fun FinanceApp() {
                     "Coach" -> CoachScreen(income, expenses, loans.sumOf { it.emi })
                     "Calendar" -> CalendarScreen(loans, transactions)
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance })
-                    "Credit health" -> InfoScreen("Credit health", "No credit bureau score is connected. Check your official credit report, pay EMIs on time, and review unfamiliar accounts.", Icons.Default.VerifiedUser)
+                    "Credit health" -> CreditHealthScreen()
                     "Categories" -> CategoriesScreen()
-                    "Backup & security" -> InfoScreen("Backup & security", "This prototype keeps demo data in memory only. Encrypted backup, restore and CSV import/export are not implemented yet. Do not use it as your only financial record.", Icons.Default.Security)
+                    "Backup & security" -> BackupSecurityScreen()
+                    "Appearance" -> AppearanceScreen()
+                    "Loan details" -> LoanDetailsScreen(loans.first())
+                    "Add loan" -> AddLoanScreen()
                     else -> SettingsScreen { tab = it }
                 }
             }
@@ -495,6 +501,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
         "Calendar" to Icons.Default.CalendarMonth,
         "Insights" to Icons.Default.Insights,
         "Credit health" to Icons.Default.Speed,
+        "Appearance" to Icons.Default.Palette,
         "Backup & security" to Icons.Default.Security
     )
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
