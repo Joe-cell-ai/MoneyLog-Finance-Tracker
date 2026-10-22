@@ -643,10 +643,18 @@ private fun CoachScreen(income: Long, expenses: Long, emi: Long) {
         }
         item {
             Button(onClick = {
-                answer = if (income == 0L) {
-                    "Start by recording take-home income, essential bills and loan EMIs."
-                } else {
-                    "After tracked expenses and EMIs, your estimated remaining amount is ${Money.format(income - expenses - emi)}. Review recurring categories, keep minimum payments current, and compare loan APRs and foreclosure charges before extra repayment."
+                val remaining = income - expenses - emi
+                val topic = question.trim().lowercase()
+                answer = when {
+                    income <= 0L -> "Start by recording your monthly take-home income, essential expenses and loan EMIs. Once those are tracked, this coach can calculate a more useful monthly estimate."
+                    topic.contains("loan") || topic.contains("emi") || topic.contains("interest") || topic.contains("debt") ->
+                        "Your tracked monthly EMI total is ${Money.format(emi)} and your estimated amount after expenses and EMIs is ${Money.format(remaining)}. Compare each loan's APR, remaining tenure and foreclosure charges. Keep required payments current and direct extra repayment only after checking fees and maintaining an emergency buffer."
+                    topic.contains("save") || topic.contains("saving") || topic.contains("budget") ->
+                        "Your tracked income is ${Money.format(income)}, expenses are ${Money.format(expenses)}, and EMIs are ${Money.format(emi)}. Estimated monthly remainder: ${Money.format(remaining)}. Set a realistic savings target from this remainder, reserve essential bills first, and review the largest spending categories weekly."
+                    topic.contains("expense") || topic.contains("spend") || topic.contains("category") || topic.contains("cut") ->
+                        "Your tracked expenses total ${Money.format(expenses)} and EMIs total ${Money.format(emi)} against income of ${Money.format(income)}. Estimated remainder: ${Money.format(remaining)}. Review category totals for flexible spending first; avoid cutting essential healthcare, housing or minimum debt payments."
+                    else ->
+                        "Your tracked income is ${Money.format(income)}, expenses are ${Money.format(expenses)}, and EMIs are ${Money.format(emi)}. Estimated monthly remainder: ${Money.format(remaining)}. Record transactions consistently, review your monthly report, and keep an emergency buffer before making extra loan payments."
                 }
             }, modifier = Modifier.fillMaxWidth()) { Text("Get guidance") }
         }
@@ -1218,6 +1226,7 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddTransactionDialog(
     onDismiss: () -> Unit,
