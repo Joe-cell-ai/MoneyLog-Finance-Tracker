@@ -37,6 +37,7 @@ class PaymentNotificationListener : NotificationListenerService() {
         val titleLine = lines.firstOrNull().orEmpty()
         val source = when {
             packageName.contains("dreamplug", true) || titleLine.contains("CRED", true) -> "CRED"
+            packageName.contains("icici", true) || titleLine.contains("iMobile", true) || titleLine.contains("ICICI", true) -> "ICICI iMobile"
             packageName.contains("paisa", true) || titleLine.contains("Google Pay", true) -> "Google Pay"
             packageName.contains("phonepe", true) || titleLine.contains("PhonePe", true) -> "PhonePe"
             packageName.contains("paytm", true) || titleLine.contains("Paytm", true) -> "Paytm"
