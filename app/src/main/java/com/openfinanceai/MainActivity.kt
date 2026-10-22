@@ -6,6 +6,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import org.json.JSONArray
+import org.json.JSONObject
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -57,16 +62,34 @@ class MainActivity : ComponentActivity() {
 private fun FinanceApp() {
     var tab by remember { mutableStateOf("Home") }
     var showAdd by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     var transactions by remember {
-        mutableStateOf(
-            listOf(
-                Transaction("Monthly salary", "Income", "Today", 65000, true),
-                Transaction("Grocery shopping", "Food & groceries", "Today", 1840, false),
-                Transaction("Electricity bill", "Bills", "Yesterday", 1250, false),
-                Transaction("Fuel", "Transport", "Yesterday", 1800, false),
-                Transaction("Coffee shop", "Food & drink", "20 Oct", 240, false)
-            )
-        )
+        mutableStateOf(loadTransactions(context) ?: listOf(
+            Transaction("Monthly salary", "Income", "Today", 65000, true),
+            Transaction("Grocery shopping", "Food & groceries", "Today", 1840, false),
+            Transaction("Electricity bill", "Bills", "Yesterday", 1250, false),
+            Transaction("Fuel", "Transport", "Yesterday", 1800, false),
+            Transaction("Coffee shop", "Food & drink", "20 Oct", 240, false)
+        ).also { saveTransactions(context, it) })
+    }
+    var importMessage by remember { mutableStateOf("") }
+    var importedPreview by remember { mutableStateOf<List<Transaction>>(emptyList()) }
+    val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching {
+                val csvText = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    ?: error("Could not read the selected file.")
+                val parsed = parseTransactionCsv(csvText)
+                val existingKeys = transactions.map { transactionKey(it) }.toSet()
+                val unique = parsed.distinctBy { transactionKey(it) }
+                    .filterNot { transactionKey(it) in existingKeys }
+                importedPreview = unique
+                importMessage = "Found ${parsed.size} valid row(s). ${parsed.size - unique.size} duplicate row(s) will be skipped."
+            }.onFailure {
+                importedPreview = emptyList()
+                importMessage = it.message ?: "Could not import this CSV file."
+            }
+        }
     }
     val loans = listOf(
         Loan("Fibe", 31000, 6200, "5 Nov"),
@@ -134,6 +157,7 @@ private fun FinanceApp() {
                     "Categories" -> CategoriesScreen()
                     "Backup & security" -> BackupSecurityScreen()
                     "CRED sync" -> CredSyncScreen()
+                    "Import transactions" -> ImportTransactionsScreen(importMessage, importedPreview.size, { csvPicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) }, {\n                        transactions = (importedPreview + transactions).distinctBy { transactionKey(it) }\n                        saveTransactions(context, transactions)\n                        importMessage = "Imported ${importedPreview.size} transaction(s). Saved on this device."\n                        importedPreview = emptyList()\n                    })
                     "Appearance" -> AppearanceScreen()
                     "Loan details" -> LoanDetailsScreen(loans.first())
                     "Add loan" -> AddLoanScreen()
@@ -145,6 +169,7 @@ private fun FinanceApp() {
                     onDismiss = { showAdd = false },
                     onSave = { title, amount, isIncome, category ->
                         transactions = listOf(Transaction(title, category, "Just now", amount, isIncome)) + transactions
+                        saveTransactions(context, transactions)
                         showAdd = false
                     }
                 )
@@ -517,7 +542,8 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
         "Credit health" to Icons.Default.Speed,
         "Appearance" to Icons.Default.Palette,
         "Backup & security" to Icons.Default.Security,
-        "CRED sync" to Icons.Default.Sync
+        "CRED sync" to Icons.Default.Sync,
+        "Import transactions" to Icons.Default.FileUpload
     )
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
@@ -529,6 +555,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
         item { OutlinedButton(onClick = { onOpen("Appearance") }, modifier = Modifier.fillMaxWidth()) { Text("Settings appearance") } }
         item { OutlinedButton(onClick = { onOpen("Backup & security") }, modifier = Modifier.fillMaxWidth()) { Text("Backup & security") } }
         item { OutlinedButton(onClick = { onOpen("CRED sync") }, modifier = Modifier.fillMaxWidth()) { Text("CRED transaction sync") } }
+        item { OutlinedButton(onClick = { onOpen("Import transactions") }, modifier = Modifier.fillMaxWidth()) { Text("Import bank CSV") } }
         item { OutlinedButton(onClick = { onOpen("Credit health") }, modifier = Modifier.fillMaxWidth()) { Text("CIBIL & credit health") } }
         item { OutlinedButton(onClick = { onOpen("Loan details") }, modifier = Modifier.fillMaxWidth()) { Text("Loan details & EMI schedule") } }
         item { Button(onClick = { onOpen("Add loan") }, modifier = Modifier.fillMaxWidth()) { Text("+ Add loan") } }
@@ -716,4 +743,125 @@ private fun AddTransactionDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+
+private fun transactionKey(transaction: Transaction): String =
+    "${transaction.title.trim().lowercase(Locale.ROOT)}|${transaction.category.trim().lowercase(Locale.ROOT)}|${transaction.date.trim().lowercase(Locale.ROOT)}|${transaction.amount}|${transaction.income}"
+
+private fun saveTransactions(context: android.content.Context, transactions: List<Transaction>) {
+    val array = JSONArray()
+    transactions.forEach { transaction ->
+        array.put(JSONObject().apply {
+            put("title", transaction.title)
+            put("category", transaction.category)
+            put("date", transaction.date)
+            put("amount", transaction.amount)
+            put("income", transaction.income)
+        })
+    }
+    context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+        .edit().putString("transactions", array.toString()).apply()
+}
+
+private fun loadTransactions(context: android.content.Context): List<Transaction>? = runCatching {
+    val raw = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+        .getString("transactions", null) ?: return null
+    val array = JSONArray(raw)
+    (0 until array.length()).map { index ->
+        val item = array.getJSONObject(index)
+        Transaction(
+            item.getString("title"),
+            item.optString("category", "Other"),
+            item.optString("date", ""),
+            item.getLong("amount"),
+            item.optBoolean("income", false)
+        )
+    }
+}.getOrNull()
+
+private fun parseTransactionCsv(csv: String): List<Transaction> {
+    val rows = mutableListOf<List<String>>()
+    var row = mutableListOf<String>()
+    var cell = StringBuilder()
+    var quoted = false
+    var i = 0
+    while (i < csv.length) {
+        val ch = csv[i]
+        when {
+            ch == '"' && quoted && i + 1 < csv.length && csv[i + 1] == '"' -> { cell.append('"'); i++ }
+            ch == '"' -> quoted = !quoted
+            (ch == ',' || ch == ';' || ch == '\t') && !quoted -> { row.add(cell.toString().trim()); cell = StringBuilder() }
+            (ch == '\n' || ch == '\r') && !quoted -> {
+                if (ch == '\r' && i + 1 < csv.length && csv[i + 1] == '\n') i++
+                row.add(cell.toString().trim())
+                if (row.any { it.isNotBlank() }) rows.add(row)
+                row = mutableListOf()
+                cell = StringBuilder()
+            }
+            else -> cell.append(ch)
+        }
+        i++
+    }
+    row.add(cell.toString().trim())
+    if (row.any { it.isNotBlank() }) rows.add(row)
+    require(rows.size >= 2) { "CSV must contain a header row and at least one transaction." }
+    val header = rows.first().map { it.trim().lowercase(Locale.ROOT).replace("_", " ") }
+    fun findHeader(vararg names: String) = names.firstNotNullOfOrNull { name -> header.indexOf(name).takeIf { it >= 0 } }
+    val dateIndex = findHeader("date", "transaction date", "txn date", "value date")
+    val titleIndex = findHeader("description", "narration", "details", "merchant", "particulars", "transaction details", "title")
+    val amountIndex = findHeader("amount", "transaction amount", "txn amount")
+    val debitIndex = findHeader("debit", "withdrawal", "withdrawals", "money out")
+    val creditIndex = findHeader("credit", "deposit", "deposits", "money in")
+    val typeIndex = findHeader("type", "transaction type", "dr/cr")
+    val categoryIndex = findHeader("category")
+    require(titleIndex != null && (amountIndex != null || debitIndex != null || creditIndex != null)) {
+        "Could not identify columns. Include Description/Narration and Amount, or separate Debit and Credit columns."
+    }
+    fun amountAt(values: List<String>, index: Int?): Long {
+        if (index == null || index !in values.indices) return 0L
+        val cleaned = values[index].replace(",", "").replace("₹", "").replace("INR", "", ignoreCase = true).replace(" ", "").trim()
+        return cleaned.replace(Regex("[^0-9.()-]"), "").replace("(", "-").replace(")", "").toDoubleOrNull()?.let { kotlin.math.abs(it).toLong() } ?: 0L
+    }
+    return rows.drop(1).mapNotNull { values ->
+        val title = values.getOrNull(titleIndex)?.trim().orEmpty()
+        if (title.isBlank()) return@mapNotNull null
+        val debit = amountAt(values, debitIndex)
+        val credit = amountAt(values, creditIndex)
+        val rawAmount = if (amountIndex != null) amountAt(values, amountIndex) else maxOf(debit, credit)
+        if (rawAmount <= 0L) return@mapNotNull null
+        val type = values.getOrNull(typeIndex ?: -1).orEmpty().lowercase(Locale.ROOT)
+        val isIncome = if (creditIndex != null || debitIndex != null) credit > 0L && debit == 0L
+            else type.contains("cr") || type.contains("credit") || (amountIndex != null && values.getOrNull(amountIndex)?.trim()?.startsWith("+") == true)
+        Transaction(
+            title = title,
+            category = values.getOrNull(categoryIndex ?: -1)?.takeIf { it.isNotBlank() } ?: if (isIncome) "Income" else "Imported",
+            date = values.getOrNull(dateIndex ?: -1)?.takeIf { it.isNotBlank() } ?: "Imported",
+            amount = rawAmount,
+            income = isIncome
+        )
+    }.also { require(it.isNotEmpty()) { "No valid transaction rows found. Check the CSV column names and amounts." } }
+}
+
+@Composable
+private fun ImportTransactionsScreen(
+    message: String,
+    previewCount: Int,
+    onChooseFile: () -> Unit,
+    onImport: () -> Unit
+) {
+    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item {
+            Text("Import transactions", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
+            Text("Import a bank statement CSV saved on your device.", color = Muted)
+        }
+        item { InfoCard("Supported columns", "Description / Narration and Amount, or Description with separate Debit and Credit columns. Date, Type and Category are optional.", Icons.Default.FileUpload) }
+        item { Button(onClick = onChooseFile, modifier = Modifier.fillMaxWidth()) { Text("Choose CSV file") } }
+        if (message.isNotBlank()) item { InfoCard("Import check", message, Icons.Default.Info) }
+        if (previewCount > 0) item {
+            InfoCard("Ready to import", "$previewCount new transaction(s) found. Existing matching rows will be skipped.", Icons.Default.CheckCircle)
+            Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Import $previewCount transactions") }
+        }
+        item { Text("Privacy: the selected file is read on this device. Imported transactions are stored locally in app preferences. Review your statement before importing; bank CSV formats can vary.", color = Muted, fontSize = 12.sp) }
+    }
 }
