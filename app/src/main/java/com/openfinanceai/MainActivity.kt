@@ -1024,14 +1024,45 @@ private fun AppearanceScreen() {
 }
 @Composable
 private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
+    var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
+    val monthlyRate = (loan.annualRate.coerceAtLeast(0.0) / 1200.0)
+    val schedule = (0 until 6).map { index ->
+        val interest = scheduleBalance * monthlyRate
+        val principalPart = (loan.emi.toDouble() - interest).coerceAtLeast(0.0).coerceAtMost(scheduleBalance)
+        val closingBalance = (scheduleBalance - principalPart).coerceAtLeast(0.0)
+        val row = Triple(interest.toLong(), principalPart.toLong(), closingBalance.toLong())
+        scheduleBalance = closingBalance
+        row
+    }
+    val paymentTooLow = monthlyRate > 0.0 && loan.emi.toDouble() <= loan.balance.toDouble() * monthlyRate
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Loan Details & EMI Schedule", fontSize = 25.sp, color = Ink, fontWeight = FontWeight.Bold) }
         item { MetricCard("Outstanding · ${loan.lender}", Money.format(loan.balance), Modifier.fillMaxWidth()) }
         item { MetricCard("Monthly EMI", Money.format(loan.emi), Modifier.fillMaxWidth()) }
         item { MetricCard("Annual interest rate", "${loan.annualRate}%", Modifier.fillMaxWidth()) }
-        item { InfoCard("Next payment", "Next due: ${loan.due}. Schedule is illustrative; verify dates and amounts from your lender statement.", Icons.Default.CalendarMonth) }
-        item { SectionHeading("Upcoming EMIs", "Schedule") }
-        items((0..5).toList()) { index -> Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(13.dp)).combinedClickable(onClick = { onEmiLongPress() }, onLongClick = { onEmiLongPress() }).padding(14.dp)) { Text(if (index == 0) loan.due else "Month ${index + 1}", Modifier.weight(1f), color = Ink); Text(Money.format(loan.emi), color = if (index == 0) ExpenseRed else Ink, fontWeight = FontWeight.Bold) } }
+        item { InfoCard("Estimated schedule", "Based on the current outstanding balance, entered EMI and interest rate. This is an estimate, not your lender's official schedule; verify exact figures and due dates against your loan statement.", Icons.Default.CalendarMonth) }
+        if (paymentTooLow) item {
+            InfoCard("EMI may not cover interest", "At the entered interest rate, the EMI is not greater than the estimated monthly interest. The balance may not reduce unless the EMI or rate changes.", Icons.Default.Warning)
+        }
+        item { SectionHeading("Estimated EMI breakdown", "Next 6 months") }
+        item {
+            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(12.dp)).padding(12.dp)) {
+                Text("Payment", Modifier.weight(1f), color = Muted, fontSize = 11.sp)
+                Text("Interest", Modifier.weight(1f), color = Muted, fontSize = 11.sp)
+                Text("Principal", Modifier.weight(1f), color = Muted, fontSize = 11.sp)
+            }
+        }
+        items(schedule.indices.toList()) { index ->
+            val (interest, principalPart, closingBalance) = schedule[index]
+            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(13.dp)).combinedClickable(onClick = { onEmiLongPress() }, onLongClick = { onEmiLongPress() }).padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(if (index == 0) loan.due else "Month ${index + 1}", color = Ink, fontWeight = FontWeight.SemiBold)
+                    Text("Balance ${Money.format(closingBalance)}", color = Muted, fontSize = 10.sp)
+                }
+                Text(Money.format(interest), Modifier.weight(1f), color = ExpenseRed, fontSize = 12.sp)
+                Text(Money.format(principalPart), Modifier.weight(1f), color = Green, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
     }
 }
 @Composable
