@@ -70,6 +70,7 @@ private fun FinanceApp() {
     var showAdd by remember { mutableStateOf(false) }
     var transactionForActions by remember { mutableStateOf<Transaction?>(null) }
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
+    var transactionTips by remember { mutableStateOf<Transaction?>(null) }
     var loanForActions by remember { mutableStateOf<Loan?>(null) }
     var loanToEdit by remember { mutableStateOf<Loan?>(null) }
     val context = LocalContext.current
@@ -208,11 +209,19 @@ private fun FinanceApp() {
                     title = { Text(transaction.title) },
                     text = { Text("What would you like to do with this transaction?") },
                     confirmButton = { TextButton(onClick = { transactionToEdit = transaction; transactionForActions = null }) { Text("Edit") } },
-                    dismissButton = { Row { TextButton(onClick = {
+                    dismissButton = { Row { TextButton(onClick = { transactionTips = transaction; transactionForActions = null }) { Text("Tips") }; TextButton(onClick = {
                         val index = transactions.indexOf(transaction)
                         if (index >= 0) { transactions = transactions.toMutableList().also { it.removeAt(index) }; saveTransactions(context, transactions) }
                         transactionForActions = null
                     }) { Text("Delete", color = ExpenseRed) }; TextButton(onClick = { transactionForActions = null }) { Text("Cancel") } } }
+                )
+            }
+            transactionTips?.let { transaction ->
+                AlertDialog(
+                    onDismissRequest = { transactionTips = null },
+                    title = { Text("MoneyLog suggestion") },
+                    text = { Text(if (transaction.income) "Suggestion: confirm this income against your bank statement and keep recurring income dates consistent. Categorize it as salary, freelance income or another suitable source." else "Suggestion: review whether this expense is essential or recurring, confirm the amount against your statement, and use a consistent category to improve your monthly reports.") },
+                    confirmButton = { TextButton(onClick = { transactionTips = null }) { Text("Got it") } }
                 )
             }
             transactionToEdit?.let { transaction ->
