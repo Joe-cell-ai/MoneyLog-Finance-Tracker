@@ -160,7 +160,14 @@ private fun FinanceApp() {
             val loanArray = JSONArray()
             loans.forEach { l -> loanArray.put(JSONObject().put("lender", l.lender).put("balance", l.balance)
                 .put("emi", l.emi).put("due", l.due).put("annualRate", l.annualRate)) }
-            root.put("transactions", transactionArray).put("loans", loanArray)
+            val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+            val savedCategories = runCatching { JSONArray(prefs.getString("custom_categories", "[]") ?: "[]") }.getOrDefault(JSONArray())
+            root.put("transactions", transactionArray)
+                .put("loans", loanArray)
+                .put("categories", savedCategories)
+                .put("appearanceTheme", prefs.getString("appearance_theme", "Light"))
+                .put("appearanceCurrency", prefs.getString("appearance_currency", "INR (₹)"))
+                .put("userReportedCreditScore", prefs.getInt("user_reported_credit_score", 0))
             context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(root.toString(2)) }
                 ?: error("Could not write the backup file.")
         }.onFailure { importMessage = it.message ?: "Backup export failed." }
@@ -183,11 +190,22 @@ private fun FinanceApp() {
                     Loan(j.getString("lender"), j.getLong("balance"), j.getLong("emi"), j.optString("due", "Not set"), j.optDouble("annualRate", 0.0))
                 } }
             } ?: emptyList()
+            val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+            val editor = prefs.edit()
+            root.optJSONArray("categories")?.let { editor.putString("custom_categories", it.toString()) }
+            if (root.has("appearanceTheme")) editor.putString("appearance_theme", root.optString("appearanceTheme", "Light"))
+            if (root.has("appearanceCurrency")) editor.putString("appearance_currency", root.optString("appearanceCurrency", "INR (₹)"))
+            if (root.has("userReportedCreditScore")) {
+                val restoredScore = root.optInt("userReportedCreditScore", 0)
+                if (restoredScore in 300..900) editor.putInt("user_reported_credit_score", restoredScore)
+                else editor.remove("user_reported_credit_score")
+            }
+            editor.apply()
             transactions = restoredTransactions
             loans = restoredLoans
             saveTransactions(context, transactions)
             saveLoans(context, loans)
-            importMessage = "Backup restored: ${transactions.size} transactions and ${loans.size} loans."
+            importMessage = "Backup restored: ${transactions.size} transactions, ${loans.size} loans and local settings."
         }.onFailure { importMessage = it.message ?: "Backup restore failed." }
     }
     val income = transactions.filter { it.income }.sumOf { it.amount }
