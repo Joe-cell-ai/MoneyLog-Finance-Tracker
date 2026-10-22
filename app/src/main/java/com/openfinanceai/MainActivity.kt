@@ -647,30 +647,36 @@ private fun CoachScreen(income: Long, expenses: Long, emi: Long) {
 }
 
 @Composable
+@Composable
 private fun CalendarScreen(loans: List<Loan>, transactions: List<Transaction>) {
-    var visibleMonth by remember { mutableStateOf(java.time.YearMonth.now()) }
     val today = java.time.LocalDate.now()
+    var visibleMonth by remember { mutableStateOf(java.time.YearMonth.from(today)) }
+    var selectedDate by remember { mutableStateOf(today) }
     val firstDayOffset = visibleMonth.atDay(1).dayOfWeek.value % 7
     val totalCells = ((firstDayOffset + visibleMonth.lengthOfMonth() + 6) / 7) * 7
     val cells = (0 until totalCells).map { index ->
         val day = index - firstDayOffset + 1
         if (day in 1..visibleMonth.lengthOfMonth()) day else null
     }
+    val monthTransactions = transactions.filter { transactionBelongsToMonth(it, visibleMonth) }
+    val selectedTransactions = transactions.filter { transactionDateOrNull(it) == selectedDate }
+    val selectedIncome = selectedTransactions.filter { it.income }.sumOf { it.amount }
+    val selectedExpenses = selectedTransactions.filterNot { it.income }.sumOf { it.amount }
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("Financial calendar", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("EMI dates and money activity", color = Muted)
+            Text("Tap a date to review transactions and EMI reminders", color = Muted)
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { visibleMonth = visibleMonth.minusMonths(1) }) {
+                        IconButton(onClick = { visibleMonth = visibleMonth.minusMonths(1); selectedDate = visibleMonth.atDay(1) }) {
                             Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month", tint = Green)
                         }
                         Text(visibleMonth.month.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault()) + " " + visibleMonth.year,
                             Modifier.weight(1f), textAlign = TextAlign.Center, color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        IconButton(onClick = { visibleMonth = visibleMonth.plusMonths(1) }) {
+                        IconButton(onClick = { visibleMonth = visibleMonth.plusMonths(1); selectedDate = visibleMonth.atDay(1) }) {
                             Icon(Icons.Default.ChevronRight, contentDescription = "Next month", tint = Green)
                         }
                     }
@@ -684,24 +690,55 @@ private fun CalendarScreen(loans: List<Loan>, transactions: List<Transaction>) {
                     cells.chunked(7).forEach { week ->
                         Row(Modifier.fillMaxWidth()) {
                             week.forEach { day ->
-                                Box(Modifier.weight(1f).height(43.dp).padding(2.dp)
-                                    .background(
-                                        when {
-                                            day == null -> Color.Transparent
-                                            visibleMonth.atDay(day) == today -> Green
-                                            else -> Page
-                                        }, RoundedCornerShape(10.dp)
-                                    ), contentAlignment = Alignment.Center) {
-                                    if (day != null) {
-                                        Text(day.toString(), color = if (visibleMonth.atDay(day) == today) Color.White else Ink,
-                                            fontSize = 13.sp, fontWeight = if (visibleMonth.atDay(day) == today) FontWeight.Bold else FontWeight.Normal)
+                                if (day == null) {
+                                    Box(Modifier.weight(1f).height(48.dp))
+                                } else {
+                                    val date = visibleMonth.atDay(day)
+                                    val dayTransactions = monthTransactions.filter { transactionDateOrNull(it) == date }
+                                    val isSelected = selectedDate == date
+                                    Column(
+                                        Modifier.weight(1f).height(48.dp).padding(2.dp)
+                                            .background(if (isSelected) Green else if (date == today) Mint else Page, RoundedCornerShape(9.dp))
+                                            .clickable { selectedDate = date }
+                                            .padding(vertical = 4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(day.toString(), color = if (isSelected) Color.White else Ink,
+                                            fontSize = 13.sp, fontWeight = if (isSelected || date == today) FontWeight.Bold else FontWeight.Normal)
+                                        if (dayTransactions.isNotEmpty()) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                                if (dayTransactions.any { it.income }) Box(Modifier.size(4.dp).background(if (isSelected) Color.White else IncomeGreen, CircleShape))
+                                                if (dayTransactions.any { !it.income }) Box(Modifier.size(4.dp).background(if (isSelected) Color.White else ExpenseRed, CircleShape))
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                    Text("Weeks and dates are aligned to their correct weekdays. Use the arrows to change month.",
-                        color = Muted, fontSize = 11.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Box(Modifier.size(7.dp).background(IncomeGreen, CircleShape)); Text("Income", color = Muted, fontSize = 11.sp)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Box(Modifier.size(7.dp).background(ExpenseRed, CircleShape)); Text("Expense", color = Muted, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(selectedDate.format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH)), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        MetricCard("Income", Money.format(selectedIncome), Modifier.weight(1f))
+                        MetricCard("Expenses", Money.format(selectedExpenses), Modifier.weight(1f))
+                    }
+                    Text("Net for day: " + Money.format(selectedIncome - selectedExpenses), color = if (selectedIncome >= selectedExpenses) Green else ExpenseRed, fontWeight = FontWeight.Bold)
+                    if (selectedTransactions.isEmpty()) Text("No dated transactions for this day.", color = Muted, fontSize = 12.sp)
+                    else selectedTransactions.forEach { TransactionRow(it) }
                 }
             }
         }
@@ -718,12 +755,6 @@ private fun CalendarScreen(loans: List<Loan>, transactions: List<Transaction>) {
                     Text(Money.format(loan.emi), color = Ink, fontWeight = FontWeight.Bold)
                 }
             }
-        }
-        item { SectionHeading("Recent transactions", "") }
-        if (transactions.isEmpty()) {
-            item { Text("Your recent transactions will appear here.", color = Muted) }
-        } else {
-            items(transactions.take(5)) { TransactionRow(it) }
         }
     }
 }
@@ -1160,9 +1191,9 @@ private fun AddTransactionDialog(
 
 
 
-private fun transactionBelongsToMonth(transaction: Transaction, month: YearMonth, today: java.time.LocalDate = java.time.LocalDate.now()): Boolean {
+private fun transactionDateOrNull(transaction: Transaction, today: java.time.LocalDate = java.time.LocalDate.now()): java.time.LocalDate? {
     val raw = transaction.date.trim()
-    val date = runCatching {
+    return runCatching {
         when {
             raw.equals("today", ignoreCase = true) || raw.equals("just now", ignoreCase = true) -> today
             raw.equals("yesterday", ignoreCase = true) -> today.minusDays(1)
@@ -1177,9 +1208,11 @@ private fun transactionBelongsToMonth(transaction: Transaction, month: YearMonth
             }
             else -> null
         }
-    }.getOrNull() ?: return false
-    return YearMonth.from(date) == month
+    }.getOrNull()
 }
+
+private fun transactionBelongsToMonth(transaction: Transaction, month: YearMonth, today: java.time.LocalDate = java.time.LocalDate.now()): Boolean =
+    transactionDateOrNull(transaction, today)?.let { YearMonth.from(it) == month } ?: false
 
 private fun transactionKey(transaction: Transaction): String {
     fun normalize(value: String): String = value.trim()
