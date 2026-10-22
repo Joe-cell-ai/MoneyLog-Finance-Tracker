@@ -441,12 +441,26 @@ private fun TransactionRow(transaction: Transaction, onLongPress: () -> Unit = {
 
 @Composable
 private fun ActivityScreen(transactions: List<Transaction>, onTransactionLongPress: (Transaction) -> Unit) {
-    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+    var filter by remember { mutableStateOf("All") }
+    val visible = transactions.filter { filter == "All" || (filter == "Income" && it.income) || (filter == "Expense" && !it.income) }
+    val grouped = visible.groupBy { it.date }
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            Text("Transactions", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Your tracked money activity", color = Muted)
+            Text("Transactions", fontSize = 25.sp, color = Ink, fontWeight = FontWeight.Bold)
+            Text("Your tracked money activity", color = Muted, fontSize = 12.sp)
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("All", "Income", "Expense").forEach { choice ->
+                    FilterChip(selected = filter == choice, onClick = { filter = choice }, label = { Text(choice) },
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Green, selectedLabelColor = Color.White))
+                }
+            }
         }
-        items(transactions) { transaction -> TransactionRow(transaction, onLongPress = { onTransactionLongPress(transaction) }) }
+        if (visible.isEmpty()) item { Text("No transactions in this filter yet.", color = Muted, modifier = Modifier.padding(18.dp)) }
+        grouped.forEach { (date, rows) ->
+            item { Text(date, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp)) }
+            items(rows) { transaction -> TransactionRow(transaction, onLongPress = { onTransactionLongPress(transaction) }) }
+        }
     }
 }
 
@@ -523,8 +537,15 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
                         Text(Money.format(loan.balance), color = Ink, fontWeight = FontWeight.Bold)
                     }
                     HorizontalDivider(color = Mint)
-                    Text("Monthly EMI: " + Money.format(loan.emi), color = Muted)
-                    Text("Next due: " + loan.due, color = Muted)
+                    Text("Monthly EMI", color = Muted, fontSize = 12.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(Money.format(loan.emi), Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("On track", color = Green, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.background(Mint, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 5.dp))
+                    }
+                    LinearProgressIndicator(progress = { 0.32f }, modifier = Modifier.fillMaxWidth().height(7.dp), color = Green, trackColor = Mint)
+                    Text("Outstanding  " + Money.format(loan.balance), color = Muted, fontSize = 12.sp)
+                    Text("Next due: " + loan.due, color = Muted, fontSize = 12.sp)
                 }
             }
         }
