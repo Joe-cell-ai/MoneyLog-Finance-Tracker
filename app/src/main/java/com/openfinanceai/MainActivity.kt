@@ -647,7 +647,6 @@ private fun CoachScreen(income: Long, expenses: Long, emi: Long) {
 }
 
 @Composable
-@Composable
 private fun CalendarScreen(loans: List<Loan>, transactions: List<Transaction>) {
     val today = java.time.LocalDate.now()
     var visibleMonth by remember { mutableStateOf(java.time.YearMonth.from(today)) }
