@@ -133,6 +133,63 @@ private fun FinanceApp() {
             Loan("Pocketly", 12800, 3200, "10 Nov")
         ).also { saveLoans(context, it) })
     }
+
+    val csvExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) runCatching {
+            val csv = buildString {
+                appendLine("Date,Description,Category,Type,Amount,Payment Method,Notes")
+                transactions.forEach { t ->
+                    appendLine(listOf(t.date, t.title, t.category, if (t.income) "Income" else "Expense", t.amount.toString(), t.paymentMethod, t.notes)
+                        .joinToString(",") { csvEscape(it) })
+                }
+            }
+            context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(csv) }
+                ?: error("Could not write the CSV file.")
+            importMessage = "CSV export saved successfully."
+        }.onFailure { importMessage = it.message ?: "CSV export failed." }
+    }
+    val backupExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) runCatching {
+            val root = JSONObject().put("format", "open-finance-backup").put("version", 1)
+            val transactionArray = JSONArray()
+            transactions.forEach { t -> transactionArray.put(JSONObject()
+                .put("title", t.title).put("category", t.category).put("date", t.date)
+                .put("amount", t.amount).put("income", t.income).put("source", t.source)
+                .put("notificationKey", t.notificationKey).put("captureStatus", t.captureStatus)
+                .put("paymentMethod", t.paymentMethod).put("notes", t.notes)) }
+            val loanArray = JSONArray()
+            loans.forEach { l -> loanArray.put(JSONObject().put("lender", l.lender).put("balance", l.balance)
+                .put("emi", l.emi).put("due", l.due).put("annualRate", l.annualRate)) }
+            root.put("transactions", transactionArray).put("loans", loanArray)
+            context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(root.toString(2)) }
+                ?: error("Could not write the backup file.")
+        }.onFailure { importMessage = it.message ?: "Backup export failed." }
+    }
+    val backupRestoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) runCatching {
+            val raw = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                ?: error("Could not read the selected backup.")
+            val root = JSONObject(raw)
+            require(root.optString("format") == "open-finance-backup") { "This file is not an Open Finance backup." }
+            val restoredTransactions = root.getJSONArray("transactions").let { a ->
+                (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
+                    Transaction(j.getString("title"), j.optString("category", "Other"), j.optString("date", "Today"),
+                        j.getLong("amount"), j.optBoolean("income"), j.optString("source"), j.optString("notificationKey"),
+                        j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"))
+                } }
+            }
+            val restoredLoans = root.optJSONArray("loans")?.let { a ->
+                (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
+                    Loan(j.getString("lender"), j.getLong("balance"), j.getLong("emi"), j.optString("due", "Not set"), j.optDouble("annualRate", 0.0))
+                } }
+            } ?: emptyList()
+            transactions = restoredTransactions
+            loans = restoredLoans
+            saveTransactions(context, transactions)
+            saveLoans(context, loans)
+            importMessage = "Backup restored: ${transactions.size} transactions and ${loans.size} loans."
+        }.onFailure { importMessage = it.message ?: "Backup restore failed." }
+    }
     val income = transactions.filter { it.income }.sumOf { it.amount }
     val expenses = transactions.filterNot { it.income }.sumOf { it.amount }
     val selectedMonthTransactions = transactions.filter { transactionBelongsToMonth(it, selectedOverviewMonth) }
@@ -195,7 +252,12 @@ private fun FinanceApp() {
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance })
                     "Credit health" -> CreditHealthScreen()
                     "Categories" -> CategoriesScreen()
-                    "Backup & security" -> BackupSecurityScreen()
+                    "Backup & security" -> BackupSecurityScreen(
+                        onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
+                        onRestoreBackup = { backupRestoreLauncher.launch(arrayOf("application/json", "text/*")) },
+                        onExportCsv = { csvExportLauncher.launch("open-finance-transactions.csv") },
+                        message = importMessage
+                    )
                     "CRED sync", "Live payment tracking" -> CredSyncScreen()
                     "Import transactions" -> ImportTransactionsScreen(importMessage, importedPreview.size, { csvPicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) }, {
                         transactions = (importedPreview + transactions).distinctBy { transactionKey(it) }
@@ -1000,13 +1062,21 @@ private fun CreditHealthScreen() {
     }
 }
 @Composable
-private fun BackupSecurityScreen() {
+private fun BackupSecurityScreen(
+    onExportBackup: () -> Unit,
+    onRestoreBackup: () -> Unit,
+    onExportCsv: () -> Unit,
+    message: String
+) {
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Backup & Security", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold) }
-        item { InfoCard("Local data", "Transactions and loans are saved in app-private local preferences and remain after app restarts on this device. Uninstalling the app or clearing its data can remove them; cloud backup is not enabled.", Icons.Default.Lock) }
-        item { InfoCard("Cloud backup", "Google Drive / OneDrive backup is not connected in this build.", Icons.Default.CloudUpload) }
-        item { InfoCard("Restore & export", "Restore, CSV export and scheduled backups are not implemented yet.", Icons.Default.Restore) }
-        item { InfoCard("Privacy", "Do not enter banking passwords, card PINs or other secrets into this prototype.", Icons.Default.PrivacyTip) }
+        item { InfoCard("Local data", "Transactions and loans are saved in app-private storage and remain after app restarts. Keep an exported backup before changing devices or reinstalling.", Icons.Default.Lock) }
+        item { Button(onClick = onExportBackup, modifier = Modifier.fillMaxWidth()) { Text("Export full backup (JSON)") } }
+        item { OutlinedButton(onClick = onRestoreBackup, modifier = Modifier.fillMaxWidth()) { Text("Restore from backup") } }
+        item { OutlinedButton(onClick = onExportCsv, modifier = Modifier.fillMaxWidth()) { Text("Export transactions (CSV)") } }
+        if (message.isNotBlank()) item { InfoCard("Latest operation", message, Icons.Default.Info) }
+        item { InfoCard("Cloud backup", "Google Drive / OneDrive and scheduled automatic backups are not connected. Store exported files somewhere private and trusted.", Icons.Default.CloudUpload) }
+        item { InfoCard("Privacy", "Backups contain financial records. Keep them private and do not enter banking passwords, card PINs or OTPs into this app.", Icons.Default.PrivacyTip) }
     }
 }
 @Composable
@@ -1476,6 +1546,9 @@ private fun ImportTransactionsScreen(
     }
 }
 
+
+
+private fun csvEscape(value: String): String = "\"" + value.replace("\"", "\"\"") + "\""
 
 private fun saveLoans(context: android.content.Context, loans: List<Loan>) {
     val array = JSONArray()
