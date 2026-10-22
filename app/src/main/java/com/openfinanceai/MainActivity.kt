@@ -174,7 +174,7 @@ private fun FinanceApp() {
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 when (tab) {
-                    "Home" -> HomeScreen(income, expenses, transactions, { tab = "Activity" }, { showAdd = true }, { tab = it })
+                    "Home" -> HomeScreen(income, expenses, transactions, { tab = "Activity" }, { showAdd = true }, { tab = it }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
                     "Reports" -> ReportsScreen(income, expenses, transactions)
                     "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" }, { loanForActions = it })
@@ -192,7 +192,7 @@ private fun FinanceApp() {
                         importedPreview = emptyList()
                     })
                     "Appearance" -> AppearanceScreen()
-                    "Loan details" -> selectedLoan?.let { LoanDetailsScreen(it) } ?: loans.firstOrNull()?.let { LoanDetailsScreen(it) } ?: EmptyLoansScreen { tab = "Add loan" }
+                    "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: EmptyLoansScreen { tab = "Add loan" }
                     "Add loan" -> AddLoanScreen { lender, principal, rate, emi ->
                         val newLoan = Loan(lender, principal, emi, "Set due date", rate)
                         loans = listOf(newLoan) + loans
@@ -263,7 +263,8 @@ private fun HomeScreen(
     transactions: List<Transaction>,
     onAll: () -> Unit,
     onAdd: () -> Unit,
-    onOpen: (String) -> Unit
+    onOpen: (String) -> Unit,
+    onTransactionLongPress: (Transaction) -> Unit
 ) {
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
         item {
@@ -323,7 +324,7 @@ private fun HomeScreen(
             }
         }
         item { SectionHeading("Recent transactions", "See all", onAll) }
-        items(transactions.take(4)) { TransactionRow(it, onLongPress = { onOpen("Activity") }) }
+        items(transactions.take(4)) { transaction -> TransactionRow(transaction, onLongPress = { onTransactionLongPress(transaction) }) }
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFEEF2FF)),
@@ -751,7 +752,7 @@ private fun AppearanceScreen() {
     }
 }
 @Composable
-private fun LoanDetailsScreen(loan: Loan) {
+private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Loan Details & EMI Schedule", fontSize = 25.sp, color = Ink, fontWeight = FontWeight.Bold) }
         item { MetricCard("Outstanding · ${loan.lender}", Money.format(loan.balance), Modifier.fillMaxWidth()) }
@@ -759,7 +760,7 @@ private fun LoanDetailsScreen(loan: Loan) {
         item { MetricCard("Annual interest rate", "${loan.annualRate}%", Modifier.fillMaxWidth()) }
         item { InfoCard("Next payment", "Next due: ${loan.due}. Schedule is illustrative; verify dates and amounts from your lender statement.", Icons.Default.CalendarMonth) }
         item { SectionHeading("Upcoming EMIs", "Schedule") }
-        items((0..5).toList()) { index -> Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(13.dp)).padding(14.dp)) { Text(if (index == 0) loan.due else "Month ${index + 1}", Modifier.weight(1f), color = Ink); Text(Money.format(loan.emi), color = if (index == 0) ExpenseRed else Ink, fontWeight = FontWeight.Bold) } }
+        items((0..5).toList()) { index -> Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(13.dp)).combinedClickable(onClick = { onEmiLongPress() }, onLongClick = { onEmiLongPress() }).padding(14.dp)) { Text(if (index == 0) loan.due else "Month ${index + 1}", Modifier.weight(1f), color = Ink); Text(Money.format(loan.emi), color = if (index == 0) ExpenseRed else Ink, fontWeight = FontWeight.Bold) } }
     }
 }
 @Composable
