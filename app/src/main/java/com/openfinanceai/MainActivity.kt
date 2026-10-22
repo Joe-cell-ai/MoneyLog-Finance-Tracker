@@ -815,10 +815,27 @@ private fun InfoScreen(title: String, body: String, icon: ImageVector) {
 
 @Composable
 private fun CategoriesScreen() {
-    var categories by remember { mutableStateOf(listOf(
+    val context = LocalContext.current
+    val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
+    val defaultCategories = listOf(
         "Food & groceries", "Housing", "Transport", "Bills & utilities", "Health",
         "Shopping", "Entertainment", "Education", "Loan repayment", "Salary", "Other income"
-    )) }
+    )
+    val savedCategories = remember {
+        runCatching {
+            val raw = preferences.getString("custom_categories", null)
+            if (raw.isNullOrBlank()) defaultCategories else {
+                val array = JSONArray(raw)
+                (0 until array.length()).map { array.getString(it) }.ifEmpty { defaultCategories }
+            }
+        }.getOrDefault(defaultCategories)
+    }
+    var categories by remember { mutableStateOf(savedCategories) }
+    fun persistCategories(values: List<String>) {
+        val array = JSONArray()
+        values.forEach { array.put(it) }
+        preferences.edit().putString("custom_categories", array.toString()).apply()
+    }
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
@@ -852,7 +869,7 @@ private fun CategoriesScreen() {
                 }
             }
         }
-        item { Text("Category changes apply to this screen in the current session. Renaming existing transaction categories and persistent custom-category storage are not yet connected.", color = Muted, fontSize = 11.sp) }
+        item { Text("Your custom category list is saved on this device and remains after restarting the app. Existing transactions keep their original category labels.", color = Muted, fontSize = 11.sp) }
     }
     if (showAdd) {
         AlertDialog(
@@ -866,6 +883,7 @@ private fun CategoriesScreen() {
                         categories = if (editing == null) {
                             if (categories.any { it.equals(name, ignoreCase = true) }) categories else categories + name
                         } else categories.map { if (it == editing) name else it }.distinctBy { it.lowercase(Locale.ROOT) }
+                        persistCategories(categories)
                         showAdd = false
                     }
                 }) { Text("Save", color = Green) }
@@ -878,7 +896,7 @@ private fun CategoriesScreen() {
             onDismissRequest = { pendingDelete = null },
             title = { Text("Delete category?") },
             text = { Text("Remove \"$category\" from this category list? Existing transactions are not changed.") },
-            confirmButton = { TextButton(onClick = { categories = categories - category; pendingDelete = null }) { Text("Delete", color = ExpenseRed) } },
+            confirmButton = { TextButton(onClick = { categories = categories - category; persistCategories(categories); pendingDelete = null }) { Text("Delete", color = ExpenseRed) } },
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } }
         )
     }
