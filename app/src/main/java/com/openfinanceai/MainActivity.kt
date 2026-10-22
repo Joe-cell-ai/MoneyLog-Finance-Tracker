@@ -33,6 +33,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -183,7 +185,7 @@ private fun FinanceApp() {
                 when (tab) {
                     "Home" -> HomeScreen(income, expenses, transactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = "Activity" }, { showAdd = true }, { tab = it }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
-                    "Reports" -> ReportsScreen(income, expenses, transactions)
+                    "Reports" -> ReportsScreen(income, expenses, transactions, selectedOverviewMonth, { selectedOverviewMonth = it })
                     "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" }, { loanForActions = it })
                     "Coach" -> CoachScreen(income, expenses, loans.sumOf { it.emi })
                     "Calendar" -> CalendarScreen(loans, transactions)
@@ -465,12 +467,28 @@ private fun ActivityScreen(transactions: List<Transaction>, onTransactionLongPre
 }
 
 @Composable
-private fun ReportsScreen(income: Long, expenses: Long, transactions: List<Transaction>) {
-    val categories = transactions.filterNot { it.income }.groupBy { it.category }.map { entry -> entry.key to entry.value.sumOf { it.amount } }
+private fun ReportsScreen(
+    income: Long,
+    expenses: Long,
+    transactions: List<Transaction>,
+    selectedMonth: YearMonth,
+    onMonthChange: (YearMonth) -> Unit
+) {
+    val categories = transactions.filterNot { it.income }.groupBy { it.category }.map { entry -> entry.key to entry.value.sumOf { it.amount } }.sortedByDescending { it.second }
+    val chartColors = listOf(Green, ExpenseRed, SavingsBlue, Color(0xFF9B6AD6), Color(0xFFE99B51), Color(0xFF4E9A8A))
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Text("Monthly reports", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
             Text("Income, spending and cash flow", color = Muted)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }) { Icon(Icons.Default.ChevronLeft, "Previous month") }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(selectedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH), color = Ink, fontWeight = FontWeight.Bold)
+                    Text(selectedMonth.year.toString(), color = Muted, fontSize = 12.sp)
+                }
+                IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }) { Icon(Icons.Default.ChevronRight, "Next month") }
+            }
+            Text("Report totals currently use all saved transactions; month-specific filtering needs normalized transaction dates.", color = Muted, fontSize = 11.sp)
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -490,11 +508,40 @@ private fun ReportsScreen(income: Long, expenses: Long, transactions: List<Trans
                 }
             }
         }
-        item { SectionHeading("Category breakdown", "This month") }
+        if (categories.isNotEmpty()) item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Spending by category", Modifier.fillMaxWidth(), color = Ink, fontWeight = FontWeight.Bold)
+                    androidx.compose.foundation.Canvas(Modifier.size(178.dp)) {
+                        val total = categories.sumOf { it.second }.coerceAtLeast(1L).toFloat()
+                        var start = -90f
+                        categories.forEachIndexed { index, entry ->
+                            val sweep = entry.second.toFloat() / total * 360f
+                            drawArc(
+                                color = chartColors[index % chartColors.size],
+                                startAngle = start,
+                                sweepAngle = sweep,
+                                useCenter = false,
+                                style = Stroke(width = size.minDimension * 0.19f, cap = StrokeCap.Butt)
+                            )
+                            start += sweep
+                        }
+                    }
+                    Text(Money.format(categories.sumOf { it.second }), color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        item { SectionHeading("Category breakdown", "Tracked spending") }
         items(categories) { (category, amount) ->
-            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(15.dp)) {
-                Text(category, Modifier.weight(1f), color = Ink)
-                Text(Money.format(amount), color = Ink, fontWeight = FontWeight.Bold)
+            val colorIndex = categories.indexOfFirst { it.first == category }.coerceAtLeast(0)
+            Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).background(chartColors[colorIndex % chartColors.size], CircleShape))
+                    Spacer(Modifier.width(9.dp))
+                    Text(category, Modifier.weight(1f), color = Ink)
+                    Text(Money.format(amount), color = Ink, fontWeight = FontWeight.Bold)
+                }
+                LinearProgressIndicator(progress = { (amount.toFloat() / categories.sumOf { it.second }.coerceAtLeast(1L)).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(5.dp), color = chartColors[colorIndex % chartColors.size], trackColor = Mint)
             }
         }
     }
