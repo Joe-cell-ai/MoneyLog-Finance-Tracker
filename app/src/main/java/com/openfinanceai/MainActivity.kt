@@ -168,6 +168,7 @@ private fun FinanceApp() {
                 .put("appearanceTheme", prefs.getString("appearance_theme", "Light"))
                 .put("appearanceCurrency", prefs.getString("appearance_currency", "INR (₹)"))
                 .put("userReportedCreditScore", prefs.getInt("user_reported_credit_score", 0))
+                .put("monthlyCategoryBudgets", JSONObject(prefs.getString("monthly_category_budgets", "{}") ?: "{}"))
             context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(root.toString(2)) }
                 ?: error("Could not write the backup file.")
         }.onFailure { importMessage = it.message ?: "Backup export failed." }
@@ -200,6 +201,7 @@ private fun FinanceApp() {
                 if (restoredScore in 300..900) editor.putInt("user_reported_credit_score", restoredScore)
                 else editor.remove("user_reported_credit_score")
             }
+            root.optJSONObject("monthlyCategoryBudgets")?.let { editor.putString("monthly_category_budgets", it.toString()) }
             editor.apply()
             transactions = restoredTransactions
             loans = restoredLoans
@@ -225,7 +227,7 @@ private fun FinanceApp() {
                     Icon(Icons.Default.AccountBalanceWallet, null, tint = Green, modifier = Modifier.size(32.dp))
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("OPEN FINANCE", color = Muted, fontSize = 11.sp, letterSpacing = 2.sp)
+                        Text("MONEYLOG", color = Muted, fontSize = 11.sp, letterSpacing = 2.sp)
                         Text("Your money, clearly.", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
                     IconButton(onClick = { tab = "Settings" }) { Icon(Icons.Default.Settings, "Settings") }
@@ -267,7 +269,8 @@ private fun FinanceApp() {
                     "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" }, { loanForActions = it })
                     "Coach" -> CoachScreen(income, expenses, loans.sumOf { it.emi })
                     "Calendar" -> CalendarScreen(loans, transactions)
-                    "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance })
+                    "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance }, transactions)
+                    "Budgets" -> BudgetsScreen(transactions)
                     "Credit health" -> CreditHealthScreen()
                     "Categories" -> CategoriesScreen()
                     "Backup & security" -> BackupSecurityScreen(
@@ -528,12 +531,26 @@ private fun TransactionRow(transaction: Transaction, onLongPress: () -> Unit = {
 @Composable
 private fun ActivityScreen(transactions: List<Transaction>, onTransactionLongPress: (Transaction) -> Unit) {
     var filter by remember { mutableStateOf("All") }
+    var query by remember { mutableStateOf("") }
+    var categoryFilter by remember { mutableStateOf("All categories") }
+    val availableCategories = listOf("All categories") + transactions.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
     val visible = transactions.filter { filter == "All" || (filter == "Income" && it.income) || (filter == "Expense" && !it.income) }
+        .filter { categoryFilter == "All categories" || it.category == categoryFilter }
+        .filter { query.isBlank() || listOf(it.title, it.category, it.source, it.notes, it.date).any { field -> field.contains(query.trim(), ignoreCase = true) } }
     val grouped = visible.groupBy { it.date }
     LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Text("Transactions", fontSize = 25.sp, color = Ink, fontWeight = FontWeight.Bold)
             Text("Your tracked money activity", color = Muted, fontSize = 12.sp)
+            OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Search transactions") }, leadingIcon = { Icon(Icons.Default.Search, null) }, singleLine = true)
+            var categoryMenu by remember { mutableStateOf(false) }
+            Box {
+                OutlinedButton(onClick = { categoryMenu = true }) { Icon(Icons.Default.FilterList, null); Text(" $categoryFilter") }
+                DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
+                    availableCategories.forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { categoryFilter = option; categoryMenu = false }) }
+                }
+            }
+            Text("${visible.size} matching transaction(s)", color = Muted, fontSize = 11.sp)
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf("All", "Income", "Expense").forEach { choice ->
@@ -858,7 +875,74 @@ private fun CalendarScreen(loans: List<Loan>, transactions: List<Transaction>) {
 }
 
 @Composable
-private fun InsightsScreen(income: Long, expenses: Long, debt: Long) {
+private fun BudgetsScreen(transactions: List<Transaction>) {
+    val context = LocalContext.current
+    val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
+    var budgets by remember {
+        mutableStateOf(runCatching {
+            val json = JSONObject(preferences.getString("monthly_category_budgets", "{}") ?: "{}")
+            buildMap { val keys = json.keys(); while (keys.hasNext()) { val key = keys.next(); put(key, json.optLong(key, 0L)) } }
+        }.getOrDefault(emptyMap()))
+    }
+    var category by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf("") }
+    val expenses = transactions.filterNot { it.income }.filter { transactionBelongsToMonth(it, YearMonth.now()) }
+        .groupBy { it.category }.mapValues { entry -> entry.value.sumOf { it.amount } }
+    fun persist(values: Map<String, Long>) {
+        val json = JSONObject()
+        values.forEach { (key, value) -> json.put(key, value) }
+        preferences.edit().putString("monthly_category_budgets", json.toString()).apply()
+    }
+    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Monthly budgets", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold) }
+        item { Text("Set category limits and compare them with dated expenses in the current month.", color = Muted) }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(value = amount, onValueChange = { amount = it.filter(Char::isDigit) }, label = { Text("Monthly limit (₹)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    Button(onClick = {
+                        val name = category.trim()
+                        val limit = amount.toLongOrNull()
+                        if (name.isBlank() || limit == null || limit <= 0L) message = "Enter a category and a positive monthly limit."
+                        else {
+                            budgets = budgets + (name to limit)
+                            persist(budgets)
+                            message = "Budget saved for $name."
+                            category = ""; amount = ""
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Save budget") }
+                    if (message.isNotBlank()) Text(message, color = Green, fontSize = 12.sp)
+                }
+            }
+        }
+        if (budgets.isEmpty()) item { InfoCard("No budgets yet", "Add a category and monthly spending limit above to start tracking.", Icons.Default.Savings) }
+        items(budgets.keys.sorted(), key = { it }) { name ->
+            val limit = budgets[name] ?: 0L
+            val spent = expenses[name] ?: 0L
+            val ratio = if (limit > 0L) spent.toFloat() / limit else 0f
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(15.dp)) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(name, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Bold)
+                        Text("${(ratio * 100).toInt()}%", color = if (ratio >= 1f) ExpenseRed else Green, fontWeight = FontWeight.Bold)
+                    }
+                    Text("Spent ${Money.format(spent)} of ${Money.format(limit)}", color = Muted, fontSize = 12.sp)
+                    LinearProgressIndicator(progress = { ratio.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth(), color = if (ratio >= 1f) ExpenseRed else Green, trackColor = Mint)
+                    if (ratio >= 1f) Text("Budget exceeded by ${Money.format(spent - limit)}", color = ExpenseRed, fontSize = 12.sp)
+                    TextButton(onClick = { budgets = budgets - name; persist(budgets) }) { Text("Remove budget", color = ExpenseRed) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InsightsScreen(income: Long, expenses: Long, debt: Long, transactions: List<Transaction>) {
+    val categoryTotals = transactions.filterNot { it.income }.filter { transactionBelongsToMonth(it, YearMonth.now()) }
+        .groupBy { it.category }.mapValues { entry -> entry.value.sumOf { it.amount } }
+        .toList().sortedByDescending { it.second }.take(5)
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { Text("Financial insights", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold) }
         item { MetricCard("Net tracked cash flow", Money.format(income - expenses), Modifier.fillMaxWidth()) }
@@ -872,6 +956,19 @@ private fun InsightsScreen(income: Long, expenses: Long, debt: Long) {
             )
         }
         item { InfoCard("Debt overview", "Track each balance, APR, fee, minimum payment and due date. Compare total costs before refinancing.", Icons.Default.AccountBalance) }
+        item {
+            Text("Top spending categories this month", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            if (categoryTotals.isEmpty()) Text("Add dated expenses to see category insights.", color = Muted)
+            categoryTotals.forEach { (category, amount) ->
+                Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(category, Modifier.weight(1f), color = Ink)
+                        Text(Money.format(amount), color = Ink, fontWeight = FontWeight.SemiBold)
+                    }
+                    LinearProgressIndicator(progress = { (amount.toFloat() / categoryTotals.maxOf { it.second }.coerceAtLeast(1L)).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth(), color = Green, trackColor = Mint)
+                }
+            }
+        }
         item { InfoCard("Emergency buffer", "Build savings gradually for essential expenses, at a pace that fits your income and obligations.", Icons.Default.Savings) }
     }
 }
@@ -994,6 +1091,7 @@ private fun CategoriesScreen() {
 private fun SettingsScreen(onOpen: (String) -> Unit) {
     val entries = listOf(
         "Categories" to Icons.Default.Label,
+        "Budgets" to Icons.Default.AccountBalanceWallet,
         "Calendar" to Icons.Default.CalendarMonth,
         "Insights" to Icons.Default.Insights,
         "Credit health" to Icons.Default.Speed,
@@ -1009,6 +1107,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
         }
         item { InfoCard("Preferences", "Reference palette: forest green, mint, white and slate. Transactions and loans are saved locally on this device. Open Appearance to save display preferences.", Icons.Default.Tune) }
         item { Button(onClick = { onOpen("Categories") }, modifier = Modifier.fillMaxWidth()) { Text("Category management") } }
+        item { OutlinedButton(onClick = { onOpen("Budgets") }, modifier = Modifier.fillMaxWidth()) { Text("Monthly category budgets") } }
         item { OutlinedButton(onClick = { onOpen("Appearance") }, modifier = Modifier.fillMaxWidth()) { Text("Settings appearance") } }
         item { OutlinedButton(onClick = { onOpen("Backup & security") }, modifier = Modifier.fillMaxWidth()) { Text("Backup & security") } }
         item { OutlinedButton(onClick = { onOpen("CRED sync") }, modifier = Modifier.fillMaxWidth()) { Text("Live payment tracking") } }
@@ -1167,7 +1266,7 @@ private fun CredSyncScreen() {
                 })
                 Column(Modifier.weight(1f).padding(top = 10.dp)) {
                     Text("I consent to optional payment notification capture", color = Ink, fontWeight = FontWeight.SemiBold)
-                    Text("Payment notifications may reveal merchant names, amounts and other text. The listener may inspect notification text from other apps too. Captured records stay in this app's local storage. You can withdraw consent here and disable Notification access in Android Settings.", color = Muted, fontSize = 12.sp)
+                    Text("Android notification access is system-wide. This app only processes full payment-alert text when the source is identified as CRED or ICICI iMobile; other apps’ notification titles may be checked to identify the source but their full text is not saved. Captured records stay locally. Withdraw consent here and disable Notification access in Android Settings to stop capture.", color = Muted, fontSize = 12.sp)
                 }
             }
             Button(onClick = {
@@ -1390,19 +1489,19 @@ private fun AddTransactionDialog(
     val savedCategories = remember {
         runCatching {
             val raw = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE).getString("custom_categories", null)
-            if (raw.isNullOrBlank()) defaultCategories
-            else {
+            val custom = if (raw.isNullOrBlank()) emptyList() else {
                 val array = JSONArray(raw)
-                (0 until array.length()).map { array.getString(it) }.filter { it.isNotBlank() }.ifEmpty { defaultCategories }
+                (0 until array.length()).map { array.getString(it) }.filter { it.isNotBlank() }
             }
+            (defaultCategories + custom).distinctBy { it.trim().lowercase(Locale.ROOT) }
         }.getOrDefault(defaultCategories)
     }
-    var category by remember { mutableStateOf(savedCategories.firstOrNull() ?: "Other") }
+    var isIncome by remember { mutableStateOf(false) }
+    var category by remember { mutableStateOf(savedCategories.firstOrNull { it == "Food & groceries" } ?: "Other") }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     var date by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
     var paymentMethod by remember { mutableStateOf("UPI") }
     var notes by remember { mutableStateOf("") }
-    var isIncome by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
 
     AlertDialog(
@@ -1411,8 +1510,8 @@ private fun AddTransactionDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(selected = !isIncome, onClick = { isIncome = false }, label = { Text("Expense") })
-                    FilterChip(selected = isIncome, onClick = { isIncome = true }, label = { Text("Income") })
+                    FilterChip(selected = !isIncome, onClick = { isIncome = false; if (category in listOf("Salary", "Other income", "Income")) category = savedCategories.firstOrNull { it !in listOf("Salary", "Other income", "Income") } ?: "Other" }, label = { Text("Expense") })
+                    FilterChip(selected = isIncome, onClick = { isIncome = true; if (category !in listOf("Salary", "Other income", "Income")) category = "Salary" }, label = { Text("Income") })
                 }
                 OutlinedTextField(title, { title = it }, label = { Text("Description") }, singleLine = true)
                 OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text("Amount (₹)") }, singleLine = true)
@@ -1432,7 +1531,7 @@ private fun AddTransactionDialog(
                         expanded = categoryMenuExpanded,
                         onDismissRequest = { categoryMenuExpanded = false }
                     ) {
-                        savedCategories.forEach { option ->
+                        (if (isIncome) listOf("Salary", "Other income") else savedCategories.filterNot { it in listOf("Salary", "Other income", "Income") }).distinct().forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(option) },
                                 onClick = { category = option; categoryMenuExpanded = false }

@@ -9,8 +9,9 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToLong
 
-/** Optional notification capture; it does not verify settlement with a bank. */
+/** Best-effort capture for explicitly selected CRED and ICICI iMobile alerts; not bank-verified. */
 class PaymentNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val packageName = sbn.packageName ?: return
@@ -18,6 +19,11 @@ class PaymentNotificationListener : NotificationListenerService() {
         val preferences = getSharedPreferences("open_finance_data", MODE_PRIVATE)
         if (!preferences.getBoolean("notification_capture_consent", false)) return
         val extras = sbn.notification.extras ?: return
+        val titleLine = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
+        val selectedProvider = packageName.contains("dreamplug", true) || packageName.contains("cred", true) ||
+            packageName.contains("icici", true) || titleLine.contains("CRED", true) ||
+            titleLine.contains("iMobile", true) || titleLine.contains("ICICI", true)
+        if (!selectedProvider) return
         val lines = mutableListOf<String>()
         listOf(Notification.EXTRA_TITLE, Notification.EXTRA_TEXT, Notification.EXTRA_BIG_TEXT).forEach { key ->
             extras.getCharSequence(key)?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let(lines::add)
@@ -32,17 +38,9 @@ class PaymentNotificationListener : NotificationListenerService() {
             ?: Regex("(?i)\\b(?:paid|debited|credited|sent|received)\\s+(?:of\\s+)?(?:INR|Rs\\.?\\s*)?([0-9,]+(?:\\.[0-9]{1,2})?)").find(body)
             ?: return
         if (!paymentWords.containsMatchIn(body)) return
-        val amount = amountMatch.groupValues[1].replace(",", "").toDoubleOrNull()?.toLong() ?: return
+        val amount = amountMatch.groupValues[1].replace(",", "").toDoubleOrNull()?.roundToLong() ?: return
         if (amount <= 0L) return
-        val titleLine = lines.firstOrNull().orEmpty()
-        val source = when {
-            packageName.contains("dreamplug", true) || titleLine.contains("CRED", true) -> "CRED"
-            packageName.contains("icici", true) || titleLine.contains("iMobile", true) || titleLine.contains("ICICI", true) -> "ICICI iMobile"
-            packageName.contains("paisa", true) || titleLine.contains("Google Pay", true) -> "Google Pay"
-            packageName.contains("phonepe", true) || titleLine.contains("PhonePe", true) -> "PhonePe"
-            packageName.contains("paytm", true) || titleLine.contains("Paytm", true) -> "Paytm"
-            else -> applicationLabel(packageName)
-        }
+        val source = if (packageName.contains("icici", true) || titleLine.contains("iMobile", true) || titleLine.contains("ICICI", true)) "ICICI iMobile" else "CRED"
         val title = extractRecipient(body, titleLine, source)
         val date = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(sbn.postTime))
         val isIncome = Regex("(?i)\\b(received|credited)\\b").containsMatchIn(body) &&
