@@ -1242,7 +1242,7 @@ private fun AddTransactionDialog(
             else (0 until JSONArray(raw).length()).map { JSONArray(raw).getString(it) }
         }.getOrDefault(listOf("Food & groceries", "Housing", "Transport", "Bills & utilities", "Health", "Shopping", "Entertainment", "Education", "Loan repayment", "Salary", "Other income"))
     }
-    var category by remember { mutableStateOf("Food & groceries") }
+    var category by remember { mutableStateOf(savedCategories.firstOrNull() ?: "Other") }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     var date by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
     var paymentMethod by remember { mutableStateOf("UPI") }
@@ -1305,7 +1305,7 @@ private fun AddTransactionDialog(
                 } else if (!validDate) {
                     error = "Enter the date as YYYY-MM-DD."
                 } else {
-                    onSave(title.trim(), parsed, isIncome, if (isIncome) "Income" else category.ifBlank { "Other" }, date, paymentMethod, notes.trim())
+                    onSave(title.trim(), parsed, isIncome, category.ifBlank { "Other" }, date, paymentMethod, notes.trim())
                 }
             }, colors = ButtonDefaults.buttonColors(containerColor = Green), modifier = Modifier.fillMaxWidth()) { Text("Save transaction") }
         },
