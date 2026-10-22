@@ -133,6 +133,7 @@ private fun FinanceApp() {
                     "Credit health" -> CreditHealthScreen()
                     "Categories" -> CategoriesScreen()
                     "Backup & security" -> BackupSecurityScreen()
+                    "CRED sync" -> CredSyncScreen()
                     "Appearance" -> AppearanceScreen()
                     "Loan details" -> LoanDetailsScreen(loans.first())
                     "Add loan" -> AddLoanScreen()
@@ -515,7 +516,8 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
         "Insights" to Icons.Default.Insights,
         "Credit health" to Icons.Default.Speed,
         "Appearance" to Icons.Default.Palette,
-        "Backup & security" to Icons.Default.Security
+        "Backup & security" to Icons.Default.Security,
+        "CRED sync" to Icons.Default.Sync
     )
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
@@ -526,6 +528,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
         item { Button(onClick = { onOpen("Categories") }, modifier = Modifier.fillMaxWidth()) { Text("Category management") } }
         item { OutlinedButton(onClick = { onOpen("Appearance") }, modifier = Modifier.fillMaxWidth()) { Text("Settings appearance") } }
         item { OutlinedButton(onClick = { onOpen("Backup & security") }, modifier = Modifier.fillMaxWidth()) { Text("Backup & security") } }
+        item { OutlinedButton(onClick = { onOpen("CRED sync") }, modifier = Modifier.fillMaxWidth()) { Text("CRED transaction sync") } }
         item { OutlinedButton(onClick = { onOpen("Credit health") }, modifier = Modifier.fillMaxWidth()) { Text("CIBIL & credit health") } }
         item { OutlinedButton(onClick = { onOpen("Loan details") }, modifier = Modifier.fillMaxWidth()) { Text("Loan details & EMI schedule") } }
         item { Button(onClick = { onOpen("Add loan") }, modifier = Modifier.fillMaxWidth()) { Text("+ Add loan") } }
@@ -563,6 +566,63 @@ private fun BackupSecurityScreen() {
         item { InfoCard("Privacy", "Do not enter banking passwords, card PINs or other secrets into this prototype.", Icons.Default.PrivacyTip) }
     }
 }
+@Composable
+private fun CredSyncScreen() {
+    var consent by remember { mutableStateOf(false) }
+    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            Text("CRED transaction sync", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
+            Text("CRED UPI + credit-card bill payments", color = Muted)
+        }
+        item {
+            InfoCard(
+                "Connection status: not connected",
+                "CRED does not currently expose a verified public consumer transaction API for this app to connect to. Automatic sync is not active; enabling a switch here must never imply otherwise.",
+                Icons.Default.Sync
+            )
+        }
+        item {
+            InfoCard(
+                "Safest integration path",
+                "Use an authorized, consent-based financial-data provider (such as an RBI-regulated Account Aggregator flow where eligible) or an official CRED partner API if CRED grants access. Both require a real provider integration and server-side verification before transactions can be imported.",
+                Icons.Default.VerifiedUser
+            )
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Future connection consent", color = Ink, fontWeight = FontWeight.Bold)
+                    Text("I want to connect CRED UPI and CRED credit-card payment activity when a verified, authorized integration is available.", color = Muted, fontSize = 13.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = consent, onCheckedChange = { consent = it })
+                        Text("Record my preference for both sources", color = Ink)
+                    }
+                    Text(
+                        if (consent) "Preference selected for this screen only. No account is connected and no data is being accessed."
+                        else "No permission has been granted to any provider.",
+                        color = Muted,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
+        item {
+            InfoCard(
+                "What this app will not do",
+                "It will not ask for your CRED password, UPI PIN, OTP or card credentials; scrape the CRED app; or read private SMS without a valid policy-compliant use case. Android SMS access is restricted, so SMS scraping is not used as a workaround.",
+                Icons.Default.Lock
+            )
+        }
+        item {
+            InfoCard(
+                "Available fallback",
+                "Until an authorized connection is implemented, add transactions manually. A statement/CSV import flow can be added as a separate user-initiated option; this screen does not import or sync transactions yet.",
+                Icons.Default.FileDownload
+            )
+        }
+    }
+}
+
 @Composable
 private fun AppearanceScreen() {
     var theme by remember { mutableStateOf("Light") }
