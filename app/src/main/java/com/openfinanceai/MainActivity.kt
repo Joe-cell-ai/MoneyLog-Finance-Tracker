@@ -598,6 +598,12 @@ private fun ReportsScreen(
             }
         }
         item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricCard("Savings / net", Money.format(income - expenses), Modifier.weight(1f))
+                MetricCard("Transactions", transactions.size.toString(), Modifier.weight(1f))
+            }
+        }
+        item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Income vs expenses", fontWeight = FontWeight.Bold, color = Ink)
@@ -609,30 +615,37 @@ private fun ReportsScreen(
                 }
             }
         }
-        if (categories.isNotEmpty()) item {
+        item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Spending by category", Modifier.fillMaxWidth(), color = Ink, fontWeight = FontWeight.Bold)
-                    androidx.compose.foundation.Canvas(Modifier.size(178.dp)) {
-                        val total = categories.sumOf { it.second }.coerceAtLeast(1L).toFloat()
-                        var start = -90f
-                        categories.forEachIndexed { index, entry ->
-                            val sweep = entry.second.toFloat() / total * 360f
-                            drawArc(
-                                color = chartColors[index % chartColors.size],
-                                startAngle = start,
-                                sweepAngle = sweep,
-                                useCenter = false,
-                                style = Stroke(width = size.minDimension * 0.19f, cap = StrokeCap.Butt)
-                            )
-                            start += sweep
+                    Box(contentAlignment = Alignment.Center) {
+                        androidx.compose.foundation.Canvas(Modifier.size(178.dp)) {
+                            val totalValue = categories.sumOf { it.second }.toFloat()
+                            if (totalValue > 0f) {
+                                var start = -90f
+                                categories.forEachIndexed { index, entry ->
+                                    val sweep = entry.second.toFloat() / totalValue * 360f
+                                    drawArc(color = chartColors[index % chartColors.size], startAngle = start, sweepAngle = sweep, useCenter = false, style = Stroke(width = size.minDimension * 0.19f, cap = StrokeCap.Butt))
+                                    start += sweep
+                                }
+                            } else {
+                                drawArc(color = Mint, startAngle = 0f, sweepAngle = 360f, useCenter = false, style = Stroke(width = size.minDimension * 0.19f, cap = StrokeCap.Butt))
+                            }
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(Money.format(categories.sumOf { it.second }), color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            Text("Total spend", color = Muted, fontSize = 10.sp)
                         }
                     }
-                    Text(Money.format(categories.sumOf { it.second }), color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    if (categories.isEmpty() || categories.sumOf { it.second } == 0L) {
+                        Text("No expenses recorded for this month.", color = Muted, fontSize = 12.sp)
+                    }
                 }
             }
         }
-        item { SectionHeading("Category breakdown", "Tracked spending") }
+        item { SectionHeading("Category breakdown", "Selected month spending") }
+        if (categories.isEmpty()) { item { Text("No categories to show for this month yet.", color = Muted, fontSize = 12.sp) } }
         items(categories) { (category, amount) ->
             val colorIndex = categories.indexOfFirst { it.first == category }.coerceAtLeast(0)
             Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -777,7 +790,7 @@ private fun CalendarScreen(loans: List<Loan>, transactions: List<Transaction>) {
         if (day in 1..visibleMonth.lengthOfMonth()) day else null
     }
     val monthTransactions = transactions.filter { transactionBelongsToMonth(it, visibleMonth) }
-    val selectedTransactions = transactions.filter { transactionDateOrNull(it) == selectedDate }
+    val selectedTransactions = monthTransactions.filter { transactionDateOrNull(it) == selectedDate }
     val selectedIncome = selectedTransactions.filter { it.income }.sumOf { it.amount }
     val selectedExpenses = selectedTransactions.filterNot { it.income }.sumOf { it.amount }
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -789,12 +802,20 @@ private fun CalendarScreen(loans: List<Loan>, transactions: List<Transaction>) {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { visibleMonth = visibleMonth.minusMonths(1); selectedDate = visibleMonth.atDay(1) }) {
+                        IconButton(onClick = {
+                            val nextMonth = visibleMonth.minusMonths(1)
+                            visibleMonth = nextMonth
+                            selectedDate = nextMonth.atDay(1)
+                        }) {
                             Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month", tint = Green)
                         }
                         Text(visibleMonth.month.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault()) + " " + visibleMonth.year,
                             Modifier.weight(1f), textAlign = TextAlign.Center, color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        IconButton(onClick = { visibleMonth = visibleMonth.plusMonths(1); selectedDate = visibleMonth.atDay(1) }) {
+                        IconButton(onClick = {
+                            val nextMonth = visibleMonth.plusMonths(1)
+                            visibleMonth = nextMonth
+                            selectedDate = nextMonth.atDay(1)
+                        }) {
                             Icon(Icons.Default.ChevronRight, contentDescription = "Next month", tint = Green)
                         }
                     }
