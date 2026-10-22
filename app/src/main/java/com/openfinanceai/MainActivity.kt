@@ -525,6 +525,80 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
     }
 }
 
+
+@Composable
+private fun CreditHealthScreen() {
+    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("CIBIL & Credit Health", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold) }
+        item { InfoCard("Credit score", "720 · Good (sample only, not a real CIBIL score). Connect an authorized bureau for verified data.", Icons.Default.VerifiedUser) }
+        item { InfoCard("Recommendations", "Pay EMIs on time, keep credit utilization low, avoid unnecessary loan applications and review your official report for errors.", Icons.Default.Lightbulb) }
+    }
+}
+@Composable
+private fun BackupSecurityScreen() {
+    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Backup & Security", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold) }
+        item { InfoCard("Local data", "Demo data may reset when the app closes. Persistent encrypted storage is not connected yet.", Icons.Default.Lock) }
+        item { InfoCard("Cloud backup", "Google Drive / OneDrive backup is not connected in this build.", Icons.Default.CloudUpload) }
+        item { InfoCard("Restore & export", "Restore, CSV export and scheduled backups are not implemented yet.", Icons.Default.Restore) }
+        item { InfoCard("Privacy", "Do not enter banking passwords, card PINs or other secrets into this prototype.", Icons.Default.PrivacyTip) }
+    }
+}
+@Composable
+private fun AppearanceScreen() {
+    var theme by remember { mutableStateOf("Light") }
+    var currency by remember { mutableStateOf("INR (₹)") }
+    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Settings · Appearance", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold) }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Theme", color = Ink, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("Light", "Dark", "System").forEach { value -> FilterChip(selected = theme == value, onClick = { theme = value }, label = { Text(value) }) }
+                    }
+                    Text("Currency", color = Ink, fontWeight = FontWeight.Bold)
+                    listOf("INR (₹)", "USD ($)", "EUR (€)").forEach { value -> Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = currency == value, onClick = { currency = value }); Text(value, color = Ink) } }
+                    Text("Preferences are a preview and are not saved between app launches yet.", color = Muted, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+@Composable
+private fun LoanDetailsScreen(loan: Loan) {
+    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Loan Details & EMI Schedule", fontSize = 25.sp, color = Ink, fontWeight = FontWeight.Bold) }
+        item { MetricCard("Outstanding · ${loan.lender}", Money.format(loan.balance), Modifier.fillMaxWidth()) }
+        item { MetricCard("Monthly EMI", Money.format(loan.emi), Modifier.fillMaxWidth()) }
+        item { InfoCard("Next payment", "Next due: ${loan.due}. Schedule is illustrative; verify dates and amounts from your lender statement.", Icons.Default.CalendarMonth) }
+        item { SectionHeading("Upcoming EMIs", "Schedule") }
+        items((0..5).toList()) { index -> Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(13.dp)).padding(14.dp)) { Text(if (index == 0) loan.due else "Month ${index + 1}", Modifier.weight(1f), color = Ink); Text(Money.format(loan.emi), color = if (index == 0) ExpenseRed else Ink, fontWeight = FontWeight.Bold) } }
+    }
+}
+@Composable
+private fun AddLoanScreen() {
+    var lender by remember { mutableStateOf("") }
+    var principal by remember { mutableStateOf("") }
+    var rate by remember { mutableStateOf("12") }
+    var emi by remember { mutableStateOf("") }
+    var saved by remember { mutableStateOf(false) }
+    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Add Loan", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold) }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(lender, { lender = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Lender / Bank") }, singleLine = true)
+                    OutlinedTextField(principal, { principal = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Principal amount (₹)") }, singleLine = true)
+                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' } }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true)
+                    OutlinedTextField(emi, { emi = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true)
+                    Button(onClick = { saved = lender.isNotBlank() && (principal.toLongOrNull() ?: 0L) > 0 }, modifier = Modifier.fillMaxWidth()) { Text("Save Loan") }
+                    if (saved) Text("Loan form validated. Persistent saving is not connected yet.", color = IncomeGreen)
+                }
+            }
+        }
+    }
+}
 @Composable
 private fun AddTransactionDialog(
     onDismiss: () -> Unit,
