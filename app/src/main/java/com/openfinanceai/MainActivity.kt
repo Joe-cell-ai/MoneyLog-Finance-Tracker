@@ -174,8 +174,12 @@ private fun HomeScreen(
                             Text(Money.format(income), color = Color.White, fontWeight = FontWeight.Bold)
                         }
                         Column(Modifier.weight(1f)) {
-                            Text("↑ EXPENSES", color = Color.White.copy(alpha = .8f))
+                            Text("↑ EXPENSES", color = Color(0xFFFFC1C6))
                             Text(Money.format(expenses), color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("✦ SAVINGS", color = Color(0xFFB7E5FF))
+                            Text(Money.format(income - expenses), color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -510,6 +514,12 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
             Text("Personalize your workspace", color = Muted)
         }
         item { InfoCard("Preferences", "Currency: Indian Rupee (₹)\nTheme: Light\nStorage: demo in memory", Icons.Default.Tune) }
+        item { Button(onClick = { onOpen("Categories") }, modifier = Modifier.fillMaxWidth()) { Text("Category management") } }
+        item { OutlinedButton(onClick = { onOpen("Appearance") }, modifier = Modifier.fillMaxWidth()) { Text("Settings appearance") } }
+        item { OutlinedButton(onClick = { onOpen("Backup & security") }, modifier = Modifier.fillMaxWidth()) { Text("Backup & security") } }
+        item { OutlinedButton(onClick = { onOpen("Credit health") }, modifier = Modifier.fillMaxWidth()) { Text("CIBIL & credit health") } }
+        item { OutlinedButton(onClick = { onOpen("Loan details") }, modifier = Modifier.fillMaxWidth()) { Text("Loan details & EMI schedule") } }
+        item { Button(onClick = { onOpen("Add loan") }, modifier = Modifier.fillMaxWidth()) { Text("+ Add loan") } }
         items(entries) { (label, icon) ->
             Row(
                 Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).clickable { onOpen(label) }.padding(16.dp),
