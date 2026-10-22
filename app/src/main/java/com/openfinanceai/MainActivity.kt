@@ -37,6 +37,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.text.NumberFormat
+import java.time.YearMonth
+import java.time.format.TextStyle
 import java.util.Locale
 
 private val Green = Color(0xFF087F5B)
@@ -68,6 +70,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun FinanceApp() {
     var tab by remember { mutableStateOf("Home") }
+    var selectedOverviewMonth by remember { mutableStateOf(YearMonth.now()) }
     var showAdd by remember { mutableStateOf(false) }
     var transactionForActions by remember { mutableStateOf<Transaction?>(null) }
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
@@ -176,7 +179,7 @@ private fun FinanceApp() {
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 when (tab) {
-                    "Home" -> HomeScreen(income, expenses, transactions, { tab = "Activity" }, { showAdd = true }, { tab = it }, { transactionForActions = it })
+                    "Home" -> HomeScreen(income, expenses, transactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = "Activity" }, { showAdd = true }, { tab = it }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
                     "Reports" -> ReportsScreen(income, expenses, transactions)
                     "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" }, { loanForActions = it })
@@ -271,14 +274,17 @@ private fun HomeScreen(
     income: Long,
     expenses: Long,
     transactions: List<Transaction>,
+    selectedMonth: YearMonth,
+    onMonthChange: (YearMonth) -> Unit,
     onAll: () -> Unit,
     onAdd: () -> Unit,
     onOpen: (String) -> Unit,
     onTransactionLongPress: (Transaction) -> Unit
 ) {
+    var showMonthPicker by remember { mutableStateOf(false) }
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
         item {
-            Text("OCTOBER 2026", color = Muted, fontSize = 11.sp, letterSpacing = 1.sp)
+            Text(selectedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH).uppercase(Locale.ENGLISH) + " " + selectedMonth.year, color = Muted, fontSize = 11.sp, letterSpacing = 1.sp)
             Text("Good morning 👋", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { onOpen("Calendar") }) { Icon(Icons.Default.CalendarMonth, null); Text(" Calendar") }
@@ -316,7 +322,15 @@ private fun HomeScreen(
                 QuickAction("AI coach", Icons.Default.AutoAwesome, Modifier.weight(1f)) { onOpen("Coach") }
             }
         }
-        item { SectionHeading("Monthly overview", "October 2026") }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Monthly overview", modifier = Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
+                TextButton(onClick = { showMonthPicker = true }) {
+                    Text(selectedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH) + " " + selectedMonth.year)
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Choose month")
+                }
+            }
+        }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -357,6 +371,36 @@ private fun HomeScreen(
                 Text(" Credit health")
             }
         }
+    }
+
+    if (showMonthPicker) {
+        AlertDialog(
+            onDismissRequest = { showMonthPicker = false },
+            title = { Text("Choose month") },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Select a month to view", color = Muted, fontSize = 13.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }) {
+                            Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month")
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(selectedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
+                            Text(selectedMonth.year.toString(), color = Muted)
+                        }
+                        IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }) {
+                            Icon(Icons.Default.ChevronRight, contentDescription = "Next month")
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { onMonthChange(YearMonth.now()) }) { Text("This month") }
+                        TextButton(onClick = { showMonthPicker = false }) { Text("Done") }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showMonthPicker = false }) { Text("Close") } }
+        )
     }
 }
 
