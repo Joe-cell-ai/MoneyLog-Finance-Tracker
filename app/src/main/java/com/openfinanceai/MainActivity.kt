@@ -56,7 +56,7 @@ private val Page = Color(0xFFF3F7F8)
 private val Money = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
 
 private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "")
-private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0)
+private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -159,7 +159,7 @@ private fun FinanceApp() {
                 .put("paymentMethod", t.paymentMethod).put("notes", t.notes)) }
             val loanArray = JSONArray()
             loans.forEach { l -> loanArray.put(JSONObject().put("lender", l.lender).put("balance", l.balance)
-                .put("emi", l.emi).put("due", l.due).put("annualRate", l.annualRate)) }
+                .put("emi", l.emi).put("due", l.due).put("annualRate", l.annualRate).put("originalPrincipal", l.originalPrincipal).put("paymentsMade", l.paymentsMade)) }
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
             val savedCategories = runCatching { JSONArray(prefs.getString("custom_categories", "[]") ?: "[]") }.getOrDefault(JSONArray())
             root.put("transactions", transactionArray)
@@ -188,7 +188,7 @@ private fun FinanceApp() {
             }
             val restoredLoans = root.optJSONArray("loans")?.let { a ->
                 (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
-                    Loan(j.getString("lender"), j.getLong("balance"), j.getLong("emi"), j.optString("due", "Not set"), j.optDouble("annualRate", 0.0))
+                    Loan(j.getString("lender"), j.getLong("balance"), j.getLong("emi"), j.optString("due", "Not set"), j.optDouble("annualRate", 0.0), j.optLong("originalPrincipal", j.getLong("balance")), j.optLong("paymentsMade", 0L))
                 } }
             } ?: emptyList()
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -1746,6 +1746,8 @@ private fun saveLoans(context: android.content.Context, loans: List<Loan>) {
             put("emi", loan.emi)
             put("due", loan.due)
             put("annualRate", loan.annualRate)
+            put("originalPrincipal", loan.originalPrincipal)
+            put("paymentsMade", loan.paymentsMade)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -1758,6 +1760,6 @@ private fun loadLoans(context: android.content.Context): List<Loan>? = runCatchi
     val array = JSONArray(raw)
     (0 until array.length()).map { index ->
         val item = array.getJSONObject(index)
-        Loan(item.getString("lender"), item.getLong("balance"), item.getLong("emi"), item.optString("due", "Not set"), item.optDouble("annualRate", 0.0))
+        Loan(item.getString("lender"), item.getLong("balance"), item.getLong("emi"), item.optString("due", "Not set"), item.optDouble("annualRate", 0.0), item.optLong("originalPrincipal", item.getLong("balance")), item.optLong("paymentsMade", 0L))
     }
 }.getOrNull()
