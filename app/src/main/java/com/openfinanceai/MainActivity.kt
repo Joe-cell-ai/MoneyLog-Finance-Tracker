@@ -157,7 +157,12 @@ private fun FinanceApp() {
                     "Categories" -> CategoriesScreen()
                     "Backup & security" -> BackupSecurityScreen()
                     "CRED sync" -> CredSyncScreen()
-                    "Import transactions" -> ImportTransactionsScreen(importMessage, importedPreview.size, { csvPicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) }, {\n                        transactions = (importedPreview + transactions).distinctBy { transactionKey(it) }\n                        saveTransactions(context, transactions)\n                        importMessage = "Imported ${importedPreview.size} transaction(s). Saved on this device."\n                        importedPreview = emptyList()\n                    })
+                    "Import transactions" -> ImportTransactionsScreen(importMessage, importedPreview.size, { csvPicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) }, {
+                        transactions = (importedPreview + transactions).distinctBy { transactionKey(it) }
+                        saveTransactions(context, transactions)
+                        importMessage = "Imported ${importedPreview.size} transaction(s). Saved on this device."
+                        importedPreview = emptyList()
+                    })
                     "Appearance" -> AppearanceScreen()
                     "Loan details" -> LoanDetailsScreen(loans.first())
                     "Add loan" -> AddLoanScreen()
