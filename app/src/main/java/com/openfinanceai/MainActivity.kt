@@ -578,6 +578,9 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
                 }
             }
         }
+        if (loans.isEmpty()) item {
+            InfoCard("No loans added yet", "Add a loan to track its outstanding balance, monthly EMI and next due date.", Icons.Default.AccountBalance)
+        }
         items(loans) { loan ->
             Card(modifier = Modifier.combinedClickable(onClick = { onDetails(loan) }, onLongClick = { onLoanLongPress(loan) }), colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -591,12 +594,20 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
                     Text("Monthly EMI", color = Muted, fontSize = 12.sp)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(Money.format(loan.emi), Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text("On track", color = Green, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                        Text("Monthly", color = Green, fontSize = 11.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier.background(Mint, RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 5.dp))
                     }
-                    LinearProgressIndicator(progress = { 0.32f }, modifier = Modifier.fillMaxWidth().height(7.dp), color = Green, trackColor = Mint)
-                    Text("Outstanding  " + Money.format(loan.balance), color = Muted, fontSize = 12.sp)
-                    Text("Next due: " + loan.due, color = Muted, fontSize = 12.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Outstanding balance", color = Muted, fontSize = 11.sp)
+                            Text(Money.format(loan.balance), color = Ink, fontWeight = FontWeight.SemiBold)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Next due", color = Muted, fontSize = 11.sp)
+                            Text(loan.due, color = Ink, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    Text("Repayment progress isn't shown because the original principal and payments made haven't been recorded.", color = Muted, fontSize = 11.sp)
                 }
             }
         }
