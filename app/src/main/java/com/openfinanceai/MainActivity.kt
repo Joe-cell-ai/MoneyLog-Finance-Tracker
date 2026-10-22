@@ -774,7 +774,14 @@ private fun CoachScreen(income: Long, expenses: Long, emi: Long) {
         if (answer.isNotBlank()) item {
             Text(answer, Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).padding(16.dp), color = Ink)
         }
-        item { Text("This starter coach uses local rules, not a live AI service or regulated financial advice.", color = Muted, fontSize = 11.sp) }
+        item {
+            InfoCard(
+                "Live AI service: Not connected",
+                "These answers are generated locally from tracked totals. They are not live AI responses or current lender quotes. A future connected service must show its provider and update time, protect API keys on a trusted backend, and ask before sharing financial details.",
+                Icons.Default.CloudOff
+            )
+        }
+        item { Text("Guidance is informational, not regulated financial advice.", color = Muted, fontSize = 11.sp) }
     }
 }
 
@@ -1167,6 +1174,13 @@ private fun CreditHealthScreen() {
     val enteredScore = scoreText.toIntOrNull()?.takeIf { it in 300..900 }
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("CIBIL & Credit Health", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold) }
+        item {
+            InfoCard(
+                "Live bureau status: Not connected",
+                "No authorized live CIBIL/bureau API is configured in this build. A score entered below is user-reported, not verified. When an authorized integration is added, show its source and the successful fetch time; never substitute a generated score.",
+                Icons.Default.CloudOff
+            )
+        }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 listOf("Credit score", "Recommendations").forEach { option ->
