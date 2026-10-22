@@ -957,8 +957,32 @@ private fun CreditHealthScreen() {
             }
         }
         if (selected == "Credit score") {
-            item { InfoCard("Credit score", "720 · Good (illustrative sample only, not your real CIBIL score). MoneyLog is not connected to a credit bureau, so this value must not be treated as your actual score.", Icons.Default.VerifiedUser) }
-            item { InfoCard("Get your real score", "Use the official CIBIL website or an authorized credit bureau/app to check your verified score and report. This app does not collect your bureau credentials.", Icons.Default.OpenInNew) }
+            item {
+                Column(
+                    Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(22.dp)).padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("Illustrative score preview", color = Muted, fontSize = 13.sp)
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(154.dp)) {
+                        CircularProgressIndicator(
+                            progress = { 720f / 900f },
+                            modifier = Modifier.fillMaxSize(),
+                            color = Green,
+                            trackColor = Mint,
+                            strokeWidth = 11.dp
+                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("720", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = Ink)
+                            Text("of 900", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                    Text("Good · Sample only", color = Green, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("This is a demonstration value, not your actual CIBIL score. No credit bureau is connected.", color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
+                }
+            }
+            item { InfoCard("What affects your score?", "Repayment history, credit utilisation, length of credit history, credit mix and recent enquiries can influence a credit score. This app cannot assess your actual bureau factors without a verified report.", Icons.Default.Insights) }
+            item { InfoCard("Get your verified score", "Check your score and report through the official TransUnion CIBIL website or an authorized credit bureau service. Review account balances and late-payment records for errors. Never share your bureau password or OTP with this app.", Icons.Default.OpenInNew) }
         } else {
             item { InfoCard("Protect your payment history", "Pay every EMI by its due date and keep enough balance before the auto-debit date. Set reminders a few days early.", Icons.Default.EventAvailable) }
             item { InfoCard("Manage credit utilisation", "Try to keep revolving credit-card utilisation low, ideally below 30%, and pay the full statement balance when possible.", Icons.Default.PieChart) }
