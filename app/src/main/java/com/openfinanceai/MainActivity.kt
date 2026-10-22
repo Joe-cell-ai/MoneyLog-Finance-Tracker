@@ -1148,51 +1148,56 @@ private fun CredSyncScreen() {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
     var notificationConsent by remember { mutableStateOf(preferences.getBoolean("notification_capture_consent", false)) }
+    fun openWeb(url: String) {
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+    }
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("Bank & Credit Integrations", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Permissions, consent and connection status", color = Muted)
+            Text("Selected sources: CRED, ICICI iMobile and CIBIL", color = Muted)
         }
-        item { InfoCard("Available today", "Local transaction tracking, bank-statement CSV import/export, EMI reminders, and optional payment-notification capture are available. A real bank feed or verified CIBIL score is not connected in this build.", Icons.Default.Info) }
+        item { InfoCard("Current connection status", "CRED and ICICI iMobile can be monitored through payment notifications if those apps post readable payment alerts and you enable Android Notification access. This is not a direct bank API connection and may miss or misread alerts. Verified CIBIL reports are not connected yet.", Icons.Default.Info) }
         item {
-            Text("1 · Optional payment notification access", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            InfoCard("Android access required", "To auto-detect payment alerts, Android asks you to enable Notification access in system settings. Android 13+ also asks for notification permission so the app can show EMI reminders. No contacts, location, SMS, call-log, or broad storage permission is required for the current CSV import/export flow.", Icons.Default.NotificationsActive)
+            Text("1 · CRED + ICICI iMobile alerts", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            InfoCard("What this app can do now", "With your consent, the listener checks notifications for payment-related wording and amounts and saves matching entries locally. It does not sign in to CRED or ICICI, read account balances, fetch complete statements, or verify that a payment settled. Check each captured transaction against your bank record.", Icons.Default.NotificationsActive)
             Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(12.dp), verticalAlignment = Alignment.Top) {
                 Checkbox(checked = notificationConsent, onCheckedChange = { accepted ->
                     notificationConsent = accepted
                     preferences.edit().putBoolean("notification_capture_consent", accepted).apply()
                 })
                 Column(Modifier.weight(1f).padding(top = 10.dp)) {
-                    Text("I consent to optional notification capture", color = Ink, fontWeight = FontWeight.SemiBold)
-                    Text("Payment notifications may contain merchant, amount and other notification text. The app attempts to save relevant payment alerts locally. Other notification content may be visible to the listener; capture is best-effort and is not a verified bank statement. I can revoke access in Android settings.", color = Muted, fontSize = 12.sp)
+                    Text("I consent to optional payment notification capture", color = Ink, fontWeight = FontWeight.SemiBold)
+                    Text("Payment notifications may reveal merchant names, amounts and other text. The listener may inspect notification text from other apps too. Captured records stay in this app's local storage. You can withdraw consent here and disable Notification access in Android Settings.", color = Muted, fontSize = 12.sp)
                 }
             }
             Button(onClick = {
                 runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             }, enabled = notificationConsent, modifier = Modifier.fillMaxWidth()) {
-                Text(if (notificationConsent) "Open Android notification access settings" else "Agree above to continue")
+                Text(if (notificationConsent) "Enable Android notification access" else "Agree above to continue")
             }
             OutlinedButton(onClick = {
                 notificationConsent = false
                 preferences.edit().putBoolean("notification_capture_consent", false).apply()
                 runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            }, modifier = Modifier.fillMaxWidth()) { Text("Withdraw in-app consent / manage Android access") }
+            }, modifier = Modifier.fillMaxWidth()) { Text("Withdraw consent / manage Android access") }
         }
         item {
-            Text("2 · Real bank account integration", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            InfoCard("What is needed", "A production connection needs an eligible bank/API provider or RBI-regulated Account Aggregator flow, provider onboarding and credentials, a secure backend, and a separate, specific consent flow showing accounts, data types, purpose and time period. Android permissions alone cannot grant access to bank balances or statements. No bank login, UPI PIN or OTP should be collected by this app.", Icons.Default.AccountBalance)
+            Text("2 · Direct bank-data connection", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            InfoCard("CRED and ICICI", "CRED's own Money/Networth feature can use the Account Aggregator framework, but that does not give this app access to CRED's private integrations. ICICI's developer portal is a starting point for approved API projects, not automatic access to a personal iMobile account. A production connection needs provider approval, a compliant secure backend and a separate customer consent flow. Never collect bank passwords, UPI PINs or OTPs.", Icons.Default.AccountBalance)
+            OutlinedButton(onClick = { openWeb("https://api-portal.icici.bank.in/") }, modifier = Modifier.fillMaxWidth()) { Text("Open ICICI Bank developer portal") }
+            OutlinedButton(onClick = { openWeb("https://www.financialservices.gov.in/account-aggregator-framework") }, modifier = Modifier.fillMaxWidth()) { Text("Read official Account Aggregator framework") }
         }
         item {
-            Text("3 · Verified CIBIL score/report", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            InfoCard("What is needed", "A verified score needs an approved TransUnion CIBIL or authorized bureau/partner integration, contractual/API access and secure server-side credentials, plus the user's informed consent and identity/authorization checks required by that provider. This app currently stores only a score you manually enter; it does not fetch or verify it.", Icons.Default.VerifiedUser)
+            Text("3 · CIBIL Insights / current report", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            InfoCard("Verified report requirement", "To show a current verified CIBIL score/report inside this app, the app owner needs TransUnion CIBIL's approved consumer-report product/API access, commercial onboarding, production approval and a compliant identity/consent flow. Until that is approved and integrated, this app only stores a score you manually enter; it must not label it as a live or verified CIBIL result.", Icons.Default.VerifiedUser)
+            OutlinedButton(onClick = { openWeb("https://apimarketplace.transunioncibil.com/products/credit-data/dtc-consumer-connect-services") }, modifier = Modifier.fillMaxWidth()) { Text("Open official CIBIL Consumer Connect details") }
+            OutlinedButton(onClick = { openWeb("https://apimarketplace.transunioncibil.com/getting-started") }, modifier = Modifier.fillMaxWidth()) { Text("Open CIBIL API onboarding") }
         }
         item {
-            Text("4 · CSV import and backup", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            InfoCard("No broad file permission", "For CSV import and JSON/CSV export, Android's system document picker grants access only to the file you select. The app does not need broad storage access. Review imported rows before relying on them and keep financial backups private.", Icons.Default.FileUpload)
+            Text("4 · Statement import and backup", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            InfoCard("Local file access only", "You can import a bank statement CSV or export a backup using Android's document picker. Only the file you select is granted to the app; no broad storage permission is needed. Review imported rows and keep exported financial files private.", Icons.Default.FileUpload)
         }
-        item {
-            InfoCard("Never share these secrets", "Do not enter your bank password, UPI PIN, card PIN, OTP, or credit-bureau password into MoneyLog or send them in chat. API keys belong in a secured backend, not inside the Android app or a public GitHub repository.", Icons.Default.Lock)
-        }
+        item { InfoCard("Important safety rule", "Do not enter bank passwords, UPI PINs, card PINs, OTPs or bureau passwords into this app or send them in chat. Provider API credentials must be kept on a secured backend, never hard-coded into the Android app or public GitHub.", Icons.Default.Lock) }
     }
 }
 @Composable
