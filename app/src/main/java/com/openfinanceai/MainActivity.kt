@@ -1146,40 +1146,52 @@ private fun BackupSecurityScreen(
 @Composable
 private fun CredSyncScreen() {
     val context = LocalContext.current
+    val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
+    var notificationConsent by remember { mutableStateOf(preferences.getBoolean("notification_capture_consent", false)) }
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Text("Live payment tracking", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("CRED · Google Pay · PhonePe · Paytm · bank alerts", color = Muted)
+            Text("Bank & Credit Integrations", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
+            Text("Permissions, consent and connection status", color = Muted)
         }
+        item { InfoCard("Available today", "Local transaction tracking, bank-statement CSV import/export, EMI reminders, and optional payment-notification capture are available. A real bank feed or verified CIBIL score is not connected in this build.", Icons.Default.Info) }
         item {
-            InfoCard("Stage 1 · Notification capture",
-                "MoneyLog can read payment notifications only after you explicitly enable Notification access in Android settings. It extracts amount, app/source, recipient text when available, and notification time, then saves locally. Some apps hide details or do not post notifications, so this is best-effort and not a verified bank ledger.",
-                Icons.Default.NotificationsActive)
-        }
-        item {
+            Text("1 · Optional payment notification access", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            InfoCard("Android access required", "To auto-detect payment alerts, Android asks you to enable Notification access in system settings. Android 13+ also asks for notification permission so the app can show EMI reminders. No contacts, location, SMS, call-log, or broad storage permission is required for the current CSV import/export flow.", Icons.Default.NotificationsActive)
+            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(12.dp), verticalAlignment = Alignment.Top) {
+                Checkbox(checked = notificationConsent, onCheckedChange = { accepted ->
+                    notificationConsent = accepted
+                    preferences.edit().putBoolean("notification_capture_consent", accepted).apply()
+                })
+                Column(Modifier.weight(1f).padding(top = 10.dp)) {
+                    Text("I consent to optional notification capture", color = Ink, fontWeight = FontWeight.SemiBold)
+                    Text("Payment notifications may contain merchant, amount and other notification text. The app attempts to save relevant payment alerts locally. Other notification content may be visible to the listener; capture is best-effort and is not a verified bank statement. I can revoke access in Android settings.", color = Muted, fontSize = 12.sp)
+                }
+            }
             Button(onClick = {
                 runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            }, modifier = Modifier.fillMaxWidth()) { Text("Enable payment notification access") }
+            }, enabled = notificationConsent, modifier = Modifier.fillMaxWidth()) {
+                Text(if (notificationConsent) "Open Android notification access settings" else "Agree above to continue")
+            }
+            OutlinedButton(onClick = {
+                notificationConsent = false
+                preferences.edit().putBoolean("notification_capture_consent", false).apply()
+                runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            }, modifier = Modifier.fillMaxWidth()) { Text("Withdraw in-app consent / manage Android access") }
         }
         item {
-            InfoCard("Stage 2 · Bank statement / Account Aggregator",
-                "Import statement CSV files to fill gaps and reconcile notification captures. A live Account Aggregator connection requires an eligible regulated Financial Information User/provider, user consent, and a real integration; it is not connected in this build.",
-                Icons.Default.VerifiedUser)
+            Text("2 · Real bank account integration", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            InfoCard("What is needed", "A production connection needs an eligible bank/API provider or RBI-regulated Account Aggregator flow, provider onboarding and credentials, a secure backend, and a separate, specific consent flow showing accounts, data types, purpose and time period. Android permissions alone cannot grant access to bank balances or statements. No bank login, UPI PIN or OTP should be collected by this app.", Icons.Default.AccountBalance)
         }
         item {
-            InfoCard("Stage 3 · Official CRED integration",
-                "Connect directly to CRED only if an official API or partner integration is approved and credentials are securely configured. No private API, password scraping, UPI PIN, OTP, or SMS scraping is used.",
-                Icons.Default.Sync)
+            Text("3 · Verified CIBIL score/report", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            InfoCard("What is needed", "A verified score needs an approved TransUnion CIBIL or authorized bureau/partner integration, contractual/API access and secure server-side credentials, plus the user's informed consent and identity/authorization checks required by that provider. This app currently stores only a score you manually enter; it does not fetch or verify it.", Icons.Default.VerifiedUser)
         }
         item {
-            InfoCard("Transaction details & safety",
-                "Captured entries include available recipient/merchant text, amount, and timestamp. Notification text can be incomplete or misleading; verify important payments against your bank/UPI history. Duplicates are filtered using notification identifiers where available.",
-                Icons.Default.ReceiptLong)
+            Text("4 · CSV import and backup", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            InfoCard("No broad file permission", "For CSV import and JSON/CSV export, Android's system document picker grants access only to the file you select. The app does not need broad storage access. Review imported rows before relying on them and keep financial backups private.", Icons.Default.FileUpload)
         }
         item {
-            InfoCard("Privacy",
-                "Captured transactions are stored in app-private local storage. Android notification access can expose other app notifications, so enable it only if you accept that access; you can revoke it in Android settings at any time.",
-                Icons.Default.Lock)
+            InfoCard("Never share these secrets", "Do not enter your bank password, UPI PIN, card PIN, OTP, or credit-bureau password into MoneyLog or send them in chat. API keys belong in a secured backend, not inside the Android app or a public GitHub repository.", Icons.Default.Lock)
         }
     }
 }
