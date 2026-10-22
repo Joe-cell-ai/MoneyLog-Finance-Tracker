@@ -785,8 +785,12 @@ private fun AddTransactionDialog(
 }
 
 
-private fun transactionKey(transaction: Transaction): String =
-    "${transaction.title.trim().replace(Regex("\\\\s+"), " ").lowercase(Locale.ROOT)}|${transaction.date.trim().lowercase(Locale.ROOT)}|${transaction.amount}|${transaction.income}"
+private fun transactionKey(transaction: Transaction): String {
+    fun normalize(value: String): String = value.trim()
+        .replace(Regex("\\s+"), " ")
+        .lowercase(Locale.ROOT)
+    return "${normalize(transaction.title)}|${normalize(transaction.date)}|${transaction.amount}|${transaction.income}"
+}
 
 private fun saveTransactions(context: android.content.Context, transactions: List<Transaction>) {
     val array = JSONArray()
