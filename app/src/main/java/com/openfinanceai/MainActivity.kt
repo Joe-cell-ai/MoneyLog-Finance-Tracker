@@ -288,8 +288,8 @@ private fun FinanceApp() {
                     })
                     "Appearance" -> AppearanceScreen()
                     "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: EmptyLoansScreen { tab = "Add loan" }
-                    "Add loan" -> AddLoanScreen { lender, principal, rate, emi ->
-                        val newLoan = Loan(lender, principal, emi, "Set due date", rate)
+                    "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi ->
+                        val newLoan = Loan(lender, balance, emi, "Set due date", rate, originalPrincipal, paymentsMade)
                         loans = listOf(newLoan) + loans
                         saveLoans(context, loans)
                         tab = "Loans"
@@ -1378,9 +1378,11 @@ private fun EmptyLoansScreen(onAddLoan: () -> Unit) {
 }
 
 @Composable
-private fun AddLoanScreen(onSave: (String, Long, Double, Long) -> Unit) {
+private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long) -> Unit) {
     var lender by remember { mutableStateOf("") }
     var principal by remember { mutableStateOf("") }
+    var outstanding by remember { mutableStateOf("") }
+    var paymentsMade by remember { mutableStateOf("0") }
     var rate by remember { mutableStateOf("12") }
     var emi by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf(false) }
@@ -1390,15 +1392,19 @@ private fun AddLoanScreen(onSave: (String, Long, Double, Long) -> Unit) {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(lender, { lender = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Lender / Bank") }, singleLine = true)
-                    OutlinedTextField(principal, { principal = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Principal amount (₹)") }, singleLine = true)
+                    OutlinedTextField(principal, { principal = it.filter(Char::isDigit); if (outstanding.isBlank()) outstanding = principal }, modifier = Modifier.fillMaxWidth(), label = { Text("Original principal (₹)") }, singleLine = true)
+                    OutlinedTextField(outstanding, { outstanding = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Current outstanding (₹)") }, singleLine = true)
+                    OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("EMI payments made (count)") }, singleLine = true)
                     OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' } }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true)
                     OutlinedTextField(emi, { emi = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true)
                     Button(onClick = {
-                        val amount = principal.toLongOrNull() ?: 0L
+                        val original = principal.toLongOrNull() ?: 0L
+                        val amount = outstanding.toLongOrNull() ?: original
+                        val count = paymentsMade.toLongOrNull() ?: 0L
                         val monthly = emi.toLongOrNull() ?: 0L
                         val annualRate = rate.toDoubleOrNull() ?: 0.0
-                        if (lender.isNotBlank() && amount > 0 && monthly > 0 && annualRate >= 0) {
-                            onSave(lender.trim(), amount, annualRate, monthly)
+                        if (lender.isNotBlank() && original > 0 && amount >= 0 && amount <= original && count >= 0 && monthly > 0 && annualRate >= 0) {
+                            onSave(lender.trim(), original, amount, count, annualRate, monthly)
                             saved = true
                         }
                     }, modifier = Modifier.fillMaxWidth()) { Text("Save Loan") }
@@ -1449,6 +1455,8 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
     var balance by remember(loan) { mutableStateOf(loan.balance.toString()) }
     var emi by remember(loan) { mutableStateOf(loan.emi.toString()) }
     var rate by remember(loan) { mutableStateOf(loan.annualRate.toString()) }
+    var originalPrincipal by remember(loan) { mutableStateOf(loan.originalPrincipal.toString()) }
+    var paymentsMade by remember(loan) { mutableStateOf(loan.paymentsMade.toString()) }
     var due by remember(loan) { mutableStateOf(loan.due) }
     var error by remember { mutableStateOf("") }
     AlertDialog(
@@ -1457,7 +1465,9 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 OutlinedTextField(lender, { lender = it }, label = { Text("Lender") }, singleLine = true)
+                OutlinedTextField(originalPrincipal, { originalPrincipal = it.filter(Char::isDigit) }, label = { Text("Original principal (₹)") }, singleLine = true)
                 OutlinedTextField(balance, { balance = it.filter(Char::isDigit) }, label = { Text("Outstanding balance (₹)") }, singleLine = true)
+                OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit) }, label = { Text("EMI payments made (count)") }, singleLine = true)
                 OutlinedTextField(emi, { emi = it.filter(Char::isDigit) }, label = { Text("Monthly EMI (₹)") }, singleLine = true)
                 OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Annual interest (%)") }, singleLine = true)
                 OutlinedTextField(due, { due = it }, label = { Text("Next due date") }, singleLine = true)
@@ -1467,10 +1477,12 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
         confirmButton = {
             TextButton(onClick = {
                 val parsedBalance = balance.toLongOrNull()
+                val parsedPrincipal = originalPrincipal.toLongOrNull()
+                val parsedPayments = paymentsMade.toLongOrNull()
                 val parsedEmi = emi.toLongOrNull()
                 val parsedRate = rate.toDoubleOrNull()
-                if (lender.isBlank() || parsedBalance == null || parsedBalance < 0L || parsedEmi == null || parsedEmi <= 0L || parsedRate == null || parsedRate < 0.0) error = "Check lender, balance, EMI and interest rate."
-                else onSave(loan.copy(lender = lender.trim(), balance = parsedBalance, emi = parsedEmi, annualRate = parsedRate, due = due.ifBlank { "Not set" }))
+                if (lender.isBlank() || parsedBalance == null || parsedBalance < 0L || parsedPrincipal == null || parsedPrincipal <= 0L || parsedBalance > parsedPrincipal || parsedPayments == null || parsedPayments < 0L || parsedEmi == null || parsedEmi <= 0L || parsedRate == null || parsedRate < 0.0) error = "Check lender, principal, outstanding balance, payment count, EMI and rate."
+                else onSave(loan.copy(lender = lender.trim(), balance = parsedBalance, originalPrincipal = parsedPrincipal, paymentsMade = parsedPayments, emi = parsedEmi, annualRate = parsedRate, due = due.ifBlank { "Not set" }))
             }) { Text("Save changes") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
