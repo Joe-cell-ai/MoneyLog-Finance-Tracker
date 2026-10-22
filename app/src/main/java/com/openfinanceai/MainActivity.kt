@@ -167,7 +167,12 @@ private fun FinanceApp() {
                     })
                     "Appearance" -> AppearanceScreen()
                     "Loan details" -> LoanDetailsScreen(loans.first())
-                    "Add loan" -> AddLoanScreen { lender, principal, rate, emi ->\n                        val newLoan = Loan(lender, principal, emi, "Set due date")\n                        loans = listOf(newLoan) + loans\n                        saveLoans(context, loans)\n                        tab = "Loans"\n                    }
+                    "Add loan" -> AddLoanScreen { lender, principal, rate, emi ->
+                        val newLoan = Loan(lender, principal, emi, "Set due date")
+                        loans = listOf(newLoan) + loans
+                        saveLoans(context, loans)
+                        tab = "Loans"
+                    }
                     else -> SettingsScreen { tab = it }
                 }
             }
