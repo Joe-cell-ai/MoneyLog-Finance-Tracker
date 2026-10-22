@@ -18,6 +18,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -67,6 +68,10 @@ class MainActivity : ComponentActivity() {
 private fun FinanceApp() {
     var tab by remember { mutableStateOf("Home") }
     var showAdd by remember { mutableStateOf(false) }
+    var transactionForActions by remember { mutableStateOf<Transaction?>(null) }
+    var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
+    var loanForActions by remember { mutableStateOf<Loan?>(null) }
+    var loanToEdit by remember { mutableStateOf<Loan?>(null) }
     val context = LocalContext.current
     var transactions by remember {
         mutableStateOf(loadTransactions(context) ?: listOf(
@@ -170,9 +175,9 @@ private fun FinanceApp() {
             Box(Modifier.fillMaxSize().padding(padding)) {
                 when (tab) {
                     "Home" -> HomeScreen(income, expenses, transactions, { tab = "Activity" }, { showAdd = true }, { tab = it })
-                    "Activity" -> ActivityScreen(transactions)
+                    "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
                     "Reports" -> ReportsScreen(income, expenses, transactions)
-                    "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" })
+                    "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" }, { loanForActions = it })
                     "Coach" -> CoachScreen(income, expenses, loans.sumOf { it.emi })
                     "Calendar" -> CalendarScreen(loans, transactions)
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance })
@@ -195,6 +200,46 @@ private fun FinanceApp() {
                         tab = "Loans"
                     }
                     else -> SettingsScreen { tab = it }
+                }
+            }
+            transactionForActions?.let { transaction ->
+                AlertDialog(
+                    onDismissRequest = { transactionForActions = null },
+                    title = { Text(transaction.title) },
+                    text = { Text("What would you like to do with this transaction?") },
+                    confirmButton = { TextButton(onClick = { transactionToEdit = transaction; transactionForActions = null }) { Text("Edit") } },
+                    dismissButton = { Row { TextButton(onClick = {
+                        val index = transactions.indexOf(transaction)
+                        if (index >= 0) { transactions = transactions.toMutableList().also { it.removeAt(index) }; saveTransactions(context, transactions) }
+                        transactionForActions = null
+                    }) { Text("Delete", color = ExpenseRed) }; TextButton(onClick = { transactionForActions = null }) { Text("Cancel") } } }
+                )
+            }
+            transactionToEdit?.let { transaction ->
+                EditTransactionDialog(transaction, onDismiss = { transactionToEdit = null }) { edited ->
+                    val index = transactions.indexOf(transaction)
+                    if (index >= 0) { transactions = transactions.toMutableList().also { it[index] = edited }; saveTransactions(context, transactions) }
+                    transactionToEdit = null
+                }
+            }
+            loanForActions?.let { loan ->
+                AlertDialog(
+                    onDismissRequest = { loanForActions = null },
+                    title = { Text(loan.lender) },
+                    text = { Text("Edit this loan or delete it and its EMI tracking entry?") },
+                    confirmButton = { TextButton(onClick = { loanToEdit = loan; loanForActions = null }) { Text("Edit") } },
+                    dismissButton = { Row { TextButton(onClick = {
+                        loans = loans.toMutableList().also { list -> val index = list.indexOf(loan); if (index >= 0) list.removeAt(index) }
+                        saveLoans(context, loans)
+                        loanForActions = null
+                    }) { Text("Delete", color = ExpenseRed) }; TextButton(onClick = { loanForActions = null }) { Text("Cancel") } } }
+                )
+            }
+            loanToEdit?.let { loan ->
+                EditLoanDialog(loan, onDismiss = { loanToEdit = null }) { edited ->
+                    loans = loans.toMutableList().also { list -> val index = list.indexOf(loan); if (index >= 0) list[index] = edited }
+                    saveLoans(context, loans)
+                    loanToEdit = null
                 }
             }
             if (showAdd) {
@@ -278,7 +323,7 @@ private fun HomeScreen(
             }
         }
         item { SectionHeading("Recent transactions", "See all", onAll) }
-        items(transactions.take(4)) { TransactionRow(it) }
+        items(transactions.take(4)) { TransactionRow(it, onLongPress = { onOpen("Activity") }) }
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFEEF2FF)),
@@ -323,8 +368,8 @@ private fun SectionHeading(title: String, action: String, onClick: () -> Unit = 
 }
 
 @Composable
-private fun TransactionRow(transaction: Transaction) {
-    Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp)).padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun TransactionRow(transaction: Transaction, onLongPress: () -> Unit = {}) {
+    Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp)).combinedClickable(onClick = {}, onLongClick = onLongPress).padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(42.dp).background(if (transaction.income) Mint else Page, RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
             Icon(if (transaction.income) Icons.Default.Payments else Icons.Default.ShoppingBag, null, tint = Green)
         }
@@ -338,13 +383,13 @@ private fun TransactionRow(transaction: Transaction) {
 }
 
 @Composable
-private fun ActivityScreen(transactions: List<Transaction>) {
+private fun ActivityScreen(transactions: List<Transaction>, onTransactionLongPress: (Transaction) -> Unit) {
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
         item {
             Text("Transactions", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
             Text("Your tracked money activity", color = Muted)
         }
-        items(transactions) { TransactionRow(it) }
+        items(transactions) { transaction -> TransactionRow(transaction, onLongPress = { onTransactionLongPress(transaction) }) }
     }
 }
 
@@ -395,7 +440,7 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Loan) -> Unit) {
+private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Loan) -> Unit, onLoanLongPress: (Loan) -> Unit) {
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
             Text("Loans & EMIs", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
@@ -412,7 +457,7 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
             }
         }
         items(loans) { loan ->
-            Card(modifier = Modifier.clickable { onDetails(loan) }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Card(modifier = Modifier.combinedClickable(onClick = { onDetails(loan) }, onLongClick = { onLoanLongPress(loan) }), colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AccountBalance, null, tint = Green)
@@ -611,10 +656,25 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
 
 @Composable
 private fun CreditHealthScreen() {
+    var selected by remember { mutableStateOf("Credit score") }
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("CIBIL & Credit Health", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold) }
-        item { InfoCard("Credit score", "720 · Good (sample only, not a real CIBIL score). Connect an authorized bureau for verified data.", Icons.Default.VerifiedUser) }
-        item { InfoCard("Recommendations", "Pay EMIs on time, keep credit utilization low, avoid unnecessary loan applications and review your official report for errors.", Icons.Default.Lightbulb) }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                listOf("Credit score", "Recommendations").forEach { option ->
+                    FilterChip(selected = selected == option, onClick = { selected = option }, label = { Text(option) }, leadingIcon = { Icon(if (option == "Credit score") Icons.Default.VerifiedUser else Icons.Default.Lightbulb, null) })
+                }
+            }
+        }
+        if (selected == "Credit score") {
+            item { InfoCard("Credit score", "720 · Good (illustrative sample only, not your real CIBIL score). MoneyLog is not connected to a credit bureau, so this value must not be treated as your actual score.", Icons.Default.VerifiedUser) }
+            item { InfoCard("Get your real score", "Use the official CIBIL website or an authorized credit bureau/app to check your verified score and report. This app does not collect your bureau credentials.", Icons.Default.OpenInNew) }
+        } else {
+            item { InfoCard("Protect your payment history", "Pay every EMI by its due date and keep enough balance before the auto-debit date. Set reminders a few days early.", Icons.Default.EventAvailable) }
+            item { InfoCard("Manage credit utilisation", "Try to keep revolving credit-card utilisation low, ideally below 30%, and pay the full statement balance when possible.", Icons.Default.PieChart) }
+            item { InfoCard("Avoid unnecessary applications", "Multiple loan or card applications in a short period can create hard enquiries. Compare total cost and fees before applying.", Icons.Default.Rule) }
+            item { InfoCard("Review your report", "Check the official report for accounts you do not recognize, incorrect late payments, and outdated balances. Raise a dispute with the bureau/lender if needed.", Icons.Default.FactCheck) }
+        }
     }
 }
 @Composable
@@ -744,6 +804,75 @@ private fun AddLoanScreen(onSave: (String, Long, Double, Long) -> Unit) {
         }
     }
 }
+@Composable
+private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Unit, onSave: (Transaction) -> Unit) {
+    var title by remember(transaction) { mutableStateOf(transaction.title) }
+    var amount by remember(transaction) { mutableStateOf(transaction.amount.toString()) }
+    var category by remember(transaction) { mutableStateOf(transaction.category) }
+    var date by remember(transaction) { mutableStateOf(transaction.date) }
+    var isIncome by remember(transaction) { mutableStateOf(transaction.income) }
+    var error by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit transaction") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(selected = !isIncome, onClick = { isIncome = false }, label = { Text("Expense") })
+                    FilterChip(selected = isIncome, onClick = { isIncome = true }, label = { Text("Income") })
+                }
+                OutlinedTextField(title, { title = it }, label = { Text("Description") }, singleLine = true)
+                OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text("Amount (₹)") }, singleLine = true)
+                OutlinedTextField(category, { category = it }, label = { Text("Category") }, singleLine = true)
+                OutlinedTextField(date, { date = it }, label = { Text("Date") }, singleLine = true)
+                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val parsed = amount.toLongOrNull()
+                if (title.isBlank() || parsed == null || parsed <= 0L) error = "Enter a description and valid amount."
+                else onSave(transaction.copy(title = title.trim(), amount = parsed, category = if (isIncome) "Income" else category.ifBlank { "Other" }, date = date.ifBlank { "Date not set" }, income = isIncome))
+            }) { Text("Save changes") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> Unit) {
+    var lender by remember(loan) { mutableStateOf(loan.lender) }
+    var balance by remember(loan) { mutableStateOf(loan.balance.toString()) }
+    var emi by remember(loan) { mutableStateOf(loan.emi.toString()) }
+    var rate by remember(loan) { mutableStateOf(loan.annualRate.toString()) }
+    var due by remember(loan) { mutableStateOf(loan.due) }
+    var error by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit loan / EMI") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                OutlinedTextField(lender, { lender = it }, label = { Text("Lender") }, singleLine = true)
+                OutlinedTextField(balance, { balance = it.filter(Char::isDigit) }, label = { Text("Outstanding balance (₹)") }, singleLine = true)
+                OutlinedTextField(emi, { emi = it.filter(Char::isDigit) }, label = { Text("Monthly EMI (₹)") }, singleLine = true)
+                OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Annual interest (%)") }, singleLine = true)
+                OutlinedTextField(due, { due = it }, label = { Text("Next due date") }, singleLine = true)
+                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val parsedBalance = balance.toLongOrNull()
+                val parsedEmi = emi.toLongOrNull()
+                val parsedRate = rate.toDoubleOrNull()
+                if (lender.isBlank() || parsedBalance == null || parsedBalance < 0L || parsedEmi == null || parsedEmi <= 0L || parsedRate == null || parsedRate < 0.0) error = "Check lender, balance, EMI and interest rate."
+                else onSave(loan.copy(lender = lender.trim(), balance = parsedBalance, emi = parsedEmi, annualRate = parsedRate, due = due.ifBlank { "Not set" }))
+            }) { Text("Save changes") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
 @Composable
 private fun AddTransactionDialog(
     onDismiss: () -> Unit,
