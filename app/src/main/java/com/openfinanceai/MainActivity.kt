@@ -47,7 +47,7 @@ private val Muted = Color(0xFF71818A)
 private val Page = Color(0xFFF3F7F8)
 private val Money = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
 
-private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean)
+private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "")
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0)
 
 class MainActivity : ComponentActivity() {
@@ -797,6 +797,9 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("date", transaction.date)
             put("amount", transaction.amount)
             put("income", transaction.income)
+            put("source", transaction.source)
+            put("notificationKey", transaction.notificationKey)
+            put("captureStatus", transaction.captureStatus)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -814,7 +817,10 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optString("category", "Other"),
             item.optString("date", ""),
             item.getLong("amount"),
-            item.optBoolean("income", false)
+            item.optBoolean("income", false),
+            item.optString("source", ""),
+            item.optString("notificationKey", ""),
+            item.optString("captureStatus", "")
         )
     }
 }.getOrNull()
