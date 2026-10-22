@@ -704,7 +704,10 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
                             Text(loan.due, color = Ink, fontWeight = FontWeight.SemiBold)
                         }
                     }
-                    Text("Repayment progress isn't shown because the original principal and payments made haven't been recorded.", color = Muted, fontSize = 11.sp)
+                    val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
+                    Text("Principal repaid estimate · ${(progress * 100).toInt()}%", color = Muted, fontSize = 11.sp)
+                    LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth(), color = Green, trackColor = Mint)
+                    Text("EMI payments recorded: ${loan.paymentsMade}. Progress estimates principal reduction from the balances entered; it is not a lender-confirmed payment history.", color = Muted, fontSize = 11.sp)
                 }
             }
         }
@@ -1340,6 +1343,16 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
         item { MetricCard("Outstanding · ${loan.lender}", Money.format(loan.balance), Modifier.fillMaxWidth()) }
         item { MetricCard("Monthly EMI", Money.format(loan.emi), Modifier.fillMaxWidth()) }
         item { MetricCard("Annual interest rate", "${loan.annualRate}%", Modifier.fillMaxWidth()) }
+        item { MetricCard("Original principal", Money.format(loan.originalPrincipal), Modifier.fillMaxWidth()) }
+        item { MetricCard("EMI payments recorded", loan.paymentsMade.toString(), Modifier.fillMaxWidth()) }
+        item {
+            val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
+            Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Principal reduction estimate · ${(progress * 100).toInt()}%", color = Ink, fontWeight = FontWeight.SemiBold)
+                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth(), color = Green, trackColor = Mint)
+                Text("Estimated from original principal and current outstanding balance. Payment count is user-entered; this is not a lender-verified repayment record.", color = Muted, fontSize = 11.sp)
+            }
+        }
         item { InfoCard("Estimated schedule", "Based on the current outstanding balance, entered EMI and interest rate. This is an estimate, not your lender's official schedule; verify exact figures and due dates against your loan statement.", Icons.Default.CalendarMonth) }
         if (paymentTooLow) item {
             InfoCard("EMI may not cover interest", "At the entered interest rate, the EMI is not greater than the estimated monthly interest. The balance may not reduce unless the EMI or rate changes.", Icons.Default.Warning)
