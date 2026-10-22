@@ -576,7 +576,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
         "Credit health" to Icons.Default.Speed,
         "Appearance" to Icons.Default.Palette,
         "Backup & security" to Icons.Default.Security,
-        "CRED sync" to Icons.Default.Sync,
+        "Live payment tracking" to Icons.Default.Sync,
         "Import transactions" to Icons.Default.FileUpload
     )
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
