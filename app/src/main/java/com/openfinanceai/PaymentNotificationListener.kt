@@ -15,6 +15,8 @@ class PaymentNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val packageName = sbn.packageName ?: return
         if (packageName == applicationContext.packageName) return
+        val preferences = getSharedPreferences("open_finance_data", MODE_PRIVATE)
+        if (!preferences.getBoolean("notification_capture_consent", false)) return
         val extras = sbn.notification.extras ?: return
         val lines = mutableListOf<String>()
         listOf(Notification.EXTRA_TITLE, Notification.EXTRA_TEXT, Notification.EXTRA_BIG_TEXT).forEach { key ->
