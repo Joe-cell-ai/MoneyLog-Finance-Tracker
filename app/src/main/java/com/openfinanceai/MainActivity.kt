@@ -165,7 +165,8 @@ private fun FinanceApp() {
 
     LaunchedEffect(loans) {
         loans.forEach { loan ->
-            val dueDay = Regex("^\\s*(\\d{1,2})").find(loan.due)?.groupValues?.getOrNull(1)?.toIntOrNull()?.coerceIn(1, 28) ?: 1
+            if (loan.due.equals("Set due date", ignoreCase = true) || loan.due.isBlank()) return@forEach
+            val dueDay = Regex("^\\s*(\\d{1,2})").find(loan.due)?.groupValues?.getOrNull(1)?.toIntOrNull()?.coerceIn(1, 28) ?: return@forEach
             val reminderId = 3000 + (loan.lender.lowercase(Locale.ROOT).hashCode() and 0x3fff)
             EmiReminderReceiver.scheduleMonthly(context, loan.lender, loan.emi, dueDay, reminderId)
         }
@@ -409,6 +410,7 @@ private fun FinanceApp() {
             }
             loanToEdit?.let { loan ->
                 EditLoanDialog(loan, onDismiss = { loanToEdit = null }) { edited ->
+                    if (!edited.lender.equals(loan.lender, ignoreCase = true)) EmiReminderReceiver.cancelMonthly(context, loan.lender)
                     loans = loans.toMutableList().also { list -> val index = list.indexOfFirst { it === loan }; if (index >= 0) list[index] = edited }
                     saveLoans(context, loans)
                     loanToEdit = null
