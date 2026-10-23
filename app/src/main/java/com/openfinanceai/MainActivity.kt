@@ -710,7 +710,7 @@ private fun ReportsScreen(
                     ) {
                         Icon(tabIcon, contentDescription = null, modifier = Modifier.size(15.dp), tint = if (reportView == view) Color.White else Color(0xFF49688F))
                         Spacer(Modifier.width(4.dp))
-                        Text(label, fontSize = 10.sp, maxLines = 1, color = if (reportView == view) Color.White else Color(0xFF173D70), fontWeight = if (reportView == view) FontWeight.SemiBold else FontWeight.Medium)
+                        Text(label, fontSize = 11.sp, maxLines = 1, color = if (reportView == view) Color.White else Color(0xFF173D70), fontWeight = if (reportView == view) FontWeight.SemiBold else FontWeight.Medium)
                     }
                 }
             }
@@ -795,8 +795,8 @@ private fun ReportsScreen(
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Spending by category", color = Color(0xFF173D70), fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(Modifier.weight(0.92f), contentAlignment = Alignment.Center) {
-                            androidx.compose.foundation.Canvas(Modifier.size(136.dp)) {
+                        Box(Modifier.weight(0.86f), contentAlignment = Alignment.Center) {
+                            androidx.compose.foundation.Canvas(Modifier.size(126.dp)) {
                                 if (totalSpend > 0L) {
                                     var startAngle = -90f
                                     categories.forEach { entry ->
@@ -811,13 +811,13 @@ private fun ReportsScreen(
                                 Text(Money.format(totalSpend), color = Color(0xFF173D70), fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             }
                         }
-                        Column(Modifier.weight(1.12f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.weight(1.14f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             if (categories.isEmpty()) Text("No category totals yet.", color = Muted, fontSize = 12.sp)
                             categories.take(7).forEach { (category, amount) ->
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                     Box(Modifier.size(8.dp).background(categoryColor(category), CircleShape))
-                                    Text(category, modifier = Modifier.weight(1f), color = Color(0xFF173D70), fontSize = 9.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
-                                    Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Color(0xFF8094B0), fontSize = 9.sp, fontWeight = FontWeight.Normal, maxLines = 1, softWrap = false)
+                                    Text(category, modifier = Modifier.weight(1f), color = Color(0xFF173D70), fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
+                                    Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Color(0xFF9AA6B8), fontSize = 10.sp, fontWeight = FontWeight.Normal, maxLines = 1, softWrap = false)
                                 }
                             }
                         }
@@ -865,7 +865,7 @@ private fun ReportsScreen(
                             Box(Modifier.size(30.dp).background(Color(0xFFEAF2FC), CircleShape), contentAlignment = Alignment.Center) {
                                 Text("${index + 1}", color = Color(0xFF173D70), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                             }
-                            Box(Modifier.size(40.dp).background(categoryColor(category), CircleShape), contentAlignment = Alignment.Center) {
+                            Box(Modifier.size(44.dp).background(categoryColor(category), CircleShape), contentAlignment = Alignment.Center) {
                                 Icon(
                                     when {
                                         category.contains("food", true) || category.contains("grocer", true) -> Icons.Default.Restaurant
@@ -880,11 +880,11 @@ private fun ReportsScreen(
                                 )
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text(category, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, softWrap = false)
+                                Text(category, color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, softWrap = false)
                                 Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}% of expenses" else "0% of expenses", color = Muted, fontSize = 10.sp, maxLines = 1, softWrap = false)
                             }
-                            Text(Money.format(amount).substringBeforeLast(".").takeIf { Money.format(amount).contains(".") } ?: Money.format(amount), color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 10.sp, maxLines = 1, softWrap = false)
-                            Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Color(0xFF9AA6B8), fontSize = 9.sp, fontWeight = FontWeight.Normal, maxLines = 1, softWrap = false)
+                            Text(Money.format(amount).substringBeforeLast(".").takeIf { Money.format(amount).contains(".") } ?: Money.format(amount), color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, softWrap = false)
+                            Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Color(0xFF9AA6B8), fontSize = 10.sp, fontWeight = FontWeight.Normal, maxLines = 1, softWrap = false)
                             Icon(Icons.Default.ChevronRight, contentDescription = "Open category", tint = Muted, modifier = Modifier.size(16.dp))
                         }
                         if (index < visibleCategories.lastIndex) HorizontalDivider(color = Page)
