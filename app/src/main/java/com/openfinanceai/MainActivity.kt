@@ -429,6 +429,9 @@ private fun HomeScreen(
     onTransactionLongPress: (Transaction) -> Unit
 ) {
     var showMonthPicker by remember { mutableStateOf(false) }
+    // Keep dashboard totals consistent with the month currently selected.
+    val monthIncome = monthTransactions.filter { it.income }.sumOf { it.amount }
+    val monthExpenses = monthTransactions.filterNot { it.income }.sumOf { it.amount }
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
         item {
             Text(selectedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH).uppercase(Locale.ENGLISH) + " " + selectedMonth.year, color = Muted, fontSize = 11.sp, letterSpacing = 1.sp)
@@ -440,9 +443,9 @@ private fun HomeScreen(
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ReportMetricCard("Income", Money.format(income), Icons.Default.AccountBalanceWallet, Modifier.weight(1f), Color(0xFFE3F9ED), Color(0xFF00A86B))
-                ReportMetricCard("Expense", Money.format(expenses), Icons.Default.CreditCard, Modifier.weight(1f), Color(0xFFFFEBEB), Color(0xFFFD3C65))
-                ReportMetricCard("Savings", Money.format(income - expenses), Icons.Default.Savings, Modifier.weight(1f), Color(0xFFE6F0FF), Color(0xFF0066FF))
+                ReportMetricCard("Income", Money.format(monthIncome), Icons.Default.AccountBalanceWallet, Modifier.weight(1f), Color(0xFFE3F9ED), Color(0xFF00A86B))
+                ReportMetricCard("Expense", Money.format(monthExpenses), Icons.Default.CreditCard, Modifier.weight(1f), Color(0xFFFFEBEB), Color(0xFFFD3C65))
+                ReportMetricCard("Savings", Money.format(monthIncome - monthExpenses), Icons.Default.Savings, Modifier.weight(1f), Color(0xFFE6F0FF), Color(0xFF0066FF))
             }
         }
         item {
