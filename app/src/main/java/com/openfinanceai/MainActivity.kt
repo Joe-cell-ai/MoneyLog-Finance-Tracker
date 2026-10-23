@@ -813,9 +813,9 @@ private fun ReportsScreen(
                             categories.take(5).forEach { (category, amount) ->
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Box(Modifier.size(8.dp).background(categoryColor(category), CircleShape))
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text(category, color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Normal, maxLines = 1)
-                                        Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Muted, fontSize = 10.sp)
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(category, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Normal, maxLines = 1)
+                                        Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Muted, fontSize = 11.sp, maxLines = 1)
                                     }
                                 }
                             }
@@ -840,8 +840,8 @@ private fun ReportsScreen(
                                 Icon(Icons.Default.Category, contentDescription = null, tint = categoryColor(category))
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text("${index + 1}. ${category}", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}% of expenses" else "0%", color = Muted, fontSize = 11.sp)
+                                Text("${index + 1}. ${category}", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1)
+                                Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}% of expenses" else "0%", color = Muted, fontSize = 11.sp, maxLines = 1)
                             }
                             Text(Money.format(amount), color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
