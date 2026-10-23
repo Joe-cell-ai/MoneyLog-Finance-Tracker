@@ -2032,12 +2032,12 @@ private fun CredSyncScreen() {
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("Bank & Credit Integrations", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Selected sources: CRED, ICICI iMobile and CIBIL", color = Muted)
+            Text("Selected sources: CRED, Google Pay, PhonePe, Paytm and ICICI iMobile", color = Muted)
         }
-        item { InfoCard("Current connection status", "CRED and ICICI iMobile can be monitored through payment notifications if those apps post readable payment alerts and you enable Android Notification access. This is not a direct bank API connection and may miss or misread alerts. Verified CIBIL reports are not connected yet.", Icons.Default.Info) }
+        item { InfoCard("Current connection status", "With your explicit consent and Android Notification access, MoneyLog can inspect readable payment notifications from CRED, Google Pay, PhonePe, Paytm and ICICI iMobile. This is not a direct bank API connection and may miss or misread alerts. Verify every captured entry against your bank record. Verified CIBIL reports are not connected yet.", Icons.Default.Info) }
         item {
-            Text("1 · CRED + ICICI iMobile alerts", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            InfoCard("What this app can do now", "With your consent, the listener checks notifications for payment-related wording and amounts and saves matching entries locally. It does not sign in to CRED or ICICI, read account balances, fetch complete statements, or verify that a payment settled. Check each captured transaction against your bank record.", Icons.Default.NotificationsActive)
+            Text("1 · UPI and bank payment alerts", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            InfoCard("What this app can do now", "With your consent, the listener checks selected payment notifications for payment-related wording and amounts and saves matching entries locally. It does not sign in to payment apps, read account balances, fetch complete statements, or verify that a payment settled. Check each captured transaction against your bank record.", Icons.Default.NotificationsActive)
             Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(12.dp), verticalAlignment = Alignment.Top) {
                 Checkbox(checked = notificationConsent, onCheckedChange = { accepted ->
                     notificationConsent = accepted
