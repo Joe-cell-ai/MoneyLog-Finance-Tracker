@@ -2094,7 +2094,6 @@ private fun AppearanceScreen() {
         }
     }
 }
-@Composable
 private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.LocalDate.now()): java.time.LocalDate? {
     val raw = due.trim()
     if (raw.isBlank() || raw.equals("Set due date", ignoreCase = true) || raw.equals("Not set", ignoreCase = true)) return null
@@ -2138,6 +2137,7 @@ private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.
     return null
 }
 
+@Composable
 private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
     val firstDueDate = nextLoanDueDate(loan.due)
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
