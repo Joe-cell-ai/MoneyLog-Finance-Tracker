@@ -512,8 +512,8 @@ private fun HomeScreen(
                             monthExpenseCategories.take(7).forEach { (name, amount) ->
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                     Box(Modifier.size(8.dp).background(categoryColor(name), CircleShape))
-                                    Text(name, modifier = Modifier.weight(1f), color = Color(0xFF173D70), fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
-                                    Text(if (categorySpend > 0L) "${amount * 100 / categorySpend}%" else "0%", color = Color(0xFF9AA6B8), fontSize = 10.sp, fontWeight = FontWeight.Normal, maxLines = 1, softWrap = false)
+                                    Text(name, modifier = Modifier.weight(1f), color = Color(0xFF52627A), fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
+                                    Text(if (categorySpend > 0L) "${amount * 100 / categorySpend}%" else "0%", color = Color(0xFF52627A), fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                                 }
                             }
                         }
@@ -852,7 +852,7 @@ private fun ReportsScreen(
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                     Box(Modifier.size(8.dp).background(categoryColor(category), CircleShape))
                                     Text(category, modifier = Modifier.weight(1f), color = Color(0xFF173D70), fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
-                                    Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Color(0xFF9AA6B8), fontSize = 10.sp, fontWeight = FontWeight.Normal, maxLines = 1, softWrap = false)
+                                    Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Color(0xFF52627A), fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                                 }
                             }
                         }
@@ -916,10 +916,10 @@ private fun ReportsScreen(
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text(category, color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, softWrap = false)
-                                Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}% of expenses" else "0% of expenses", color = Muted, fontSize = 10.sp, maxLines = 1, softWrap = false)
+                                Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}% of expenses" else "0% of expenses", color = Color(0xFF52627A), fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                             }
                             Text(Money.format(amount).substringBeforeLast(".").takeIf { Money.format(amount).contains(".") } ?: Money.format(amount), color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, softWrap = false)
-                            Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Color(0xFF9AA6B8), fontSize = 10.sp, fontWeight = FontWeight.Normal, maxLines = 1, softWrap = false)
+                            Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Color(0xFF52627A), fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                             Icon(Icons.Default.ChevronRight, contentDescription = "Open category", tint = Muted, modifier = Modifier.size(16.dp))
                         }
                         if (index < visibleCategories.lastIndex) HorizontalDivider(color = Page)
