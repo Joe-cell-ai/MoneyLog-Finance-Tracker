@@ -3,14 +3,14 @@ main = "src/index.ts"
 compatibility_date = "2026-10-23"
 workers_dev = true
 
-# Create this D1 database and replace the placeholder ID before deployment.
+# D1 database for Open Finance AI.
 [[d1_databases]]
 binding = "DB"
 database_name = "open-finance-ai-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "81978b51-3b41-4c8c-8276-58eead8f8743"
 migrations_dir = "migrations"
 
-# Create this private R2 bucket before deployment.
+# Private R2 bucket for receipts and bills.
 [[r2_buckets]]
 binding = "FILES"
 bucket_name = "open-finance-ai-files"
