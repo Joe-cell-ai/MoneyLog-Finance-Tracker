@@ -610,44 +610,122 @@ private fun ActivityScreen(transactions: List<Transaction>, onTransactionLongPre
     var filter by remember { mutableStateOf("All") }
     var query by remember { mutableStateOf("") }
     var categoryFilter by remember { mutableStateOf("All categories") }
+    var categoryMenu by remember { mutableStateOf(false) }
     val availableCategories = listOf("All categories") + transactions.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
-    val visible = transactions.filter { filter == "All" || (filter == "Income" && it.income) || (filter == "Expense" && !it.income) }
+    val visible = transactions
+        .filter { filter == "All" || (filter == "Income" && it.income) || (filter == "Expense" && !it.income) }
         .filter { categoryFilter == "All categories" || it.category == categoryFilter }
         .filter { query.isBlank() || listOf(it.title, it.category, it.source, it.notes, it.date).any { field -> field.contains(query.trim(), ignoreCase = true) } }
     val grouped = visible.groupBy { it.date }
-    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(Page),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         item {
-            Text("Transactions", fontSize = 25.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Your tracked money activity", color = Muted, fontSize = 12.sp)
-            OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Search transactions") }, leadingIcon = { Icon(Icons.Default.Search, null) }, singleLine = true)
-            var categoryMenu by remember { mutableStateOf(false) }
-            Box {
-                OutlinedButton(onClick = { categoryMenu = true }) { Icon(Icons.Default.FilterList, null); Text(" $categoryFilter") }
-                DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
-                    availableCategories.forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { categoryFilter = option; categoryMenu = false }) }
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("Transactions", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
+                Text("Every income and expense, all in one place", color = Muted, fontSize = 12.sp)
             }
-            Text("${visible.size} matching transaction(s)", color = Muted, fontSize = 11.sp)
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth().height(48.dp).background(Color(0xFFEAF3FF), RoundedCornerShape(28.dp)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        }
+        item {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Search transactions") },
+                leadingIcon = { Icon(Icons.Default.Search, null, tint = Muted) },
+                trailingIcon = { if (query.isNotBlank()) IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "Clear search") } },
+                singleLine = true,
+                shape = RoundedCornerShape(18.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedContainerColor = Color.White,
+                    focusedContainerColor = Color.White,
+                    unfocusedBorderColor = Color(0xFFE5E6F0)
+                )
+            )
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box {
+                    OutlinedButton(
+                        onClick = { categoryMenu = true },
+                        shape = RoundedCornerShape(14.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
+                    ) {
+                        Icon(Icons.Default.FilterList, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(categoryFilter, maxLines = 1, fontSize = 12.sp)
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Default.ExpandMore, null, modifier = Modifier.size(18.dp))
+                    }
+                    DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
+                        availableCategories.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                leadingIcon = { if (categoryFilter == option) Icon(Icons.Default.Check, null, tint = Green) },
+                                onClick = { categoryFilter = option; categoryMenu = false }
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                Text("${visible.size} found", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+        item {
+            Row(
+                Modifier.fillMaxWidth().height(50.dp).background(LavenderTint, RoundedCornerShape(18.dp)).padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 listOf("All", "Income", "Expense").forEach { choice ->
                     val selected = filter == choice
-                    Box(
-                        Modifier.weight(1f).fillMaxHeight()
-                            .clip(RoundedCornerShape(24.dp))
+                    val tint = when (choice) { "Income" -> IncomeGreen; "Expense" -> ExpenseRed; else -> Green }
+                    Row(
+                        Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(14.dp))
                             .background(if (selected) Color.White else Color.Transparent)
                             .clickable { filter = choice },
-                        contentAlignment = Alignment.Center
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(choice, color = if (selected) Color(0xFF173D70) else Color(0xFF8094B0), fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
+                        if (choice != "All") {
+                            Icon(if (choice == "Income") Icons.Default.TrendingUp else Icons.Default.TrendingDown, null, tint = if (selected) tint else Muted, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(5.dp))
+                        }
+                        Text(choice, color = if (selected) tint else Muted, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
                     }
                 }
             }
         }
-        if (visible.isEmpty()) item { Text("No transactions in this filter yet.", color = Muted, modifier = Modifier.padding(18.dp)) }
+        if (visible.isEmpty()) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(22.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(26.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.ReceiptLong, null, tint = Muted, modifier = Modifier.size(34.dp))
+                        Text("No transactions found", color = Ink, fontWeight = FontWeight.SemiBold)
+                        Text("Try another search or change your filters.", color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
+                        if (query.isNotBlank() || categoryFilter != "All categories" || filter != "All") {
+                            TextButton(onClick = { query = ""; categoryFilter = "All categories"; filter = "All" }) { Text("Clear filters") }
+                        }
+                    }
+                }
+            }
+        }
         grouped.forEach { (date, rows) ->
-            item { Text(date, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.padding(top = 5.dp)) }
-            items(rows) { transaction -> TransactionRow(transaction, onLongPress = { onTransactionLongPress(transaction) }) }
+            item(key = "date-$date") {
+                Row(Modifier.fillMaxWidth().padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(date, color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Spacer(Modifier.width(8.dp))
+                    HorizontalDivider(Modifier.weight(1f), color = Color(0xFFE7E8F1))
+                }
+            }
+            items(rows, key = { transaction -> transactionKey(transaction) + transaction.hashCode() }) { transaction ->
+                TransactionRow(transaction, onLongPress = { onTransactionLongPress(transaction) })
+            }
+        }
+        if (visible.isNotEmpty()) {
+            item { Text("Tip: tap or long-press a transaction for available actions.", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 4.dp)) }
         }
     }
 }
