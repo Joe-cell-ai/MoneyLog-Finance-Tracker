@@ -84,7 +84,7 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
 }
 private fun categoryTint(category: String): Color = categoryColor(category).copy(alpha = 0.12f)
 
-private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "")
+private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "")
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L)
 
 class MainActivity : ComponentActivity() {
@@ -186,15 +186,17 @@ private fun FinanceApp() {
                 .put("title", t.title).put("category", t.category).put("date", t.date)
                 .put("amount", t.amount).put("income", t.income).put("source", t.source)
                 .put("notificationKey", t.notificationKey).put("captureStatus", t.captureStatus)
-                .put("paymentMethod", t.paymentMethod).put("notes", t.notes)) }
+                .put("paymentMethod", t.paymentMethod).put("notes", t.notes).put("tag", t.tag)) }
             val loanArray = JSONArray()
             loans.forEach { l -> loanArray.put(JSONObject().put("lender", l.lender).put("balance", l.balance)
                 .put("emi", l.emi).put("due", l.due).put("annualRate", l.annualRate).put("originalPrincipal", l.originalPrincipal).put("paymentsMade", l.paymentsMade)) }
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
             val savedCategories = runCatching { JSONArray(prefs.getString("custom_categories", "[]") ?: "[]") }.getOrDefault(JSONArray())
+            val savedTags = runCatching { JSONArray(prefs.getString("custom_tags", "[]") ?: "[]") }.getOrDefault(JSONArray())
             root.put("transactions", transactionArray)
                 .put("loans", loanArray)
                 .put("categories", savedCategories)
+                .put("tags", savedTags)
                 .put("appearanceTheme", prefs.getString("appearance_theme", "Light"))
                 .put("appearanceCurrency", prefs.getString("appearance_currency", "INR (₹)"))
                 .put("userReportedCreditScore", prefs.getInt("user_reported_credit_score", 0))
@@ -213,7 +215,7 @@ private fun FinanceApp() {
                 (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
                     Transaction(j.getString("title"), j.optString("category", "Other"), j.optString("date", "Today"),
                         j.getLong("amount"), j.optBoolean("income"), j.optString("source"), j.optString("notificationKey"),
-                        j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"))
+                        j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""))
                 } }
             }
             val restoredLoans = root.optJSONArray("loans")?.let { a ->
@@ -224,6 +226,7 @@ private fun FinanceApp() {
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
             val editor = prefs.edit()
             root.optJSONArray("categories")?.let { editor.putString("custom_categories", it.toString()) }
+            root.optJSONArray("tags")?.let { editor.putString("custom_tags", it.toString()) }
             if (root.has("appearanceTheme")) editor.putString("appearance_theme", root.optString("appearanceTheme", "Light"))
             if (root.has("appearanceCurrency")) editor.putString("appearance_currency", root.optString("appearanceCurrency", "INR (₹)"))
             if (root.has("userReportedCreditScore")) {
@@ -292,13 +295,13 @@ private fun FinanceApp() {
                     tonalElevation = 3.dp,
                     windowInsets = NavigationBarDefaults.windowInsets
                 ) {
-                    listOf("Home", "Activity", "Reports", "Loans", "Coach").forEach { name ->
+                    listOf("Home", "Activity", "Reports", "Loans", "Settings").forEach { name ->
                         val icon = when (name) {
                             "Home" -> Icons.Default.Home
                             "Activity" -> Icons.Default.ReceiptLong
                             "Reports" -> Icons.Default.BarChart
                             "Loans" -> Icons.Default.AccountBalance
-                            else -> Icons.Default.AutoAwesome
+                            else -> Icons.Default.Settings
                         }
                         NavigationBarItem(
                             selected = tab == name,
@@ -324,12 +327,13 @@ private fun FinanceApp() {
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
                     "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = it })
                     "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" }, { loanForActions = it })
-                    "Coach" -> CoachScreen(income, expenses, loans.sumOf { it.emi })
+                    "Settings" -> SettingsScreen { tab = it }
                     "Calendar" -> CalendarScreen(loans, transactions)
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance }, transactions)
                     "Budgets" -> BudgetsScreen(transactions)
                     "Credit health" -> CreditHealthScreen()
                     "Categories" -> CategoriesScreen()
+                    "Tag Management" -> TagManagementScreen()
                     "Backup & security" -> BackupSecurityScreen(
                         onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
                         onRestoreBackup = { backupRestoreLauncher.launch(arrayOf("application/json", "text/*")) },
@@ -406,8 +410,8 @@ private fun FinanceApp() {
                 AddTransactionDialog(
                     onDismiss = { showAdd = false },
                     initialIncome = showAddAsIncome,
-                    onSave = { title, amount, isIncome, category, date, paymentMethod, notes ->
-                        transactions = listOf(Transaction(title, category, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes)) + transactions
+                    onSave = { title, amount, isIncome, category, date, paymentMethod, notes, tag ->
+                        transactions = listOf(Transaction(title, category, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes, tag = tag)) + transactions
                         saveTransactions(context, transactions)
                         showAdd = false
                     }
@@ -1749,9 +1753,104 @@ private fun CategoriesScreen() {
 }
 
 @Composable
+private fun TagManagementScreen() {
+    val context = LocalContext.current
+    val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
+    val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online")
+    val initialTags = remember {
+        runCatching {
+            val raw = preferences.getString("custom_tags", null)
+            val saved = if (raw.isNullOrBlank()) emptyList() else {
+                val array = JSONArray(raw)
+                (0 until array.length()).map { array.getString(it).trim().removePrefix("#").trim() }.filter { it.isNotBlank() }
+            }
+            (defaultTags + saved).distinctBy { it.lowercase(Locale.ROOT) }
+        }.getOrDefault(defaultTags)
+    }
+    var tags by remember { mutableStateOf(initialTags) }
+    var message by remember { mutableStateOf("") }
+    var showAdd by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<String?>(null) }
+    var draft by remember { mutableStateOf("") }
+    var pendingDelete by remember { mutableStateOf<String?>(null) }
+    fun persistTags(values: List<String>) {
+        val array = JSONArray()
+        values.forEach { array.put(it) }
+        preferences.edit().putString("custom_tags", array.toString()).apply()
+    }
+    Column(Modifier.fillMaxSize()) {
+        LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item {
+                Text("Tag Management", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
+                Text("Create and manage tags for your transactions", color = Muted)
+                Spacer(Modifier.height(8.dp))
+            }
+            if (message.isNotBlank()) item { Text(message, color = Green, fontSize = 12.sp) }
+            items(tags, key = { it }) { tag ->
+                Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp)).padding(start = 13.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(40.dp).background(LavenderTint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Tag, null, tint = Purple)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text(tag, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
+                    IconButton(onClick = { draft = tag; editing = tag; showAdd = true }) { Icon(Icons.Default.Edit, "Edit tag", tint = Green) }
+                    IconButton(onClick = { pendingDelete = tag }) { Icon(Icons.Default.DeleteOutline, "Delete tag", tint = ExpenseRed) }
+                }
+            }
+            item { Text("Tags are saved on this device and are available in Add Transaction.", color = Muted, fontSize = 11.sp) }
+        }
+        Surface(color = Color.White, shadowElevation = 8.dp) {
+            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { draft = ""; editing = null; showAdd = true }) {
+                    Icon(Icons.Default.Add, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Add Tag")
+                }
+                Button(onClick = { persistTags(tags); message = "Tags saved successfully." }, colors = ButtonDefaults.buttonColors(containerColor = Green)) { Text("Confirm") }
+            }
+        }
+    }
+    if (showAdd) {
+        AlertDialog(
+            onDismissRequest = { showAdd = false },
+            title = { Text(if (editing == null) "Add Tag" else "Edit Tag") },
+            text = { OutlinedTextField(draft, { draft = it }, label = { Text("Tag name") }, singleLine = true) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val name = draft.trim().removePrefix("#").trim()
+                    if (name.isNotBlank()) {
+                        val duplicate = tags.any { it.equals(name, ignoreCase = true) && it != editing }
+                        if (duplicate) message = "That tag already exists."
+                        else {
+                            tags = if (editing == null) tags + name else tags.map { if (it == editing) name else it }.distinctBy { it.lowercase(Locale.ROOT) }
+                            persistTags(tags)
+                            message = ""
+                            showAdd = false
+                        }
+                    }
+                }) { Text("Save", color = Green) }
+            },
+            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Cancel") } }
+        )
+    }
+    pendingDelete?.let { tag ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete tag?") },
+            text = { Text("Remove \"$tag\" from the tag list? Existing transactions keep their saved tag.") },
+            confirmButton = {
+                TextButton(onClick = { tags = tags - tag; persistTags(tags); pendingDelete = null }) { Text("Delete", color = ExpenseRed) }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
 private fun SettingsScreen(onOpen: (String) -> Unit) {
     val entries = listOf(
         "Categories" to Icons.Default.Label,
+        "Tag Management" to Icons.Default.Tag,
         "Budgets" to Icons.Default.AccountBalanceWallet,
         "Calendar" to Icons.Default.CalendarMonth,
         "Insights" to Icons.Default.Insights,
@@ -1768,6 +1867,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
         }
         item { InfoCard("Preferences", "Premium indigo accents, soft colourful cards and light surfaces. Transactions and loans remain saved locally on this device. Open Appearance to save display preferences.", Icons.Default.Tune) }
         item { Button(onClick = { onOpen("Categories") }, modifier = Modifier.fillMaxWidth()) { Text("Category management") } }
+        item { OutlinedButton(onClick = { onOpen("Tag Management") }, modifier = Modifier.fillMaxWidth()) { Text("Tag management") } }
         item { OutlinedButton(onClick = { onOpen("Budgets") }, modifier = Modifier.fillMaxWidth()) { Text("Monthly category budgets") } }
         item { OutlinedButton(onClick = { onOpen("Appearance") }, modifier = Modifier.fillMaxWidth()) { Text("Settings appearance") } }
         item { OutlinedButton(onClick = { onOpen("Backup & security") }, modifier = Modifier.fillMaxWidth()) { Text("Backup & security") } }
@@ -2146,6 +2246,7 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
     var title by remember(transaction) { mutableStateOf(transaction.title) }
     var amount by remember(transaction) { mutableStateOf(transaction.amount.toString()) }
     var category by remember(transaction) { mutableStateOf(transaction.category) }
+    var tag by remember(transaction) { mutableStateOf(transaction.tag) }
     var date by remember(transaction) { mutableStateOf(transaction.date) }
     var showDatePicker by remember { mutableStateOf(false) }
     var isIncome by remember(transaction) { mutableStateOf(transaction.income) }
@@ -2162,6 +2263,7 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
                 OutlinedTextField(title, { title = it }, label = { Text("Description") }, singleLine = true)
                 OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text("Amount (₹)") }, singleLine = true)
                 OutlinedTextField(category, { category = it }, label = { Text("Category") }, singleLine = true)
+                OutlinedTextField(tag, { tag = it.removePrefix("#") }, label = { Text("Tag (optional)") }, singleLine = true)
                 OutlinedTextField(
                     value = date, onValueChange = {}, readOnly = true,
                     label = { Text("Transaction date") },
@@ -2238,7 +2340,7 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
 private fun AddTransactionDialog(
     onDismiss: () -> Unit,
     initialIncome: Boolean = false,
-    onSave: (String, Long, Boolean, String, String, String, String) -> Unit
+    onSave: (String, Long, Boolean, String, String, String, String, String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
@@ -2259,6 +2361,22 @@ private fun AddTransactionDialog(
     var isIncome by remember { mutableStateOf(initialIncome) }
     var category by remember { mutableStateOf(savedCategories.firstOrNull { it == "Food & groceries" } ?: "Other") }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
+    val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online")
+    val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
+    var tags by remember {
+        mutableStateOf(runCatching {
+            val raw = preferences.getString("custom_tags", null)
+            val saved = if (raw.isNullOrBlank()) emptyList() else {
+                val array = JSONArray(raw)
+                (0 until array.length()).map { array.getString(it).trim().removePrefix("#").trim() }.filter { it.isNotBlank() }
+            }
+            (defaultTags + saved).distinctBy { it.lowercase(Locale.ROOT) }
+        }.getOrDefault(defaultTags))
+    }
+    var selectedTag by remember { mutableStateOf("") }
+    var tagMenuExpanded by remember { mutableStateOf(false) }
+    var showCreateTag by remember { mutableStateOf(false) }
+    var tagDraft by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
     var showDatePicker by remember { mutableStateOf(false) }
     var paymentMethod by remember { mutableStateOf("UPI") }
@@ -2315,6 +2433,25 @@ private fun AddTransactionDialog(
                         }
                     }
                 }
+                ExposedDropdownMenuBox(expanded = tagMenuExpanded, onExpandedChange = { tagMenuExpanded = it }) {
+                    OutlinedTextField(
+                        value = selectedTag, onValueChange = {}, readOnly = true,
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                        label = { Text("Tag (optional)") }, placeholder = { Text("Choose a tag") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagMenuExpanded) },
+                        singleLine = true, shape = RoundedCornerShape(14.dp)
+                    )
+                    ExposedDropdownMenu(expanded = tagMenuExpanded, onDismissRequest = { tagMenuExpanded = false }) {
+                        DropdownMenuItem(text = { Text("No tag") }, onClick = { selectedTag = ""; tagMenuExpanded = false })
+                        tags.forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { selectedTag = option; tagMenuExpanded = false }) }
+                        DropdownMenuItem(text = { Text("+ Create tag", color = Green, fontWeight = FontWeight.SemiBold) }, onClick = { tagMenuExpanded = false; tagDraft = ""; showCreateTag = true })
+                    }
+                }
+                OutlinedButton(onClick = { tagDraft = ""; showCreateTag = true }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Add, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Create Tag")
+                }
                 OutlinedTextField(
                     value = date, onValueChange = {}, readOnly = true,
                     label = { Text("Transaction date") },
@@ -2354,12 +2491,38 @@ private fun AddTransactionDialog(
                 } else if (!validDate) {
                     error = "Enter the date as YYYY-MM-DD."
                 } else {
-                    onSave(title.trim(), parsed, isIncome, category.ifBlank { "Other" }, date, paymentMethod, notes.trim())
+                    onSave(title.trim(), parsed, isIncome, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTag)
                 }
             }, colors = ButtonDefaults.buttonColors(containerColor = if (isIncome) IncomeGreen else Green), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save transaction", fontWeight = FontWeight.Bold) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+    if (showCreateTag) {
+        AlertDialog(
+            onDismissRequest = { showCreateTag = false },
+            title = { Text("Create Tag") },
+            text = { OutlinedTextField(tagDraft, { tagDraft = it }, label = { Text("Tag name") }, singleLine = true) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val name = tagDraft.trim().removePrefix("#").trim()
+                    if (name.isNotBlank()) {
+                        val existing = tags.firstOrNull { it.equals(name, ignoreCase = true) }
+                        if (existing != null) selectedTag = existing
+                        else {
+                            tags = tags + name
+                            val array = JSONArray()
+                            tags.forEach { array.put(it) }
+                            preferences.edit().putString("custom_tags", array.toString()).apply()
+                            selectedTag = name
+                        }
+                        showCreateTag = false
+                    }
+                }) { Text("Save tag", color = Green) }
+            },
+            dismissButton = { TextButton(onClick = { showCreateTag = false }) { Text("Cancel") } }
+        )
+    }
+
 }
 
 
@@ -2414,6 +2577,7 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("captureStatus", transaction.captureStatus)
             put("paymentMethod", transaction.paymentMethod)
             put("notes", transaction.notes)
+            put("tag", transaction.tag)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -2436,7 +2600,8 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optString("notificationKey", ""),
             item.optString("captureStatus", ""),
             item.optString("paymentMethod", "Not set"),
-            item.optString("notes", "")
+            item.optString("notes", ""),
+            item.optString("tag", "")
         )
     }
 }.getOrNull()
