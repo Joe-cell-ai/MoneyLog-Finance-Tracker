@@ -310,7 +310,7 @@ private fun FinanceApp() {
                 when (tab) {
                     "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = "Activity" }, { showAdd = true }, { tab = it }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
-                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it })
+                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = it })
                     "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" }, { loanForActions = it })
                     "Coach" -> CoachScreen(income, expenses, loans.sumOf { it.emi })
                     "Calendar" -> CalendarScreen(loans, transactions)
@@ -645,9 +645,12 @@ private fun ReportsScreen(
     expenses: Long,
     transactions: List<Transaction>,
     selectedMonth: YearMonth,
-    onMonthChange: (YearMonth) -> Unit
+    onMonthChange: (YearMonth) -> Unit,
+    onOpen: (String) -> Unit
 ) {
     var reportView by remember { mutableStateOf("By category") }
+    var searchVisible by remember { mutableStateOf(false) }
+    var categoryQuery by remember { mutableStateOf("") }
     var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var showNotifications by remember { mutableStateOf(false) }
