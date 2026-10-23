@@ -1660,6 +1660,7 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
     var amount by remember(transaction) { mutableStateOf(transaction.amount.toString()) }
     var category by remember(transaction) { mutableStateOf(transaction.category) }
     var date by remember(transaction) { mutableStateOf(transaction.date) }
+    var showDatePicker by remember { mutableStateOf(false) }
     var isIncome by remember(transaction) { mutableStateOf(transaction.income) }
     var error by remember { mutableStateOf("") }
     AlertDialog(
@@ -1674,7 +1675,24 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
                 OutlinedTextField(title, { title = it }, label = { Text("Description") }, singleLine = true)
                 OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text("Amount (₹)") }, singleLine = true)
                 OutlinedTextField(category, { category = it }, label = { Text("Category") }, singleLine = true)
-                OutlinedTextField(date, { date = it }, label = { Text("Date") }, singleLine = true)
+                OutlinedTextField(
+                    value = date, onValueChange = {}, readOnly = true,
+                    label = { Text("Transaction date") },
+                    trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date") } },
+                    modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }, singleLine = true
+                )
+                if (showDatePicker) {
+                    val initialMillis = runCatching { transactionDateOrNull(transaction)?.atStartOfDay(java.time.ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: System.currentTimeMillis() }.getOrDefault(System.currentTimeMillis())
+                    val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+                    DatePickerDialog(
+                        onDismissRequest = { showDatePicker = false },
+                        confirmButton = { TextButton(onClick = {
+                            pickerState.selectedDateMillis?.let { millis -> date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString() }
+                            showDatePicker = false
+                        }) { Text("Select") } },
+                        dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
+                    ) { DatePicker(state = pickerState) }
+                }
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
             }
         },
