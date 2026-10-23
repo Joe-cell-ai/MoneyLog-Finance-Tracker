@@ -1,6 +1,6 @@
-# Secure Open Finance AI backend setup
+# MoneyLog secure backend setup
 
-This repository now contains an **undeployed backend scaffold**. The Android app does not call this function yet. Do not describe the AI coach as live until Firebase is configured, the function is deployed, App Check is enforced, and the Android client is integrated and tested.
+This repository now contains an **undeployed backend scaffold**. MoneyLog does not call this function yet. Do not describe the AI coach as live until Firebase is configured, the function is deployed, App Check is enforced, and the Android client is integrated and tested.
 
 ## Security decisions
 
@@ -23,11 +23,11 @@ This repository now contains an **undeployed backend scaffold**. The Android app
 
 1. Open the [OpenAI API platform](https://platform.openai.com/) and sign in/create an account.
 2. Configure API billing separately from any ChatGPT subscription, review current model pricing, and set usage/spend limits or alerts where available.
-3. Create a dedicated API project/key for this app. Never paste the key into ChatGPT, GitHub issues, Android code, or this repository.
+3. Create a dedicated API project/key for MoneyLog. Never paste the key into ChatGPT, GitHub issues, Android code, or this MoneyLog repository.
 
 ## 3. Deploy from your own computer
 
-Install Node.js 22 and the [Firebase CLI](https://firebase.google.com/docs/cli). Clone this repository and run the following from its root:
+Install Node.js 22 and the [Firebase CLI](https://firebase.google.com/docs/cli). Clone this MoneyLog repository and run the following from its root:
 
 ```sh
 npm --prefix functions install
@@ -54,7 +54,7 @@ If the project has not enabled required APIs or billing, Firebase CLI will expla
 
 ## 4. Finish app security before calling it
 
-- Register the Android app in Firebase using the exact application ID from this repository, then download `google-services.json` to the Android app module locally.
+- Register the Android app in Firebase using the exact application ID from this MoneyLog repository, then download `google-services.json` to the Android app module locally.
 - Add/configure the Firebase Android SDKs for Authentication, App Check (Play Integrity for a Play-distributed app; use the appropriate debug provider only for local development), and Cloud Functions.
 - Sign in before calling `financeCoach`; the callable automatically carries Firebase Auth and App Check tokens through the Firebase SDK.
 - Keep App Check enforcement on. Do not weaken the backend to accept anonymous, unverified requests just to make a test pass.
