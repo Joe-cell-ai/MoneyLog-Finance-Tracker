@@ -1618,26 +1618,28 @@ private fun InfoScreen(title: String, body: String, icon: ImageVector) {
     }
 }
 
+private val DEFAULT_MONEY_CATEGORIES = listOf(
+    "Food", "Food/Dining out", "Healthcare", "Income", "Leisure/Travel",
+    "Savings/Emergency", "Transport/Fuel", "Transport/Taxi", "Utilities/Gas",
+    "Utilities/Phone", "Food/Coffee", "Food/Takeout", "Household", "Leisure",
+    "Other", "Savings/Investment", "Transport", "Transport/Public transit",
+    "Utilities/Electricity", "Utilities/Internet", "Utilities/Water"
+)
+
 @Composable
 private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
-    val defaultCategories = listOf(
-        "Food", "Food/Dining out", "Healthcare", "Income", "Leisure/Travel",
-        "Savings/Emergency", "Transport/Fuel", "Transport/Taxi", "Utilities/Gas",
-        "Utilities/Phone", "Food/Coffee", "Food/Takeout", "Household", "Leisure",
-        "Other", "Savings/Investment", "Transport", "Transport/Public transit",
-        "Utilities/Electricity", "Utilities/Internet", "Utilities/Water"
-    )
     val initialCategories = remember {
         runCatching {
             val raw = preferences.getString("custom_categories", null)
-            val saved = if (raw.isNullOrBlank()) emptyList() else {
+            if (raw.isNullOrBlank()) DEFAULT_MONEY_CATEGORIES else {
                 val array = JSONArray(raw)
-                (0 until array.length()).map { array.getString(it).trim() }.filter { it.isNotBlank() }
+                (0 until array.length()).map { array.getString(it).trim() }
+                    .filter { it.isNotBlank() }
+                    .distinctBy { it.lowercase(Locale.ROOT) }
             }
-            (defaultCategories + saved).distinctBy { it.lowercase(Locale.ROOT) }
-        }.getOrDefault(defaultCategories)
+        }.getOrDefault(DEFAULT_MONEY_CATEGORIES)
     }
     var categories by remember { mutableStateOf(initialCategories) }
     var message by remember { mutableStateOf("") }
@@ -2398,18 +2400,20 @@ private fun AddTransactionDialog(
     val defaultCategories = listOf("Food & groceries", "Housing", "Transport", "Bills & utilities", "Health", "Shopping", "Entertainment", "Education", "Loan repayment", "Salary", "Other income")
     val savedCategories = remember(context, categoryRefreshToken) {
         runCatching {
-            val raw = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE).getString("custom_categories", null)
-            if (raw.isNullOrBlank()) defaultCategories else {
+            val raw = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+                .getString("custom_categories", null)
+            if (raw.isNullOrBlank()) DEFAULT_MONEY_CATEGORIES else {
                 val array = JSONArray(raw)
-                val saved = (0 until array.length()).map { array.getString(it).trim() }
+                (0 until array.length()).map { array.getString(it).trim() }
                     .filter { it.isNotBlank() }
                     .distinctBy { it.lowercase(Locale.ROOT) }
-                saved.ifEmpty { defaultCategories }
             }
-        }.getOrDefault(defaultCategories)
+        }.getOrDefault(DEFAULT_MONEY_CATEGORIES)
     }
     var isIncome by remember { mutableStateOf(initialIncome) }
-    var category by remember { mutableStateOf(savedCategories.firstOrNull { it == "Food & groceries" } ?: "Other") }
+    var category by remember {
+        mutableStateOf(savedCategories.firstOrNull { it == "Food" } ?: savedCategories.firstOrNull() ?: "Other")
+    }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online")
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
