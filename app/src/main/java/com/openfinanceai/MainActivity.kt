@@ -1034,19 +1034,24 @@ private fun CategoriesScreen() {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
     val defaultCategories = listOf(
-        "Food & groceries", "Housing", "Transport", "Bills & utilities", "Health",
-        "Shopping", "Entertainment", "Education", "Loan repayment", "Salary", "Other income"
+        "Food", "Food/Dining out", "Healthcare", "Income", "Leisure/Travel",
+        "Savings/Emergency", "Transport/Fuel", "Transport/Taxi", "Utilities/Gas",
+        "Utilities/Phone", "Food/Coffee", "Food/Takeout", "Household", "Leisure",
+        "Other", "Savings/Investment", "Transport", "Transport/Public transit",
+        "Utilities/Electricity", "Utilities/Internet", "Utilities/Water"
     )
-    val savedCategories = remember {
+    val initialCategories = remember {
         runCatching {
             val raw = preferences.getString("custom_categories", null)
-            if (raw.isNullOrBlank()) defaultCategories else {
+            val saved = if (raw.isNullOrBlank()) emptyList() else {
                 val array = JSONArray(raw)
-                (0 until array.length()).map { array.getString(it) }.ifEmpty { defaultCategories }
+                (0 until array.length()).map { array.getString(it).trim() }.filter { it.isNotBlank() }
             }
+            (defaultCategories + saved).distinctBy { it.lowercase(Locale.ROOT) }
         }.getOrDefault(defaultCategories)
     }
-    var categories by remember { mutableStateOf(savedCategories) }
+    var categories by remember { mutableStateOf(initialCategories) }
+    var message by remember { mutableStateOf("") }
     fun persistCategories(values: List<String>) {
         val array = JSONArray()
         values.forEach { array.put(it) }
@@ -1057,50 +1062,85 @@ private fun CategoriesScreen() {
     var draft by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     val categoryColors = listOf(Green, ExpenseRed, SavingsBlue, Color(0xFF9B6AD6), Color(0xFFE99B51))
-    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item {
-            Text("Categories", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Manage the labels used to organize your money", color = Muted)
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = { draft = ""; editing = null; showAdd = true }, modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Green)) {
-                Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Add category")
+    Column(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item {
+                Text("Category Management", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
+                Text("Manage the categories used to organize your money", color = Muted)
+                Spacer(Modifier.height(8.dp))
+            }
+            if (message.isNotBlank()) item { Text(message, color = Green, fontSize = 12.sp) }
+            items(categories, key = { it }) { category ->
+                val tint = categoryColors[categories.indexOf(category).mod(categoryColors.size)]
+                Row(
+                    Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp))
+                        .padding(start = 13.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(Modifier.size(40.dp).background(tint.copy(alpha = .12f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Label, null, tint = tint)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Text(category, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
+                    IconButton(onClick = { draft = category; editing = category; showAdd = true }) {
+                        Icon(Icons.Default.Edit, "Edit category", tint = Green)
+                    }
+                    IconButton(onClick = { pendingDelete = category }) {
+                        Icon(Icons.Default.DeleteOutline, "Delete category", tint = ExpenseRed)
+                    }
+                }
+            }
+            item {
+                Text(
+                    "Categories are saved on this device and are available in Add Transaction.",
+                    color = Muted, fontSize = 11.sp
+                )
             }
         }
-        item { InfoCard("Keep reports organized", "Use consistent category names so spending patterns and recommendations are easier to understand.", Icons.Default.Insights) }
-        items(categories, key = { it }) { category ->
-            val tint = categoryColors[(categories.indexOf(category)).mod(categoryColors.size)]
-            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp)).padding(start = 13.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(40.dp).background(tint.copy(alpha = .12f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Label, null, tint = tint)
+        Surface(color = Color.White, shadowElevation = 8.dp) {
+            Row(
+                Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(onClick = { draft = ""; editing = null; showAdd = true }) {
+                    Icon(Icons.Default.Add, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Add Category")
                 }
-                Spacer(Modifier.width(12.dp))
-                Text(category, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
-                IconButton(onClick = { draft = category; editing = category; showAdd = true }) {
-                    Icon(Icons.Default.Edit, "Edit category", tint = Green)
-                }
-                IconButton(onClick = { pendingDelete = category }) {
-                    Icon(Icons.Default.DeleteOutline, "Delete category", tint = ExpenseRed)
-                }
+                Button(
+                    onClick = {
+                        persistCategories(categories)
+                        message = "Categories saved successfully."
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Green)
+                ) { Text("Confirm") }
             }
         }
-        item { Text("Your custom category list is saved on this device and remains after restarting the app. Existing transactions keep their original category labels.", color = Muted, fontSize = 11.sp) }
     }
     if (showAdd) {
         AlertDialog(
             onDismissRequest = { showAdd = false },
-            title = { Text(if (editing == null) "Add category" else "Edit category") },
+            title = { Text(if (editing == null) "Add Category" else "Edit Category") },
             text = { OutlinedTextField(draft, { draft = it }, label = { Text("Category name") }, singleLine = true) },
             confirmButton = {
                 TextButton(onClick = {
                     val name = draft.trim()
                     if (name.isNotBlank()) {
-                        categories = if (editing == null) {
-                            if (categories.any { it.equals(name, ignoreCase = true) }) categories else categories + name
-                        } else categories.map { if (it == editing) name else it }.distinctBy { it.lowercase(Locale.ROOT) }
-                        persistCategories(categories)
-                        showAdd = false
+                        val duplicate = categories.any { it.equals(name, ignoreCase = true) && it != editing }
+                        if (duplicate) {
+                            message = "That category already exists."
+                        } else {
+                            categories = if (editing == null) categories + name else categories.map { if (it == editing) name else it }
+                                .distinctBy { it.lowercase(Locale.ROOT) }
+                            persistCategories(categories)
+                            message = ""
+                            showAdd = false
+                        }
                     }
                 }) { Text("Save", color = Green) }
             },
@@ -1111,8 +1151,14 @@ private fun CategoriesScreen() {
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("Delete category?") },
-            text = { Text("Remove \"$category\" from this category list? Existing transactions are not changed.") },
-            confirmButton = { TextButton(onClick = { categories = categories - category; persistCategories(categories); pendingDelete = null }) { Text("Delete", color = ExpenseRed) } },
+            text = { Text("Remove \"$category\" from this category list? Existing transactions keep their original labels.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    categories = categories - category
+                    persistCategories(categories)
+                    pendingDelete = null
+                }) { Text("Delete", color = ExpenseRed) }
+            },
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } }
         )
     }
@@ -1546,7 +1592,7 @@ private fun AddTransactionDialog(
     var title by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     val context = LocalContext.current
-    val defaultCategories = listOf("Food & groceries", "Housing", "Transport", "Bills & utilities", "Health", "Shopping", "Entertainment", "Education", "Loan repayment", "Salary", "Other income")
+    val defaultCategories = listOf("Food", "Food/Dining out", "Healthcare", "Income", "Leisure/Travel", "Savings/Emergency", "Transport/Fuel", "Transport/Taxi", "Utilities/Gas", "Utilities/Phone", "Food/Coffee", "Food/Takeout", "Household", "Leisure", "Other", "Savings/Investment", "Transport", "Transport/Public transit", "Utilities/Electricity", "Utilities/Internet", "Utilities/Water")
     val savedCategories = remember {
         runCatching {
             val raw = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE).getString("custom_categories", null)
@@ -1558,7 +1604,7 @@ private fun AddTransactionDialog(
         }.getOrDefault(defaultCategories)
     }
     var isIncome by remember { mutableStateOf(false) }
-    var category by remember { mutableStateOf(savedCategories.firstOrNull { it == "Food & groceries" } ?: "Other") }
+    var category by remember { mutableStateOf(savedCategories.firstOrNull { it == "Food" } ?: "Other") }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     var date by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
     var paymentMethod by remember { mutableStateOf("UPI") }
@@ -1571,8 +1617,8 @@ private fun AddTransactionDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(selected = !isIncome, onClick = { isIncome = false; if (category in listOf("Salary", "Other income", "Income")) category = savedCategories.firstOrNull { it !in listOf("Salary", "Other income", "Income") } ?: "Other" }, label = { Text("Expense") })
-                    FilterChip(selected = isIncome, onClick = { isIncome = true; if (category !in listOf("Salary", "Other income", "Income")) category = "Salary" }, label = { Text("Income") })
+                    FilterChip(selected = !isIncome, onClick = { isIncome = false; if (category == "Income") category = savedCategories.firstOrNull { it != "Income" } ?: "Other" }, label = { Text("Expense") })
+                    FilterChip(selected = isIncome, onClick = { isIncome = true; if (category != "Income") category = "Income" }, label = { Text("Income") })
                 }
                 OutlinedTextField(title, { title = it }, label = { Text("Description") }, singleLine = true)
                 OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text("Amount (₹)") }, singleLine = true)
@@ -1592,7 +1638,7 @@ private fun AddTransactionDialog(
                         expanded = categoryMenuExpanded,
                         onDismissRequest = { categoryMenuExpanded = false }
                     ) {
-                        (if (isIncome) listOf("Salary", "Other income") else savedCategories.filterNot { it in listOf("Salary", "Other income", "Income") }).distinct().forEach { option ->
+                        (if (isIncome) listOf("Income") else savedCategories.filterNot { it == "Income" }).distinct().forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(option) },
                                 onClick = { category = option; categoryMenuExpanded = false }
