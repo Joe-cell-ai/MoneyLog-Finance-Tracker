@@ -39,7 +39,13 @@ class PaymentNotificationListener : NotificationListenerService() {
         if (!paymentWords.containsMatchIn(body)) return
         val amount = amountMatch.groupValues[1].replace(",", "").toDoubleOrNull()?.roundToLong() ?: return
         if (amount <= 0L) return
-        val source = if (packageName.contains("icici", true) || titleLine.contains("iMobile", true) || titleLine.contains("ICICI", true)) "ICICI iMobile" else "CRED"
+        val source = when {
+            packageName.contains("icici", true) || titleLine.contains("iMobile", true) || titleLine.contains("ICICI", true) -> "ICICI iMobile"
+            packageName.contains("phonepe", true) || titleLine.contains("PhonePe", true) -> "PhonePe"
+            packageName.contains("paytm", true) || titleLine.contains("Paytm", true) -> "Paytm"
+            packageName.contains("google.android.apps.nbu.paisa.user", true) || packageName.contains("googlepay", true) || titleLine.contains("Google Pay", true) || titleLine.contains("GPay", true) -> "Google Pay"
+            else -> "CRED"
+        }
         val title = extractRecipient(body, titleLine, source)
         val date = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(sbn.postTime))
         val isIncome = Regex("(?i)\\b(received|credited)\\b").containsMatchIn(body) &&
