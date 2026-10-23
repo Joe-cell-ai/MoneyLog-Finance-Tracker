@@ -291,10 +291,8 @@ private fun FinanceApp() {
                     Icon(Icons.Default.AccountBalanceWallet, null, tint = Green, modifier = Modifier.size(32.dp))
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("MONEYLOG", color = Muted, fontSize = 11.sp, letterSpacing = 2.sp)
-                        Text("Your money, clearly.", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text("MONEYLOG", color = Muted, fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
                     }
-                    IconButton(onClick = { tab = "Settings" }) { Icon(Icons.Default.Settings, "Settings") }
                 }
             },
             bottomBar = {
@@ -1234,24 +1232,16 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
         }
         items(loans) { loan ->
             val index = loans.indexOf(loan)
-            val iconTint = when (index.mod(4)) {
-                1 -> SavingsBlue
-                2 -> IncomeGreen
-                3 -> Purple
-                else -> Green
-            }
-            val iconBackground = when (index.mod(4)) {
-                1 -> SkyTint
-                2 -> IncomeTint
-                3 -> LavenderTint
-                else -> Mint
-            }
+            val premiumAccents = listOf(Color(0xFF5B55D6), Color(0xFF087F8C), Color(0xFFB45309), Color(0xFF9D3FB0), Color(0xFF2563B9), Color(0xFF16805D))
+            val premiumTints = listOf(Color(0xFFF0EEFF), Color(0xFFE7F8FA), Color(0xFFFFF3E5), Color(0xFFFBEFFC), Color(0xFFEAF2FF), Color(0xFFE8F8F0))
+            val iconTint = premiumAccents[index.mod(premiumAccents.size)]
+            val iconBackground = premiumTints[index.mod(premiumTints.size)]
             Card(
                 modifier = Modifier.fillMaxWidth().combinedClickable(
                     onClick = { onDetails(loan) },
                     onLongClick = { onLoanLongPress(loan) }
                 ),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = premiumTints[index.mod(premiumTints.size)]),
                 shape = RoundedCornerShape(22.dp)
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2104,8 +2094,52 @@ private fun AppearanceScreen() {
         }
     }
 }
+private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.LocalDate.now()): java.time.LocalDate? {
+    val raw = due.trim()
+    if (raw.isBlank() || raw.equals("Set due date", ignoreCase = true) || raw.equals("Not set", ignoreCase = true)) return null
+    runCatching {
+        val parsed = java.time.LocalDate.parse(raw)
+        val candidate = runCatching { parsed.withYear(today.year) }.getOrNull() ?: return null
+        return if (candidate.isBefore(today)) candidate.plusYears(1) else candidate
+    }
+    val dayMonth = Regex("^\\s*(\\d{1,2})\\s+([A-Za-z]{3,9})(?:\\s+(\\d{4}))?\\s*$").find(raw)
+    val monthDay = Regex("^\\s*([A-Za-z]{3,9})\\s+(\\d{1,2})(?:,?\\s+(\\d{4}))?\\s*$").find(raw)
+    val match = dayMonth ?: monthDay
+    if (match != null) {
+        val day = (if (dayMonth != null) match.groupValues[1] else match.groupValues[2]).toIntOrNull() ?: return null
+        val monthText = if (dayMonth != null) match.groupValues[2] else match.groupValues[1]
+        val explicitYear = (if (dayMonth != null) match.groupValues[3] else match.groupValues[3]).toIntOrNull()
+        val month = runCatching {
+            java.time.Month.valueOf(monthText.uppercase(Locale.ENGLISH).let { if (it.length > 3) it else it.take(3) }.let {
+                when (it) {
+                    "JAN" -> "JANUARY"; "FEB" -> "FEBRUARY"; "MAR" -> "MARCH"; "APR" -> "APRIL"
+                    "MAY" -> "MAY"; "JUN" -> "JUNE"; "JUL" -> "JULY"; "AUG" -> "AUGUST"
+                    "SEP" -> "SEPTEMBER"; "OCT" -> "OCTOBER"; "NOV" -> "NOVEMBER"; "DEC" -> "DECEMBER"
+                    else -> it
+                }
+            })
+        }.getOrNull() ?: return null
+        if (explicitYear != null) return runCatching { java.time.LocalDate.of(explicitYear, month, day) }.getOrNull()
+        var candidate = runCatching { java.time.LocalDate.of(today.year, month, day) }.getOrNull() ?: return null
+        if (candidate.isBefore(today)) candidate = runCatching { candidate.plusYears(1) }.getOrNull() ?: return null
+        return candidate
+    }
+    val dayOnly = raw.toIntOrNull()?.takeIf { it in 1..31 } ?: Regex("^\\s*(\\d{1,2})\\b").find(raw)?.groupValues?.getOrNull(1)?.toIntOrNull()
+    if (dayOnly != null && dayOnly in 1..31) {
+        for (offset in 0..12) {
+            val month = java.time.YearMonth.from(today).plusMonths(offset.toLong())
+            if (dayOnly <= month.lengthOfMonth()) {
+                val candidate = month.atDay(dayOnly)
+                if (!candidate.isBefore(today)) return candidate
+            }
+        }
+    }
+    return null
+}
+
 @Composable
 private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
+    val firstDueDate = nextLoanDueDate(loan.due)
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
     val monthlyRate = (loan.annualRate.coerceAtLeast(0.0) / 1200.0)
     val schedule = (0 until 6).map { index ->
@@ -2173,7 +2207,10 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
             val (interest, principalPart, closingBalance) = schedule[index]
             Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp)).combinedClickable(onClick = { onEmiLongPress() }, onLongClick = { onEmiLongPress() }).padding(horizontal = 12.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1.25f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(if (index == 0) loan.due else "Month ${index + 1}", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    val installmentDate = firstDueDate?.plusMonths(index.toLong())
+                    val installmentLabel = installmentDate?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+                        ?: if (loan.due.equals("Set due date", ignoreCase = true) || loan.due.isBlank()) "Set due date" else loan.due
+                    Text(installmentLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     Text("Closing ${Money.format(closingBalance)}", color = Muted, fontSize = 10.sp)
                 }
                 Text(Money.format(interest), Modifier.weight(1f), color = ExpenseRed, fontSize = 11.sp, fontWeight = FontWeight.Medium)
