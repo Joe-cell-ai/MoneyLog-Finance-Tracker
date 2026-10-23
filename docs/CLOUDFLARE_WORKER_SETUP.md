@@ -1,78 +1,102 @@
-# Cloudflare Worker AI backend setup
+# Open Finance AI — Cloudflare backend setup
 
-This is a separate backend scaffold for Open Finance AI. It does not modify the Android app or remove the existing Firebase Functions scaffold. It does not make the AI coach live until an identity provider is selected, configuration is added, the Worker is deployed, and Android is integrated and tested.
+This backend is being implemented on `feature/cloudflare-ai-backend`. The `main` branch is not changed. Do not consider the backend production-ready until D1/R2 resources are created, migrations are applied, Supabase Auth is configured, secrets are set, and integration tests pass.
 
 ## Architecture
 
-- Cloudflare Worker handles `POST /v1/finance-coach`.
-- The Worker calls the OpenAI Responses API using the server-side `OPENAI_API_KEY` secret.
-- Requests must include a valid JWT from an identity provider that publishes compatible JWKS keys. The token issuer, audience and JWKS URL are configured by the operator.
-- Cloudflare's Worker rate-limit binding limits each authenticated subject to 5 requests per 60-second period. This is abuse protection, not a hard spending cap; rate-limit behavior can be approximate across Cloudflare locations.
-- The endpoint accepts only a question (up to 2,000 characters). It does not automatically send transactions, income, expenses, loans or other app data.
-- Prompts, bearer tokens, API keys and provider response bodies are not logged.
-- Responses state that live credit-bureau data is not connected.
+- **Cloudflare Worker**: authenticated API and AI coach.
+- **Cloudflare D1**: SQL storage for user-owned transactions, categories, budgets, loans, savings goals and file metadata.
+- **Cloudflare R2**: private object storage for receipts and documents. Objects are accessed only through the authenticated Worker; do not make the bucket public.
+- **Supabase Auth**: planned identity provider. The Worker validates signed access tokens and uses the verified `sub` claim as the owner ID.
+- **OpenAI API**: used by the finance coach through a server-side Worker secret.
 
-## Important authentication decision
+Every data query must scope records to the verified user's identity. Never accept a `user_id` from request JSON as proof of ownership. Do not embed an OpenAI key, Supabase service-role key, database credential, or other server secret in Android or source control.
 
-The Android project currently has no complete sign-in/token flow. Do not deploy this endpoint for public use until an identity provider is chosen and the Android app obtains valid user tokens. Do not replace this requirement with a shared secret embedded in the APK: users can extract secrets from mobile apps.
+## Storage API implemented in the Worker
 
-The Worker expects these environment variables:
+All endpoints below require a valid bearer access token after Supabase JWT configuration is complete.
 
-- `AUTH_JWKS_URL`: HTTPS URL for the identity provider's JSON Web Key Set.
-- `AUTH_ISSUER`: exact expected JWT issuer.
-- `AUTH_AUDIENCE`: exact expected JWT audience/client identifier.
-- `OPENAI_API_KEY`: Cloudflare secret, not a plain-text variable.
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET, POST | `/v1/transactions` | List or create transactions |
+| DELETE | `/v1/transactions/:id` | Delete a transaction owned by the signed-in user |
+| GET, POST | `/v1/categories` | List or create categories |
+| GET, POST | `/v1/budgets` | List or create/update a category budget for a month |
+| GET, POST | `/v1/loans` | List or create loan records |
+| GET, POST | `/v1/savings` | List or create savings goals |
+| GET, POST | `/v1/files` | List or upload private files |
+| GET, DELETE | `/v1/files/:id` | Download or delete a file owned by the signed-in user |
 
-The identity provider must issue signed JWT access/ID tokens whose issuer, audience and signing keys match the configured values. Confirm which token type the provider issues before configuring the Android client. Do not guess these values.
+File uploads currently accept PDF, JPEG, PNG and WebP, with a 10 MiB per-file limit. File objects use generated private keys; client-supplied paths are never used as object keys. The API returns downloads with private/no-store cache headers. Add further file types only after reviewing the security implications.
 
-## Configure Cloudflare
+The first storage API iteration does not yet provide transaction update, category update/delete, budget delete, loan update/delete or savings-goal update/delete endpoints. Android must not be wired to assume those operations exist until implemented and tested.
 
-1. Open Workers & Pages and select `open-finance-ai-api`.
-2. Open Settings > Variables and Secrets.
-3. Add `AUTH_JWKS_URL`, `AUTH_ISSUER` and `AUTH_AUDIENCE` as variables only after selecting an identity provider and verifying its official configuration values.
-4. Add `OPENAI_API_KEY` as a Secret. Never commit it to GitHub, put it in Android resources, or paste it into chat.
-5. Deploy from the `cloudflare-worker` directory using Wrangler after dependencies are installed and configuration has been checked.
+## 1. Create Cloudflare resources
 
-## Local development and checks
+1. In Cloudflare Dashboard, open **Workers & Pages** and create/select the Worker named `open-finance-ai-api`.
+2. Open **Storage & databases → D1 SQL Database** (dashboard labels may vary), create a database named `open-finance-ai-db`, and copy its database ID into `cloudflare-worker/wrangler.toml` in place of `REPLACE_WITH_D1_DATABASE_ID`. The ID is configuration, not a secret.
+3. Create an R2 bucket named `open-finance-ai-files`. Keep it private; do not enable public bucket access or publish a custom public domain.
+4. Before deploying, confirm the D1 binding is named `DB` and the R2 binding is named `FILES`, matching the Worker config.
 
-From the repository root:
+Do not deploy while the D1 database ID is still the placeholder.
+
+## 2. Apply the database schema
+
+From the repository root, after installing Node.js and Wrangler:
 
 ```sh
 cd cloudflare-worker
 npm install
+npx wrangler d1 migrations apply open-finance-ai-db --remote
 npm run typecheck
-npm run dev
 ```
 
-Deploy only after auth variables and the secret are configured:
+Review the migration in `cloudflare-worker/migrations/0001_initial_schema.sql` before applying it. It creates the initial schema for categories, transactions, budgets, loans, savings goals and private-file metadata. Do not put real personal financial data into test records.
 
-```sh
-npm run deploy
-```
+## 3. Configure Supabase Auth (after D1 and R2)
 
-Test the public health endpoint:
+1. Create/select the Supabase project and enable the sign-in method you intend to support.
+2. Configure Supabase to use an asymmetric JWT signing key compatible with its published JWKS endpoint. Do not share or copy signing private keys into Cloudflare or chat.
+3. Verify the official values in the Supabase dashboard for the project URL, JWKS URL, JWT issuer and access-token audience. Do not guess them; older projects using symmetric HS256 signing may require a signing-key migration before JWKS validation works.
+4. Set `AUTH_JWKS_URL`, `AUTH_ISSUER` and `AUTH_AUDIENCE` as Worker variables using the verified values. Store `OPENAI_API_KEY` as a Worker **Secret**, not a plain variable.
+5. Do not use the Supabase service-role/secret key in the Android app. The app should use the public publishable/anon key only if the selected Supabase client needs it; the user access token is what authorizes Worker requests.
+
+The Android app still needs a Supabase sign-in/token flow and integration with these endpoints. Until that work is completed, the backend API is not ready for the app.
+
+## 4. Security and testing checklist
+
+- Keep the R2 bucket private.
+- Ensure all protected endpoints reject requests without a valid token (401).
+- Confirm one user's token cannot read, download, update or delete another user's records/files.
+- Test invalid JSON, invalid amounts/dates, unsupported file types and files larger than 10 MiB.
+- Verify rate-limit binding behavior in a deployed Worker; rate limits are abuse protection and not a hard OpenAI spending cap.
+- Do not log bearer tokens, prompts, personal financial records, API keys or provider response bodies.
+- Use synthetic test records only, and delete them after testing.
+- Configure OpenAI usage alerts/limits where available; Cloudflare usage does not cover OpenAI API charges.
+
+Health check:
 
 ```sh
 curl https://YOUR-WORKER-URL/health
 ```
 
-Test the AI endpoint only with a valid JWT from the configured identity provider:
+Unauthenticated protected-route check (expected 503 until auth configuration exists, then 401):
 
 ```sh
-curl -X POST https://YOUR-WORKER-URL/v1/finance-coach \
-  -H "Authorization: Bearer YOUR_VALID_USER_JWT" \
-  -H "Content-Type: application/json" \
-  -d '{"message":"How can I make a monthly budget?"}'
+curl -i https://YOUR-WORKER-URL/v1/transactions
 ```
 
-Never use a real token in source control or share it in chat. The sample placeholder above is not a working credential.
+Deploy only after resource IDs, bindings, migrations, authentication settings and secrets have been checked:
 
-## Known remaining work
+```sh
+npm run deploy
+```
 
-- Select an identity provider and configure issuer, audience and JWKS URL.
-- Add the matching Android sign-in/token flow and securely attach the token to Worker requests.
-- Configure the OpenAI secret and verify the Cloudflare rate-limit binding in the dashboard/deployment.
-- Run typecheck and endpoint tests in a configured environment.
-- Connect the Android AI Coach UI on a separate branch after the backend contract and auth provider are confirmed.
-- Review OpenAI API usage and set account/project usage limits where available. Cloudflare's free allowance does not cover OpenAI API charges.
-- Obtain explicit consent before adding any personal financial context to AI requests.
+## Remaining work
+
+- Replace the D1 placeholder with the actual database ID and apply migrations.
+- Create the private R2 bucket and confirm bindings in the deployed Worker.
+- Configure Supabase JWT verification and the OpenAI secret.
+- Complete and test Supabase sign-in/token integration in Android.
+- Add remaining CRUD operations and connect app screens to the API.
+- Run automated and live integration tests, including cross-user access tests.
