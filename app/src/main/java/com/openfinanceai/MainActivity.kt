@@ -542,7 +542,6 @@ private fun HomeScreen(
                         trackColor = Mint
                     )
                     Text(if (income > 0) "${expenses * 100 / income}% of tracked income spent" else "Add income to see spending ratio", color = Muted, fontSize = 12.sp)
-                    Text("Open monthly report →", Modifier.clickable { onOpen("Reports") }, color = Green)
                 }
             }
         }
