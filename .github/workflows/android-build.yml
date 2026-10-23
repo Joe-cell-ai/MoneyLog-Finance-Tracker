@@ -6,9 +6,17 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   assemble:
     runs-on: ubuntu-latest
+    env:
+      MONEYLOG_KEYSTORE_BASE64: ${{ secrets.MONEYLOG_KEYSTORE_BASE64 }}
+      MONEYLOG_KEYSTORE_PASSWORD: ${{ secrets.MONEYLOG_KEYSTORE_PASSWORD }}
+      MONEYLOG_KEY_ALIAS: ${{ secrets.MONEYLOG_KEY_ALIAS }}
+      MONEYLOG_KEY_PASSWORD: ${{ secrets.MONEYLOG_KEY_PASSWORD }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -23,14 +31,41 @@ jobs:
           gradle-version: "8.9"
       - name: Verify Gradle installation
         run: gradle --version
-      - name: Build debug APK
+      - name: Prepare persistent signing key
+        if: env.MONEYLOG_KEYSTORE_BASE64 != '' && env.MONEYLOG_KEYSTORE_PASSWORD != '' && env.MONEYLOG_KEY_ALIAS != '' && env.MONEYLOG_KEY_PASSWORD != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE_PATH="$RUNNER_TEMP/moneylog-release.jks"
+          printf '%s' "$MONEYLOG_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          echo "MONEYLOG_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+      - name: Build persistently signed release APK
+        if: env.MONEYLOG_KEYSTORE_BASE64 != '' && env.MONEYLOG_KEYSTORE_PASSWORD != '' && env.MONEYLOG_KEY_ALIAS != '' && env.MONEYLOG_KEY_PASSWORD != ''
+        run: gradle --no-daemon --stacktrace --warning-mode all assembleRelease
+      - name: Build debug APK (fallback when signing secrets are not configured)
+        if: env.MONEYLOG_KEYSTORE_BASE64 == '' || env.MONEYLOG_KEYSTORE_PASSWORD == '' || env.MONEYLOG_KEY_ALIAS == '' || env.MONEYLOG_KEY_PASSWORD == ''
         run: gradle --no-daemon --stacktrace --warning-mode all assembleDebug
-      - name: Report APK output
-        if: success()
+      - name: Report release APK
+        if: success() && env.MONEYLOG_KEYSTORE_BASE64 != '' && env.MONEYLOG_KEYSTORE_PASSWORD != '' && env.MONEYLOG_KEY_ALIAS != '' && env.MONEYLOG_KEY_PASSWORD != ''
+        run: |
+          ls -lh app/build/outputs/apk/release/app-release.apk
+          sha256sum app/build/outputs/apk/release/app-release.apk
+      - name: Upload persistently signed APK
+        if: success() && env.MONEYLOG_KEYSTORE_BASE64 != '' && env.MONEYLOG_KEYSTORE_PASSWORD != '' && env.MONEYLOG_KEY_ALIAS != '' && env.MONEYLOG_KEY_PASSWORD != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoneyLog-android-signed-apk
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+      - name: Report debug APK
+        if: success() && (env.MONEYLOG_KEYSTORE_BASE64 == '' || env.MONEYLOG_KEYSTORE_PASSWORD == '' || env.MONEYLOG_KEY_ALIAS == '' || env.MONEYLOG_KEY_PASSWORD == '')
         run: |
           ls -lh app/build/outputs/apk/debug/app-debug.apk
           sha256sum app/build/outputs/apk/debug/app-debug.apk
       - name: Upload debug APK
+        if: success() && (env.MONEYLOG_KEYSTORE_BASE64 == '' || env.MONEYLOG_KEYSTORE_PASSWORD == '' || env.MONEYLOG_KEY_ALIAS == '' || env.MONEYLOG_KEY_PASSWORD == '')
         uses: actions/upload-artifact@v4
         with:
           name: MoneyLog-android-debug-apk
