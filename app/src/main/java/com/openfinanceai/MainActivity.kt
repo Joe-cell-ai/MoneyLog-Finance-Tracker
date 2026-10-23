@@ -45,14 +45,24 @@ import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
-private val Green = Color(0xFF087F5B)
-private val Mint = Color(0xFFE0F5EC)
-private val IncomeGreen = Color(0xFF159B72)
-private val ExpenseRed = Color(0xFFE85D68)
-private val SavingsBlue = Color(0xFF2699D6)
-private val Ink = Color(0xFF172A33)
-private val Muted = Color(0xFF71818A)
-private val Page = Color(0xFFF3F7F8)
+private val Green = Color(0xFF6558D3) // Premium indigo-violet primary
+private val Mint = Color(0xFFF0EDFF) // Soft lavender surface tint
+private val IncomeGreen = Color(0xFF168568)
+private val ExpenseRed = Color(0xFFD94F69)
+private val SavingsBlue = Color(0xFF3478D4)
+private val Ink = Color(0xFF22243A)
+private val Muted = Color(0xFF74788D)
+private val Page = Color(0xFFF7F7FB)
+private val IncomeTint = Color(0xFFE8F7F1)
+private val ExpenseTint = Color(0xFFFFEEF1)
+private val SkyTint = Color(0xFFEAF3FF)
+private val PeachTint = Color(0xFFFFF1E6)
+private val PinkTint = Color(0xFFFFEFF6)
+private val LavenderTint = Color(0xFFF0EDFF)
+private val Teal = Color(0xFF2D9A91)
+private val Orange = Color(0xFFE69A45)
+private val Purple = Color(0xFF8A63D2)
+private val Blue = Color(0xFF3478D4)
 private val Money = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
 
 private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "")
@@ -216,7 +226,25 @@ private fun FinanceApp() {
     val selectedMonthIncome = selectedMonthTransactions.filter { it.income }.sumOf { it.amount }
     val selectedMonthExpenses = selectedMonthTransactions.filterNot { it.income }.sumOf { it.amount }
 
-    MaterialTheme(colorScheme = lightColorScheme(primary = Green, background = Page, surface = Color.White, onSurface = Ink)) {
+    MaterialTheme(
+        colorScheme = lightColorScheme(
+            primary = Green,
+            onPrimary = Color.White,
+            primaryContainer = Mint,
+            onPrimaryContainer = Ink,
+            secondary = SavingsBlue,
+            onSecondary = Color.White,
+            tertiary = Purple,
+            onTertiary = Color.White,
+            error = ExpenseRed,
+            background = Page,
+            surface = Color.White,
+            surfaceVariant = Color(0xFFF0F1F8),
+            onSurface = Ink,
+            onSurfaceVariant = Muted,
+            outline = Color(0xFFDADCE8)
+        )
+    ) {
         Scaffold(
             containerColor = Page,
             topBar = {
@@ -248,7 +276,7 @@ private fun FinanceApp() {
                             onClick = { tab = name },
                             icon = { Icon(icon, name) },
                             label = { Text(name, fontSize = 10.sp) },
-                            colors = NavigationBarItemDefaults.colors(selectedIconColor = Green, indicatorColor = Mint)
+                            colors = NavigationBarItemDefaults.colors(selectedIconColor = Green, selectedTextColor = Green, unselectedIconColor = Muted, unselectedTextColor = Muted, indicatorColor = Mint)
                         )
                     }
                 }
@@ -383,7 +411,7 @@ private fun HomeScreen(
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Green), shape = RoundedCornerShape(24.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = Green), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)) {
                 Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("TOTAL BALANCE", color = Color.White.copy(alpha = .8f), fontSize = 12.sp, letterSpacing = 1.sp)
                     Text(Money.format(income - expenses), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
@@ -423,7 +451,7 @@ private fun HomeScreen(
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = SkyTint), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Spending in " + selectedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH), color = Muted)
                     Text(Money.format(expenses), fontSize = 25.sp, fontWeight = FontWeight.Bold, color = Ink)
@@ -447,7 +475,7 @@ private fun HomeScreen(
                 modifier = Modifier.clickable { onOpen("Coach") }
             ) {
                 Row(Modifier.padding(17.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFF5A62B5))
+                    Icon(Icons.Default.AutoAwesome, null, tint = Purple)
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text("Your AI finance coach", fontWeight = FontWeight.Bold, color = Ink)
@@ -497,9 +525,11 @@ private fun HomeScreen(
 
 @Composable
 private fun QuickAction(label: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Card(modifier = modifier.clickable { onClick() }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(15.dp)) {
+    val tint = when (label) { "Add expense" -> ExpenseTint; "Add income" -> IncomeTint; else -> LavenderTint }
+    val accent = when (label) { "Add expense" -> ExpenseRed; "Add income" -> IncomeGreen; else -> Purple }
+    Card(modifier = modifier.clickable { onClick() }, colors = CardDefaults.cardColors(containerColor = tint), shape = RoundedCornerShape(17.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, null, tint = Green)
+            Icon(icon, null, tint = accent)
             Text(label, color = Ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
     }
@@ -516,15 +546,15 @@ private fun SectionHeading(title: String, action: String, onClick: () -> Unit = 
 @Composable
 private fun TransactionRow(transaction: Transaction, onLongPress: () -> Unit = {}) {
     Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp)).combinedClickable(onClick = onLongPress, onLongClick = onLongPress).padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(42.dp).background(if (transaction.income) Mint else Page, RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
-            Icon(if (transaction.income) Icons.Default.Payments else Icons.Default.ShoppingBag, null, tint = Green)
+        Box(Modifier.size(42.dp).background(if (transaction.income) IncomeTint else ExpenseTint, RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
+            Icon(if (transaction.income) Icons.Default.Payments else Icons.Default.ShoppingBag, null, tint = if (transaction.income) IncomeGreen else ExpenseRed)
         }
         Spacer(Modifier.width(11.dp))
         Column(Modifier.weight(1f)) {
             Text(transaction.title, color = Ink, fontWeight = FontWeight.SemiBold)
             Text("${transaction.category} · ${transaction.date}", color = Muted, fontSize = 11.sp)
         }
-        Text((if (transaction.income) "+" else "−") + Money.format(transaction.amount), color = if (transaction.income) Green else Ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text((if (transaction.income) "+" else "−") + Money.format(transaction.amount), color = if (transaction.income) IncomeGreen else ExpenseRed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
     }
 }
 
@@ -576,7 +606,7 @@ private fun ReportsScreen(
     onMonthChange: (YearMonth) -> Unit
 ) {
     val categories = transactions.filterNot { it.income }.groupBy { it.category }.map { entry -> entry.key to entry.value.sumOf { it.amount } }.sortedByDescending { it.second }
-    val chartColors = listOf(Green, ExpenseRed, SavingsBlue, Color(0xFF9B6AD6), Color(0xFFE99B51), Color(0xFF4E9A8A))
+    val chartColors = listOf(IncomeGreen, ExpenseRed, SavingsBlue, Purple, Orange, Teal)
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Text("Monthly reports", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
@@ -593,14 +623,14 @@ private fun ReportsScreen(
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricCard("Income", Money.format(income), Modifier.weight(1f))
-                MetricCard("Expenses", Money.format(expenses), Modifier.weight(1f))
+                MetricCard("Income", Money.format(income), Modifier.weight(1f), IncomeTint, IncomeGreen)
+                MetricCard("Expenses", Money.format(expenses), Modifier.weight(1f), ExpenseTint, ExpenseRed)
             }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricCard("Savings / net", Money.format(income - expenses), Modifier.weight(1f))
-                MetricCard("Transactions", transactions.size.toString(), Modifier.weight(1f))
+                MetricCard("Savings / net", Money.format(income - expenses), Modifier.weight(1f), LavenderTint, Purple)
+                MetricCard("Transactions", transactions.size.toString(), Modifier.weight(1f), SkyTint, Blue)
             }
         }
         item {
@@ -662,11 +692,11 @@ private fun ReportsScreen(
 }
 
 @Composable
-private fun MetricCard(title: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+private fun MetricCard(title: String, value: String, modifier: Modifier = Modifier, tint: Color = Color.White, valueColor: Color = Green) {
+    Card(modifier, colors = CardDefaults.cardColors(containerColor = tint), shape = RoundedCornerShape(17.dp)) {
         Column(Modifier.padding(14.dp)) {
             Text(title, color = Muted)
-            Text(value, color = Green, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(value, color = valueColor, fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
     }
 }
@@ -692,7 +722,8 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
             InfoCard("No loans added yet", "Add a loan to track its outstanding balance, monthly EMI and next due date.", Icons.Default.AccountBalance)
         }
         items(loans) { loan ->
-            Card(modifier = Modifier.combinedClickable(onClick = { onDetails(loan) }, onLongClick = { onLoanLongPress(loan) }), colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            val loanTint = when (loans.indexOf(loan).mod(3)) { 1 -> SkyTint; 2 -> IncomeTint; else -> Color.White }
+            Card(modifier = Modifier.combinedClickable(onClick = { onDetails(loan) }, onLongClick = { onLoanLongPress(loan) }), colors = CardDefaults.cardColors(containerColor = loanTint), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AccountBalance, null, tint = Green)
@@ -738,7 +769,7 @@ private fun CoachScreen(income: Long, expenses: Long, emi: Long) {
             Text("Guidance based on the numbers you track", color = Muted)
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFEEF2FF)), shape = RoundedCornerShape(20.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = LavenderTint), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFF5A62B5))
                     Text("Your money snapshot", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
@@ -1056,7 +1087,7 @@ private fun CategoriesScreen() {
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
-    val categoryColors = listOf(Green, ExpenseRed, SavingsBlue, Color(0xFF9B6AD6), Color(0xFFE99B51))
+    val categoryColors = listOf(Green, ExpenseRed, SavingsBlue, Purple, Orange, Teal)
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Text("Categories", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
@@ -1136,7 +1167,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
             Text("Settings", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
             Text("Personalize your workspace", color = Muted)
         }
-        item { InfoCard("Preferences", "Reference palette: forest green, mint, white and slate. Transactions and loans are saved locally on this device. Open Appearance to save display preferences.", Icons.Default.Tune) }
+        item { InfoCard("Preferences", "Premium indigo accents, soft colourful cards and light surfaces. Transactions and loans remain saved locally on this device. Open Appearance to save display preferences.", Icons.Default.Tune) }
         item { Button(onClick = { onOpen("Categories") }, modifier = Modifier.fillMaxWidth()) { Text("Category management") } }
         item { OutlinedButton(onClick = { onOpen("Budgets") }, modifier = Modifier.fillMaxWidth()) { Text("Monthly category budgets") } }
         item { OutlinedButton(onClick = { onOpen("Appearance") }, modifier = Modifier.fillMaxWidth()) { Text("Settings appearance") } }
@@ -1147,17 +1178,19 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
         item { OutlinedButton(onClick = { onOpen("Loan details") }, modifier = Modifier.fillMaxWidth()) { Text("Loan details & EMI schedule") } }
         item { Button(onClick = { onOpen("Add loan") }, modifier = Modifier.fillMaxWidth()) { Text("+ Add loan") } }
         items(entries) { (label, icon) ->
+            val entryAccent = when (label) { "Categories" -> Purple; "Budgets" -> IncomeGreen; "Calendar" -> SavingsBlue; "Insights" -> Orange; "Credit health" -> ExpenseRed; "Appearance" -> Purple; else -> Green }
+            val entryTint = when (label) { "Categories", "Appearance" -> LavenderTint; "Budgets" -> IncomeTint; "Calendar" -> SkyTint; "Insights" -> PeachTint; "Credit health" -> ExpenseTint; else -> Color.White }
             Row(
-                Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).clickable { onOpen(label) }.padding(16.dp),
+                Modifier.fillMaxWidth().background(entryTint, RoundedCornerShape(14.dp)).clickable { onOpen(label) }.padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(icon, null, tint = Green)
+                Icon(icon, null, tint = entryAccent)
                 Spacer(Modifier.width(12.dp))
                 Text(label, Modifier.weight(1f), color = Ink)
                 Icon(Icons.Default.ChevronRight, null, tint = Muted)
             }
         }
-        item { Text("Open Finance AI · Prototype 1.0.0", color = Muted, fontSize = 11.sp) }
+        item { Text("MoneyLog · Finance tracker", color = Muted, fontSize = 11.sp) }
     }
 }
 
@@ -1571,8 +1604,8 @@ private fun AddTransactionDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(selected = !isIncome, onClick = { isIncome = false; if (category in listOf("Salary", "Other income", "Income")) category = savedCategories.firstOrNull { it !in listOf("Salary", "Other income", "Income") } ?: "Other" }, label = { Text("Expense") })
-                    FilterChip(selected = isIncome, onClick = { isIncome = true; if (category !in listOf("Salary", "Other income", "Income")) category = "Salary" }, label = { Text("Income") })
+                    FilterChip(selected = !isIncome, onClick = { isIncome = false; if (category in listOf("Salary", "Other income", "Income")) category = savedCategories.firstOrNull { it !in listOf("Salary", "Other income", "Income") } ?: "Other" }, label = { Text("Expense") }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ExpenseTint, selectedLabelColor = ExpenseRed))
+                    FilterChip(selected = isIncome, onClick = { isIncome = true; if (category !in listOf("Salary", "Other income", "Income")) category = "Salary" }, label = { Text("Income") }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = IncomeTint, selectedLabelColor = IncomeGreen))
                 }
                 OutlinedTextField(title, { title = it }, label = { Text("Description") }, singleLine = true)
                 OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text("Amount (₹)") }, singleLine = true)
@@ -1622,7 +1655,7 @@ private fun AddTransactionDialog(
                 } else {
                     onSave(title.trim(), parsed, isIncome, category.ifBlank { "Other" }, date, paymentMethod, notes.trim())
                 }
-            }, colors = ButtonDefaults.buttonColors(containerColor = Green), modifier = Modifier.fillMaxWidth()) { Text("Save transaction") }
+            }, colors = ButtonDefaults.buttonColors(containerColor = if (isIncome) IncomeGreen else Green), modifier = Modifier.fillMaxWidth()) { Text("Save transaction") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
