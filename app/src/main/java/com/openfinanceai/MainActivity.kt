@@ -811,10 +811,10 @@ private fun ReportsScreen(
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             if (categories.isEmpty()) Text("No category totals yet.", color = Muted, fontSize = 12.sp)
                             categories.take(5).forEach { (category, amount) ->
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Box(Modifier.size(8.dp).background(categoryColor(category), CircleShape))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(category, color = Ink, fontSize = 11.sp, maxLines = 1)
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(category, color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Normal, maxLines = 1)
                                         Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Muted, fontSize = 10.sp)
                                     }
                                 }
