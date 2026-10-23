@@ -4,6 +4,17 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val moneylogKeystoreFile = System.getenv("MONEYLOG_KEYSTORE_FILE")
+val moneylogStorePassword = System.getenv("MONEYLOG_KEYSTORE_PASSWORD")
+val moneylogKeyAlias = System.getenv("MONEYLOG_KEY_ALIAS")
+val moneylogKeyPassword = System.getenv("MONEYLOG_KEY_PASSWORD")
+val hasMoneylogSigning = listOf(
+    moneylogKeystoreFile,
+    moneylogStorePassword,
+    moneylogKeyAlias,
+    moneylogKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.openfinanceai"
     compileSdk = 35
@@ -14,6 +25,28 @@ android {
         versionCode = 1
         versionName = "1.0.0"
     }
+
+    if (hasMoneylogSigning) {
+        signingConfigs {
+            create("moneylogRelease") {
+                storeFile = file(moneylogKeystoreFile!!)
+                storePassword = moneylogStorePassword
+                keyAlias = moneylogKeyAlias
+                keyPassword = moneylogKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            // Use the persistent key on trusted builds; fall back to Android's
+            // normal debug key for pull requests where repository secrets are unavailable.
+            if (hasMoneylogSigning) {
+                signingConfig = signingConfigs.getByName("moneylogRelease")
+            }
+        }
+    }
+
     buildFeatures { compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
