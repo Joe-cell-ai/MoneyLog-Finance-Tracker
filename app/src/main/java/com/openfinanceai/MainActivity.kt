@@ -2200,11 +2200,13 @@ private fun AddTransactionDialog(
     val savedCategories = remember {
         runCatching {
             val raw = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE).getString("custom_categories", null)
-            val custom = if (raw.isNullOrBlank()) emptyList() else {
+            if (raw.isNullOrBlank()) defaultCategories else {
                 val array = JSONArray(raw)
-                (0 until array.length()).map { array.getString(it) }.filter { it.isNotBlank() }
+                val saved = (0 until array.length()).map { array.getString(it).trim() }
+                    .filter { it.isNotBlank() }
+                    .distinctBy { it.lowercase(Locale.ROOT) }
+                saved.ifEmpty { defaultCategories }
             }
-            (defaultCategories + custom).distinctBy { it.trim().lowercase(Locale.ROOT) }
         }.getOrDefault(defaultCategories)
     }
     var isIncome by remember { mutableStateOf(initialIncome) }
