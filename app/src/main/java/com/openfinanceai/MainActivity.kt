@@ -399,6 +399,7 @@ private fun FinanceApp() {
                     text = { Text("Edit this loan or delete it and its EMI tracking entry?") },
                     confirmButton = { TextButton(onClick = { loanToEdit = loan; loanForActions = null }) { Text("Edit") } },
                     dismissButton = { Row { TextButton(onClick = {
+                        EmiReminderReceiver.cancelMonthly(context, loan.lender)
                         loans = loans.toMutableList().also { list -> val index = list.indexOfFirst { it === loan }; if (index >= 0) list.removeAt(index) }
                         saveLoans(context, loans)
                         loanForActions = null
