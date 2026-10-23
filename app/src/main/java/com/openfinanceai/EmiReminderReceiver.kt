@@ -32,6 +32,8 @@ class EmiReminderReceiver : BroadcastReceiver() {
             .setAutoCancel(true)
             .build()
         manager.notify(intent.getIntExtra("notificationId", 1001), notification)
+        val day = intent.getIntExtra("dayOfMonth", 1).coerceIn(1, 28)
+        scheduleMonthly(context, lender, amount, day, intent.getIntExtra("notificationId", 1001))
     }
 
     companion object {
@@ -41,6 +43,7 @@ class EmiReminderReceiver : BroadcastReceiver() {
                 putExtra("lender", lender)
                 putExtra("amount", amount)
                 putExtra("notificationId", notificationId)
+                putExtra("dayOfMonth", dayOfMonth.coerceIn(1, 28))
             }
             val pending = PendingIntent.getBroadcast(
                 context, notificationId, intent,
@@ -55,6 +58,19 @@ class EmiReminderReceiver : BroadcastReceiver() {
                 if (timeInMillis <= System.currentTimeMillis()) add(Calendar.MONTH, 1)
             }
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next.timeInMillis, pending)
+        }
+
+        fun cancelMonthly(context: Context, lender: String) {
+            val notificationId = 3000 + (lender.lowercase(java.util.Locale.ROOT).hashCode() and 0x3fff)
+            val intent = Intent(context, EmiReminderReceiver::class.java)
+            val pending = PendingIntent.getBroadcast(
+                context, notificationId, intent,
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            )
+            if (pending != null) {
+                (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(pending)
+                pending.cancel()
+            }
         }
     }
 }
