@@ -36,8 +36,22 @@ jobs:
       - name: Verify Gradle installation
         run: gradle --version
 
-      - name: Build debug APK
-        run: gradle --no-daemon --stacktrace --warning-mode all assembleDebug
+      - name: Build debug APK (persistent signing when configured)
+        env:
+          MONEYLOG_KEYSTORE_BASE64: ${{ secrets.MONEYLOG_KEYSTORE_BASE64 }}
+          MONEYLOG_KEYSTORE_PASSWORD: ${{ secrets.MONEYLOG_KEYSTORE_PASSWORD }}
+          MONEYLOG_KEY_ALIAS: ${{ secrets.MONEYLOG_KEY_ALIAS }}
+          MONEYLOG_KEY_PASSWORD: ${{ secrets.MONEYLOG_KEY_PASSWORD }}
+        run: |
+          if [ -n "$MONEYLOG_KEYSTORE_BASE64" ] && [ -n "$MONEYLOG_KEYSTORE_PASSWORD" ] && [ -n "$MONEYLOG_KEY_ALIAS" ] && [ -n "$MONEYLOG_KEY_PASSWORD" ]; then
+            echo "$MONEYLOG_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/moneylog-release.jks"
+            chmod 600 "$RUNNER_TEMP/moneylog-release.jks"
+            export MONEYLOG_KEYSTORE_FILE="$RUNNER_TEMP/moneylog-release.jks"
+            echo "Building with the configured MoneyLog signing key."
+          else
+            echo "Signing secrets unavailable; using the standard debug signing key."
+          fi
+          gradle --no-daemon --stacktrace --warning-mode all assembleDebug
 
       - name: Report APK output and checksum
         if: success()
@@ -49,7 +63,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: open-finance-ai-debug-apk
+          name: moneylog-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
