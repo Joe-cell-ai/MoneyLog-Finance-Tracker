@@ -661,7 +661,7 @@ private fun ReportsScreen(
     }.groupBy { it.first }.mapValues { entry -> entry.value.sumOf { it.second } }.toList().sortedByDescending { it.second }
     val views = listOf("Calendar", "By category", "By tag", "Total")
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Color(0xFFF2F7FD)),
+        modifier = Modifier.fillMaxSize().background(Color(0xFFF4F7FC)),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
