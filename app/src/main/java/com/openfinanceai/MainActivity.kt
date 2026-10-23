@@ -1797,32 +1797,51 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long) -> Un
     var rate by remember { mutableStateOf("12") }
     var emi by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf(false) }
-    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    var error by remember { mutableStateOf("") }
+    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
-            Text("Add Loan", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Add your loan details to track balances and EMIs.", color = Muted, fontSize = 13.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(LavenderTint), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.AccountBalance, null, tint = Green, modifier = Modifier.size(25.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text("Add Loan", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
+                    Text("Set up your loan and EMI tracking", color = Muted, fontSize = 13.sp)
+                }
+            }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(lender, { lender = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Lender / Bank") }, singleLine = true)
-                    OutlinedTextField(principal, { principal = it.filter(Char::isDigit); if (outstanding.isBlank()) outstanding = principal }, modifier = Modifier.fillMaxWidth(), label = { Text("Original principal (₹)") }, singleLine = true)
-                    OutlinedTextField(outstanding, { outstanding = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Current outstanding (₹)") }, singleLine = true)
-                    OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("EMI payments made (count)") }, singleLine = true)
-                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' } }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true)
-                    OutlinedTextField(emi, { emi = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true)
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(22.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                    Text("Loan details", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    OutlinedTextField(lender, { lender = it; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Lender / Bank") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(principal, { principal = it.filter(Char::isDigit); if (outstanding.isBlank()) outstanding = principal; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Original principal (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(outstanding, { outstanding = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Current outstanding (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMI payments made (count)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(emi, { emi = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                     Button(onClick = {
                         val original = principal.toLongOrNull() ?: 0L
                         val amount = outstanding.toLongOrNull() ?: original
                         val count = paymentsMade.toLongOrNull() ?: 0L
                         val monthly = emi.toLongOrNull() ?: 0L
-                        val annualRate = rate.toDoubleOrNull() ?: 0.0
-                        if (lender.isNotBlank() && original > 0 && amount >= 0 && amount <= original && count >= 0 && monthly > 0 && annualRate >= 0) {
+                        val annualRate = rate.toDoubleOrNull() ?: -1.0
+                        if (lender.isBlank() || original <= 0 || amount < 0 || amount > original || count < 0 || monthly <= 0 || annualRate < 0) {
+                            error = "Check lender, principal, balance, EMI count, interest rate and monthly EMI."
+                            saved = false
+                        } else {
                             onSave(lender.trim(), original, amount, count, annualRate, monthly)
+                            error = ""
                             saved = true
                         }
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Save Loan") }
-                    if (saved) Text("Loan saved on this device.", color = IncomeGreen)
+                    }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                        Icon(Icons.Default.Save, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Save Loan", fontWeight = FontWeight.Bold)
+                    }
+                    if (saved) Text("Loan saved on this device.", color = IncomeGreen, fontWeight = FontWeight.Medium)
                 }
             }
         }
