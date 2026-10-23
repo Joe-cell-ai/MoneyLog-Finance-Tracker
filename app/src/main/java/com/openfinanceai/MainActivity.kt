@@ -650,8 +650,6 @@ private fun ReportsScreen(
 ) {
     var reportView by remember { mutableStateOf("By category") }
     var searchVisible by remember { mutableStateOf(false) }
-    var categoryQuery by remember { mutableStateOf("") }
-    var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var showNotifications by remember { mutableStateOf(false) }
     val categories = transactions.filterNot { it.income }.groupBy { it.category }
