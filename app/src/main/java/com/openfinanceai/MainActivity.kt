@@ -1060,7 +1060,7 @@ private fun ReportsScreen(
                     if (tagTotals.isEmpty()) Text("No tags yet. Add hashtags to transaction notes, for example #home, #travel or #work.", color = Muted, fontSize = 12.sp)
                     tagTotals.forEach { (tag, amount) ->
                         Row(Modifier.fillMaxWidth().background(categoryTint(tag), RoundedCornerShape(12.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Tag, null, tint = categoryColor(tag))
+                            Icon(Icons.Default.Label, null, tint = categoryColor(tag))
                             Spacer(Modifier.width(8.dp))
                             Text("#$tag", Modifier.weight(1f), color = Ink)
                             Text(Money.format(amount), color = Ink, fontWeight = FontWeight.Bold)
@@ -1789,7 +1789,7 @@ private fun TagManagementScreen() {
             items(tags, key = { it }) { tag ->
                 Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp)).padding(start = 13.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(40.dp).background(LavenderTint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Tag, null, tint = Purple)
+                        Icon(Icons.Default.Label, null, tint = Purple)
                     }
                     Spacer(Modifier.width(12.dp))
                     Text(tag, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
@@ -1850,7 +1850,7 @@ private fun TagManagementScreen() {
 private fun SettingsScreen(onOpen: (String) -> Unit) {
     val entries = listOf(
         "Categories" to Icons.Default.Label,
-        "Tag Management" to Icons.Default.Tag,
+        "Tag Management" to Icons.Default.Label,
         "Budgets" to Icons.Default.AccountBalanceWallet,
         "Calendar" to Icons.Default.CalendarMonth,
         "Insights" to Icons.Default.Insights,
@@ -2289,7 +2289,7 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
             TextButton(onClick = {
                 val parsed = amount.toLongOrNull()
                 if (title.isBlank() || parsed == null || parsed <= 0L) error = "Enter a description and valid amount."
-                else onSave(transaction.copy(title = title.trim(), amount = parsed, category = if (isIncome) "Income" else category.ifBlank { "Other" }, date = date.ifBlank { "Date not set" }, income = isIncome))
+                else onSave(transaction.copy(title = title.trim(), amount = parsed, category = if (isIncome) "Income" else category.ifBlank { "Other" }, date = date.ifBlank { "Date not set" }, income = isIncome, tag = tag.trim()))
             }) { Text("Save changes") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
