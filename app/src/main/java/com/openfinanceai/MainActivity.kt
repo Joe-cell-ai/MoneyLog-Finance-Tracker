@@ -882,7 +882,7 @@ private fun ReportsScreen(
                 MetricCard("Transactions", transactions.size.toString(), Modifier.weight(1f), SkyTint, Blue)
             } }
         }
-        if (reportView == "Overview") {
+        if (reportView == "Overview" || reportView == "Total") {
             item { Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Top spending category", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
