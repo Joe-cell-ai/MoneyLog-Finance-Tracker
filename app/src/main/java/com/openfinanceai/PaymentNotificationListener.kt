@@ -20,9 +20,8 @@ class PaymentNotificationListener : NotificationListenerService() {
         if (!preferences.getBoolean("notification_capture_consent", false)) return
         val extras = sbn.notification.extras ?: return
         val titleLine = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
-        val selectedProvider = packageName.contains("dreamplug", true) || packageName.contains("cred", true) ||
-            packageName.contains("icici", true) || titleLine.contains("CRED", true) ||
-            titleLine.contains("iMobile", true) || titleLine.contains("ICICI", true)
+        val selectedProvider = listOf("dreamplug", "cred", "icici", "phonepe", "paytm", "google.android.apps.nbu.paisa.user", "googlepay").any { packageName.contains(it, true) } ||
+            listOf("CRED", "iMobile", "ICICI", "PhonePe", "Paytm", "Google Pay", "GPay", "UPI").any { titleLine.contains(it, true) }
         if (!selectedProvider) return
         val lines = mutableListOf<String>()
         listOf(Notification.EXTRA_TITLE, Notification.EXTRA_TEXT, Notification.EXTRA_BIG_TEXT).forEach { key ->
