@@ -29,6 +29,16 @@ function error(message: string, status: number): Response {
   return response({ error: message }, status);
 }
 
+function matchesFileSignature(type: string, bytes: Uint8Array): boolean {
+  if (type === "application/pdf") return bytes.length >= 5 && String.fromCharCode(...bytes.slice(0, 5)) === "%PDF-";
+  if (type === "image/jpeg") return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (type === "image/png") return bytes.length >= 8 && [137,80,78,71,13,10,26,10].every((value, index) => bytes[index] === value);
+  if (type === "image/webp") return bytes.length >= 12 &&
+    String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+    String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
+  return false;
+}
+
 async function readJson(request: Request): Promise<Record<string, unknown> | null> {
   const length = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(length) && length > 32_000) return null;
@@ -164,6 +174,7 @@ async function handleFiles(request: Request, env: StorageEnv, userId: string, pa
     const objectKey = `${userId}/${id}`;
     const safeName = item.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "upload";
     const bytes = await item.arrayBuffer();
+    if (!matchesFileSignature(item.type, new Uint8Array(bytes))) return error("file_type_mismatch", 415);
     await env.FILES.put(objectKey, bytes, {
       httpMetadata: { contentType: item.type, cacheControl: "private, no-store" },
       customMetadata: { ownerId: userId, originalName: safeName }
