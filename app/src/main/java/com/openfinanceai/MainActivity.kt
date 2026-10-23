@@ -1653,6 +1653,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long) -> Un
         }
     }
 }
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Unit, onSave: (Transaction) -> Unit) {
     var title by remember(transaction) { mutableStateOf(transaction.title) }
