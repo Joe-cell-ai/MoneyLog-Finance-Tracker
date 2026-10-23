@@ -455,7 +455,6 @@ private fun HomeScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                 QuickAction("Add expense", Icons.Default.Remove, Modifier.weight(1f), onAdd)
                 QuickAction("Add income", Icons.Default.Add, Modifier.weight(1f), onAdd)
-                QuickAction("AI coach", Icons.Default.AutoAwesome, Modifier.weight(1f)) { onOpen("Coach") }
             }
         }
         item {
@@ -524,7 +523,6 @@ private fun HomeScreen(
                                     Box(Modifier.size(8.dp).background(categoryColor(name), CircleShape))
                                     Text(name, modifier = Modifier.weight(1f), color = Ink, fontSize = 10.sp, maxLines = 1)
                                     Text(if (categorySpend > 0L) "${amount * 100 / categorySpend}%" else "0%", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                                    Text(Money.format(amount), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                                 }
                             }
                         }
@@ -532,45 +530,8 @@ private fun HomeScreen(
                 }
             }
         }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = SkyTint), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Spending in " + selectedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH), color = Muted)
-                    Text(Money.format(expenses), fontSize = 25.sp, fontWeight = FontWeight.Bold, color = Ink)
-                    LinearProgressIndicator(
-                        progress = { if (income > 0) (expenses.toFloat() / income).coerceIn(0f, 1f) else 0f },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Green,
-                        trackColor = Mint
-                    )
-                    Text(if (income > 0) "${expenses * 100 / income}% of tracked income spent" else "Add income to see spending ratio", color = Muted, fontSize = 12.sp)
-                }
-            }
-        }
         item { SectionHeading("Recent transactions", "See all", onAll) }
         items((monthTransactions.ifEmpty { transactions }).take(4)) { transaction -> TransactionRow(transaction, onLongPress = { onTransactionLongPress(transaction) }) }
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFEEF2FF)),
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.clickable { onOpen("Coach") }
-            ) {
-                Row(Modifier.padding(17.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AutoAwesome, null, tint = Purple)
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text("Your AI finance coach", fontWeight = FontWeight.Bold, color = Ink)
-                        Text("Get a clearer view of your money habits.", fontSize = 12.sp, color = Muted)
-                    }
-                }
-            }
-        }
-        item {
-            OutlinedButton(onClick = { onOpen("Credit health") }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Speed, null)
-                Text(" Credit health")
-            }
-        }
     }
 
     if (showMonthPicker) {
