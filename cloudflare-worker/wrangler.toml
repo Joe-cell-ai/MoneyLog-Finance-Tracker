@@ -1,10 +1,22 @@
 name = "open-finance-ai-api"
 main = "src/index.ts"
 compatibility_date = "2026-10-23"
+workers_dev = true
 
-# Configure AUTH_JWKS_URL, AUTH_ISSUER, and AUTH_AUDIENCE as Worker
-# environment variables in the Cloudflare dashboard after choosing an
-# identity provider. Keep OPENAI_API_KEY as a secret, never a plain variable.
+# Create this D1 database and replace the placeholder ID before deployment.
+[[d1_databases]]
+binding = "DB"
+database_name = "open-finance-ai-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# Create this private R2 bucket before deployment.
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "open-finance-ai-files"
+
+# Configure AUTH_JWKS_URL, AUTH_ISSUER, AUTH_AUDIENCE as Worker variables.
+# Store OPENAI_API_KEY as a Worker secret; never put it in this file.
 
 [[ratelimits]]
 name = "RATE_LIMITER"
