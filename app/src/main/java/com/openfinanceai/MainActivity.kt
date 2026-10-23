@@ -439,27 +439,10 @@ private fun HomeScreen(
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Green), shape = RoundedCornerShape(24.dp), elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)) {
-                Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("TOTAL BALANCE", color = Color.White.copy(alpha = .8f), fontSize = 12.sp, letterSpacing = 1.sp)
-                    Text(Money.format(income - expenses), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                    Text("Across your tracked finances", color = Color.White.copy(alpha = .8f), fontSize = 12.sp)
-                    HorizontalDivider(color = Color.White.copy(alpha = .25f))
-                    Row {
-                        Column(Modifier.weight(1f)) {
-                            Text("↓ INCOME", color = Color.White.copy(alpha = .8f))
-                            Text(Money.format(income), color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                        Column(Modifier.weight(1f)) {
-                            Text("↑ EXPENSES", color = Color(0xFFFFC1C6))
-                            Text(Money.format(expenses), color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                        Column(Modifier.weight(1f)) {
-                            Text("✦ SAVINGS", color = Color(0xFFB7E5FF))
-                            Text(Money.format(income - expenses), color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ReportMetricCard("Income", Money.format(income), Icons.Default.AccountBalanceWallet, Modifier.weight(1f), Color(0xFFE3F9ED), Color(0xFF00A86B))
+                ReportMetricCard("Expense", Money.format(expenses), Icons.Default.CreditCard, Modifier.weight(1f), Color(0xFFFFEBEB), Color(0xFFFD3C65))
+                ReportMetricCard("Savings", Money.format(income - expenses), Icons.Default.Savings, Modifier.weight(1f), Color(0xFFE6F0FF), Color(0xFF0066FF))
             }
         }
         item {
@@ -506,34 +489,31 @@ private fun HomeScreen(
             Spacer(Modifier.height(2.dp))
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Expense breakdown", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(Modifier.weight(0.95f), contentAlignment = Alignment.Center) {                            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
+                    Text("Spending by category", color = Color(0xFF173D70), fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(Modifier.weight(0.86f), contentAlignment = Alignment.Center) {
+                            androidx.compose.foundation.Canvas(Modifier.size(126.dp)) {
                                 if (categorySpend > 0L) {
                                     var start = -90f
                                     monthExpenseCategories.forEach { entry ->
                                         val sweep = entry.second.toFloat() / categorySpend * 360f
-                                        drawArc(categoryColor(entry.first), start, sweep, false, style = Stroke(width = size.minDimension * 0.2f))
+                                        drawArc(categoryColor(entry.first), start, sweep, false, style = Stroke(width = size.minDimension * .22f))
                                         start += sweep
                                     }
-                                } else drawArc(Mint, 0f, 360f, false, style = Stroke(width = size.minDimension * 0.2f))
+                                } else drawArc(Mint, 0f, 360f, false, style = Stroke(width = size.minDimension * .22f))
                             }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(if (categorySpend > 0L) "100%" else "0%", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                                Text("of spend", color = Muted, fontSize = 10.sp)
+                                Text("Total Expense", color = Color(0xFF8094B0), fontSize = 10.sp)
+                                Text(Money.format(categorySpend).substringBeforeLast("."), color = Color(0xFF173D70), fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, softWrap = false)
                             }
                         }
-                        Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.weight(1.14f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             if (monthExpenseCategories.isEmpty()) Text("Add expenses to see categories.", color = Muted, fontSize = 12.sp)
-                            monthExpenseCategories.take(5).forEach { (name, amount) ->
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
+                            monthExpenseCategories.take(7).forEach { (name, amount) ->
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                     Box(Modifier.size(8.dp).background(categoryColor(name), CircleShape))
-                                    Text(name, modifier = Modifier.weight(1f), color = Ink, fontSize = 10.sp, maxLines = 1)
-                                    Text(if (categorySpend > 0L) "${amount * 100 / categorySpend}%" else "0%", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(name, modifier = Modifier.weight(1f), color = Color(0xFF173D70), fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
+                                    Text(if (categorySpend > 0L) "${amount * 100 / categorySpend}%" else "0%", color = Color(0xFF9AA6B8), fontSize = 10.sp, fontWeight = FontWeight.Normal, maxLines = 1, softWrap = false)
                                 }
                             }
                         }
@@ -599,8 +579,22 @@ private fun SectionHeading(title: String, action: String, onClick: () -> Unit = 
 @Composable
 private fun TransactionRow(transaction: Transaction, onLongPress: () -> Unit = {}) {
     Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp)).combinedClickable(onClick = onLongPress, onLongClick = onLongPress).padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(42.dp).background(categoryTint(transaction.category), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
-            Icon(if (transaction.income) Icons.Default.Payments else Icons.Default.ShoppingBag, null, tint = categoryColor(transaction.category))
+        Box(Modifier.size(42.dp).clip(CircleShape).background(categoryColor(transaction.category)), contentAlignment = Alignment.Center) {
+            Icon(
+                when {
+                    transaction.income -> Icons.Default.AccountBalanceWallet
+                    transaction.category.contains("food", true) || transaction.category.contains("grocer", true) -> Icons.Default.Restaurant
+                    transaction.category.contains("transport", true) || transaction.category.contains("travel", true) -> Icons.Default.DirectionsCar
+                    transaction.category.contains("bill", true) || transaction.category.contains("utilit", true) || transaction.category.contains("home", true) -> Icons.Default.Home
+                    transaction.category.contains("shop", true) -> Icons.Default.ShoppingBag
+                    transaction.category.contains("entertain", true) -> Icons.Default.ConfirmationNumber
+                    transaction.category.contains("health", true) || transaction.category.contains("fitness", true) -> Icons.Default.Favorite
+                    else -> Icons.Default.MoreHoriz
+                },
+                contentDescription = transaction.category,
+                tint = Color.White,
+                modifier = Modifier.size(21.dp)
+            )
         }
         Spacer(Modifier.width(11.dp))
         Column(Modifier.weight(1f)) {
@@ -635,10 +629,18 @@ private fun ActivityScreen(transactions: List<Transaction>, onTransactionLongPre
             }
             Text("${visible.size} matching transaction(s)", color = Muted, fontSize = 11.sp)
             Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth().height(48.dp).background(Color(0xFFEAF3FF), RoundedCornerShape(28.dp)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 listOf("All", "Income", "Expense").forEach { choice ->
-                    FilterChip(selected = filter == choice, onClick = { filter = choice }, label = { Text(choice) },
-                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Green, selectedLabelColor = Color.White))
+                    val selected = filter == choice
+                    Box(
+                        Modifier.weight(1f).fillMaxHeight()
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(if (selected) Color.White else Color.Transparent)
+                            .clickable { filter = choice },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(choice, color = if (selected) Color(0xFF173D70) else Color(0xFF8094B0), fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
+                    }
                 }
             }
         }
