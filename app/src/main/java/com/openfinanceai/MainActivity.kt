@@ -650,7 +650,6 @@ private fun ReportsScreen(
     onOpen: (String) -> Unit
 ) {
     var reportView by remember { mutableStateOf("By category") }
-    var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var showNotifications by remember { mutableStateOf(false) }
     var showAllCategories by remember { mutableStateOf(false) }
@@ -678,8 +677,8 @@ private fun ReportsScreen(
                         IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.ChevronRight, contentDescription = "Next month", tint = Color(0xFF49688F), modifier = Modifier.size(16.dp)) }
                     }
                 }
-                IconButton(onClick = { searchVisible = !searchVisible; if (!searchVisible) searchQuery = "" }) {
-                    Icon(Icons.Default.Search, contentDescription = "Search report", tint = Color(0xFF173D70))
+                IconButton(onClick = { showAllCategories = true }) {
+                    Icon(Icons.Default.Search, contentDescription = "Show all categories", tint = Color(0xFF173D70))
                 }
                 Box {
                     IconButton(onClick = { showNotifications = true }) {
@@ -687,16 +686,6 @@ private fun ReportsScreen(
                     }
                     Box(Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 7.dp).size(7.dp).background(Color(0xFFEF4444), CircleShape))
                 }
-            }
-            if (searchVisible) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text("Search categories and tags") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
-                )
             }
             Row(
                 Modifier.fillMaxWidth().background(Color(0xFFE5EFFB), RoundedCornerShape(18.dp)).padding(4.dp),
