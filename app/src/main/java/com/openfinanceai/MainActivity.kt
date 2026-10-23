@@ -653,6 +653,7 @@ private fun ReportsScreen(
     var searchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var showNotifications by remember { mutableStateOf(false) }
+    var showAllCategories by remember { mutableStateOf(false) }
     val categories = transactions.filterNot { it.income }.groupBy { it.category }
         .map { it.key to it.value.sumOf { transaction -> transaction.amount } }.sortedByDescending { it.second }
     val totalSpend = categories.sumOf { it.second }
@@ -671,9 +672,10 @@ private fun ReportsScreen(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Monthly Report", fontSize = 23.sp, color = Color(0xFF102D59), fontWeight = FontWeight.Bold)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(selectedMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy")), color = Color(0xFF49688F), fontSize = 14.sp)
-                        Icon(Icons.Default.ExpandMore, contentDescription = "Choose month", tint = Color(0xFF49688F), modifier = Modifier.size(18.dp))
+                        IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.ExpandMore, contentDescription = "Previous month", tint = Color(0xFF49688F), modifier = Modifier.size(16.dp)) }
+                        IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.ChevronRight, contentDescription = "Next month", tint = Color(0xFF49688F), modifier = Modifier.size(16.dp)) }
                     }
                 }
                 IconButton(onClick = { searchVisible = !searchVisible; if (!searchVisible) searchQuery = "" }) {
@@ -816,8 +818,8 @@ private fun ReportsScreen(
                                 } else drawArc(Mint, 0f, 360f, false, style = Stroke(width = size.minDimension * .22f))
                             }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(if (totalSpend > 0L) "${(totalSpend * 100 / totalSpend)}%" else "0%", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                                Text("of spend", color = Muted, fontSize = 10.sp)
+                                Text("Total Expense", color = Color(0xFF8094B0), fontSize = 11.sp)
+                                Text(Money.format(totalSpend), color = Color(0xFF173D70), fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             }
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(13.dp)) {
@@ -833,10 +835,35 @@ private fun ReportsScreen(
                     }
                 }
             } }
-            item { Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Top spending categories", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    val visibleCategories = categories.filter { it.first.contains(searchQuery, ignoreCase = true) }
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                    placeholder = { Text("Search categories...", fontSize = 13.sp, color = Color(0xFF8094B0)) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF8094B0)) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = Color(0xFFF4F8FD),
+                        focusedContainerColor = Color.White,
+                        unfocusedBorderColor = Color(0xFFDCE9F8),
+                        focusedBorderColor = Color(0xFF6258F5)
+                    )
+                )
+            }
+            item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Top Spending Categories", modifier = Modifier.weight(1f), color = Color(0xFF173D70), fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    TextButton(onClick = { showAllCategories = !showAllCategories }) {
+                        Text(if (showAllCategories) "Show less  →" else "See all  →", color = Color(0xFF6258F5), fontSize = 12.sp)
+                    }
+                }
+            }
+            item { Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    val filteredCategories = categories.filter { it.first.contains(searchQuery, ignoreCase = true) }
+                    val visibleCategories = if (showAllCategories) filteredCategories else filteredCategories.take(5)
                     if (visibleCategories.isEmpty()) {
                         Text(if (searchQuery.isBlank()) "No expenses recorded this month yet." else "No matching categories.", color = Muted, fontSize = 12.sp)
                     }
