@@ -261,6 +261,12 @@ private fun FinanceApp() {
             onSurface = Ink,
             onSurfaceVariant = Muted,
             outline = Color(0xFFDADCE8)
+        ),
+        shapes = Shapes(
+            extraSmall = RoundedCornerShape(10.dp),
+            small = RoundedCornerShape(18.dp),
+            medium = RoundedCornerShape(22.dp),
+            large = RoundedCornerShape(28.dp)
         )
     ) {
         Scaffold(
@@ -280,7 +286,11 @@ private fun FinanceApp() {
                 }
             },
             bottomBar = {
-                NavigationBar(containerColor = Color.White) {
+                NavigationBar(
+                    containerColor = Color.White,
+                    tonalElevation = 3.dp,
+                    windowInsets = NavigationBarDefaults.windowInsets
+                ) {
                     listOf("Home", "Activity", "Reports", "Loans", "Coach").forEach { name ->
                         val icon = when (name) {
                             "Home" -> Icons.Default.Home
