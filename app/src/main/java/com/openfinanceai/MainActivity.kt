@@ -457,9 +457,26 @@ private fun HomeScreen(
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Monthly overview", modifier = Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
-                TextButton(onClick = { showMonthPicker = true }) {
-                    Text(selectedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH) + " " + selectedMonth.year)
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Choose month")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.background(Color.White, RoundedCornerShape(14.dp))
+                ) {
+                    IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month", tint = Purple)
+                    }
+                    TextButton(onClick = { showMonthPicker = true }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                        Text(
+                            selectedMonth.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH) + " " + selectedMonth.year,
+                            color = Ink,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Choose month", tint = Purple)
+                    }
+                    IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.ChevronRight, contentDescription = "Next month", tint = Purple)
+                    }
                 }
             }
         }
