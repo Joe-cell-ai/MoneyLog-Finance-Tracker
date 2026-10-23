@@ -814,7 +814,7 @@ private fun ReportsScreen(
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(13.dp)) {
                             if (categories.isEmpty()) Text("No category totals yet.", color = Muted, fontSize = 12.sp)
                             categories.take(7).forEach { (category, amount) ->
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Box(Modifier.size(9.dp).background(categoryColor(category), CircleShape))
                                     Text(category, modifier = Modifier.weight(1f), color = Color(0xFF173D70), fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                                     Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Color(0xFF173D70), fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
@@ -858,7 +858,7 @@ private fun ReportsScreen(
                     }
                     visibleCategories.forEachIndexed { index, (category, amount) ->
                         Row(
-                            Modifier.fillMaxWidth().padding(vertical = 7.dp),
+                            Modifier.fillMaxWidth().padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
@@ -866,14 +866,25 @@ private fun ReportsScreen(
                                 Text("${index + 1}", color = Color(0xFF173D70), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                             }
                             Box(Modifier.size(40.dp).background(categoryColor(category), CircleShape), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Category, contentDescription = null, tint = Color.White)
+                                Icon(
+                                    when {
+                                        category.contains("food", true) || category.contains("grocer", true) -> Icons.Default.Restaurant
+                                        category.contains("transport", true) || category.contains("travel", true) -> Icons.Default.DirectionsCar
+                                        category.contains("bill", true) || category.contains("utilit", true) || category.contains("home", true) -> Icons.Default.Home
+                                        category.contains("shop", true) -> Icons.Default.ShoppingBag
+                                        category.contains("entertain", true) -> Icons.Default.ConfirmationNumber
+                                        category.contains("health", true) || category.contains("fitness", true) -> Icons.Default.Favorite
+                                        else -> Icons.Default.MoreHoriz
+                                    },
+                                    contentDescription = category, tint = Color.White
+                                )
                             }
-                            Text(category, modifier = Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 1)
-                            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(Money.format(amount), color = Ink, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
-                                Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Muted, fontSize = 11.sp)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(category, color = Ink, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 1)
+                                Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Muted, fontSize = 11.sp, maxLines = 1)
                             }
-                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Muted, modifier = Modifier.size(18.dp))
+                            Text(Money.format(amount), color = Ink, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
+                            Icon(Icons.Default.ChevronRight, contentDescription = "Open category", tint = Muted, modifier = Modifier.size(18.dp))
                         }
                         if (index < visibleCategories.lastIndex) HorizontalDivider(color = Page)
                     }
