@@ -93,9 +93,6 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9001)
         }
-        EmiReminderReceiver.scheduleMonthly(this, "Fibe", 6200L, 5, 1005)
-        EmiReminderReceiver.scheduleMonthly(this, "KreditBee", 4800L, 8, 1008)
-        EmiReminderReceiver.scheduleMonthly(this, "Pocketly", 3200L, 10, 1010)
         setContent { FinanceApp() }
     }
 }
@@ -163,6 +160,14 @@ private fun FinanceApp() {
             Loan("KreditBee", 24000, 4800, "8 Nov"),
             Loan("Pocketly", 12800, 3200, "10 Nov")
         ).also { saveLoans(context, it) })
+    }
+
+    LaunchedEffect(loans) {
+        loans.forEach { loan ->
+            val dueDay = Regex("^\\s*(\\d{1,2})").find(loan.due)?.groupValues?.getOrNull(1)?.toIntOrNull()?.coerceIn(1, 28) ?: 1
+            val reminderId = 3000 + (loan.lender.lowercase(Locale.ROOT).hashCode() and 0x3fff)
+            EmiReminderReceiver.scheduleMonthly(context, loan.lender, loan.emi, dueDay, reminderId)
+        }
     }
 
     val csvExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
@@ -366,7 +371,7 @@ private fun FinanceApp() {
                     text = { Text("What would you like to do with this transaction?") },
                     confirmButton = { TextButton(onClick = { transactionToEdit = transaction; transactionForActions = null }) { Text("Edit") } },
                     dismissButton = { Row { TextButton(onClick = { transactionTips = transaction; transactionForActions = null }) { Text("Tips") }; TextButton(onClick = {
-                        val index = transactions.indexOf(transaction)
+                        val index = transactions.indexOfFirst { it === transaction }
                         if (index >= 0) { transactions = transactions.toMutableList().also { it.removeAt(index) }; saveTransactions(context, transactions) }
                         transactionForActions = null
                     }) { Text("Delete", color = ExpenseRed) }; TextButton(onClick = { transactionForActions = null }) { Text("Cancel") } } }
@@ -394,7 +399,7 @@ private fun FinanceApp() {
                     text = { Text("Edit this loan or delete it and its EMI tracking entry?") },
                     confirmButton = { TextButton(onClick = { loanToEdit = loan; loanForActions = null }) { Text("Edit") } },
                     dismissButton = { Row { TextButton(onClick = {
-                        loans = loans.toMutableList().also { list -> val index = list.indexOf(loan); if (index >= 0) list.removeAt(index) }
+                        loans = loans.toMutableList().also { list -> val index = list.indexOfFirst { it === loan }; if (index >= 0) list.removeAt(index) }
                         saveLoans(context, loans)
                         loanForActions = null
                     }) { Text("Delete", color = ExpenseRed) }; TextButton(onClick = { loanForActions = null }) { Text("Cancel") } } }
@@ -402,7 +407,7 @@ private fun FinanceApp() {
             }
             loanToEdit?.let { loan ->
                 EditLoanDialog(loan, onDismiss = { loanToEdit = null }) { edited ->
-                    loans = loans.toMutableList().also { list -> val index = list.indexOf(loan); if (index >= 0) list[index] = edited }
+                    loans = loans.toMutableList().also { list -> val index = list.indexOfFirst { it === loan }; if (index >= 0) list[index] = edited }
                     saveLoans(context, loans)
                     loanToEdit = null
                 }
