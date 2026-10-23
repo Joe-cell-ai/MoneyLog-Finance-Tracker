@@ -1,6 +1,9 @@
+import { handleStorage } from "./storage";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 interface Env {
+  DB: import("@cloudflare/workers-types").D1Database;
+  FILES: import("@cloudflare/workers-types").R2Bucket;
   OPENAI_API_KEY?: string;
   AUTH_JWKS_URL?: string;
   AUTH_ISSUER?: string;
@@ -217,14 +220,37 @@ export default {
       return json({ status: "ok", service: "open-finance-ai-api" });
     }
 
-    if (url.pathname !== "/v1/finance-coach") {
-      return json({ error: "not_found", message: "Endpoint not found." }, 404);
+    if (url.pathname === "/v1/finance-coach") {
+      if (request.method !== "POST") {
+        return json({ error: "method_not_allowed", message: "Use POST for this endpoint." }, 405);
+      }
+      return handleCoach(request, env);
     }
 
-    if (request.method !== "POST") {
-      return json({ error: "method_not_allowed", message: "Use POST for this endpoint." }, 405);
+    if (url.pathname.startsWith("/v1/")) {
+      if (!hasAuthConfiguration(env)) {
+        return json({ error: "service_not_configured", message: "Authentication is not configured yet." }, 503);
+      }
+      let userId: string | null;
+      try {
+        userId = await authenticate(request, env);
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith("AUTH_")) {
+          console.error("Authentication configuration error:", error.message);
+          return json({ error: "service_not_configured", message: "Authentication is not configured correctly." }, 503);
+        }
+        return json({ error: "unauthorized", message: "Sign in to access your finance data." }, 401);
+      }
+      if (!userId) {
+        return json({ error: "unauthorized", message: "Sign in to access your finance data." }, 401);
+      }
+      try {
+        return await handleStorage(request, env, userId);
+      } catch {
+        return json({ error: "storage_unavailable", message: "Storage is temporarily unavailable." }, 503);
+      }
     }
 
-    return handleCoach(request, env);
+    return json({ error: "not_found", message: "Endpoint not found." }, 404);
   }
 };
