@@ -653,6 +653,7 @@ private fun ReportsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var showNotifications by remember { mutableStateOf(false) }
     var showAllCategories by remember { mutableStateOf(false) }
+    var showMonthMenu by remember { mutableStateOf(false) }
     val categories = transactions.filterNot { it.income }.groupBy { it.category }
         .map { it.key to it.value.sumOf { transaction -> transaction.amount } }.sortedByDescending { it.second }
     val totalSpend = categories.sumOf { it.second }
@@ -671,10 +672,32 @@ private fun ReportsScreen(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Monthly Report", fontSize = 23.sp, color = Color(0xFF102D59), fontWeight = FontWeight.Bold)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(selectedMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy")), color = Color(0xFF49688F), fontSize = 14.sp)
-                        IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.ExpandMore, contentDescription = "Previous month", tint = Color(0xFF49688F), modifier = Modifier.size(16.dp)) }
-                        IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.ChevronRight, contentDescription = "Next month", tint = Color(0xFF49688F), modifier = Modifier.size(16.dp)) }
+                    Box {
+                        Row(
+                            Modifier.clip(RoundedCornerShape(10.dp)).clickable { showMonthMenu = true }.padding(horizontal = 2.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text(selectedMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy")), color = Color(0xFF49688F), fontSize = 14.sp)
+                            Icon(Icons.Default.ExpandMore, contentDescription = "Select month", tint = Color(0xFF49688F), modifier = Modifier.size(18.dp))
+                        }
+                        DropdownMenu(
+                            expanded = showMonthMenu,
+                            onDismissRequest = { showMonthMenu = false },
+                            modifier = Modifier.heightIn(max = 360.dp).background(Color.White)
+                        ) {
+                            (0..23).map { selectedMonth.plusMonths(12L - it) }.sortedDescending().forEach { month ->
+                                DropdownMenuItem(
+                                    text = { Text(month.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy")), color = if (month == selectedMonth) Green else Ink, fontWeight = if (month == selectedMonth) FontWeight.Bold else FontWeight.Normal) },
+                                    onClick = { onMonthChange(month); showMonthMenu = false },
+                                    leadingIcon = if (month == selectedMonth) ({ Icon(Icons.Default.Check, null, tint = Green) }) else null
+                                )
+                            }
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }, modifier = Modifier.size(22.dp)) { Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month", tint = Color(0xFF49688F), modifier = Modifier.size(16.dp)) }
+                        IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }, modifier = Modifier.size(22.dp)) { Icon(Icons.Default.ChevronRight, contentDescription = "Next month", tint = Color(0xFF49688F), modifier = Modifier.size(16.dp)) }
                     }
                 }
                 IconButton(onClick = { showAllCategories = true }) {
@@ -688,7 +711,7 @@ private fun ReportsScreen(
                 }
             }
             Row(
-                Modifier.fillMaxWidth().background(Color(0xFFE5EFFB), RoundedCornerShape(18.dp)).padding(4.dp),
+                Modifier.fillMaxWidth().background(Color(0xFFE5EFFB), RoundedCornerShape(24.dp)).padding(5.dp),
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -701,14 +724,14 @@ private fun ReportsScreen(
                         else -> Icons.Default.Functions
                     }
                     Row(
-                        Modifier.weight(1f).clip(RoundedCornerShape(15.dp))
+                        Modifier.weight(1f).clip(RoundedCornerShape(22.dp))
                             .background(if (reportView == view) Color(0xFF6258F5) else Color.Transparent)
                             .clickable { reportView = view }
-                            .padding(vertical = 11.dp, horizontal = 3.dp),
+                            .padding(vertical = 14.dp, horizontal = 3.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(tabIcon, contentDescription = null, modifier = Modifier.size(15.dp), tint = if (reportView == view) Color.White else Color(0xFF49688F))
+                        Icon(tabIcon, contentDescription = null, modifier = Modifier.size(17.dp), tint = if (reportView == view) Color.White else Color(0xFF49688F))
                         Spacer(Modifier.width(4.dp))
                         Text(label, fontSize = 11.sp, maxLines = 1, color = if (reportView == view) Color.White else Color(0xFF173D70), fontWeight = if (reportView == view) FontWeight.SemiBold else FontWeight.Medium)
                     }
@@ -786,9 +809,9 @@ private fun ReportsScreen(
         if (reportView == "By category") {
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MetricCard("Income", Money.format(income), Modifier.weight(1f), IncomeTint, IncomeGreen)
-                    MetricCard("Expense", Money.format(expenses), Modifier.weight(1f), ExpenseTint, ExpenseRed)
-                    MetricCard("Savings", Money.format(income - expenses), Modifier.weight(1f), SkyTint, Blue)
+                    ReportMetricCard("Income", Money.format(income), Icons.Default.AccountBalanceWallet, Modifier.weight(1f), Color(0xFFE3F9ED), Color(0xFF00A86B))
+                    ReportMetricCard("Expense", Money.format(expenses), Icons.Default.CreditCard, Modifier.weight(1f), Color(0xFFFFEBEB), Color(0xFFFD3C65))
+                    ReportMetricCard("Savings", Money.format(income - expenses), Icons.Default.Savings, Modifier.weight(1f), Color(0xFFE6F0FF), Color(0xFF0066FF))
                 }
             }
             item { Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
@@ -929,6 +952,46 @@ private fun ReportsScreen(
             text = { Text("You're all caught up. New reminders and alerts will appear here when available.") },
             confirmButton = { TextButton(onClick = { showNotifications = false }) { Text("OK") } }
         )
+    }
+}
+
+@Composable
+private fun ReportMetricCard(
+    title: String,
+    value: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    tint: Color,
+    accent: Color
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = tint),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 13.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(
+                    Modifier.size(34.dp).clip(CircleShape).background(accent),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+                }
+                Text(title, color = accent, fontSize = 11.sp, maxLines = 1, softWrap = false)
+            }
+            Text(
+                value.substringBeforeLast(".").takeIf { value.contains(".") } ?: value,
+                modifier = Modifier.fillMaxWidth(),
+                color = accent,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
     }
 }
 
