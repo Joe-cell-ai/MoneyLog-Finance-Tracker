@@ -4,6 +4,15 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val moneyLogKeystorePath = System.getenv("MONEYLOG_KEYSTORE_PATH")
+val moneyLogKeystorePassword = System.getenv("MONEYLOG_KEYSTORE_PASSWORD")
+val moneyLogKeyAlias = System.getenv("MONEYLOG_KEY_ALIAS")
+val moneyLogKeyPassword = System.getenv("MONEYLOG_KEY_PASSWORD")
+val hasMoneyLogSigning = !moneyLogKeystorePath.isNullOrBlank() &&
+    !moneyLogKeystorePassword.isNullOrBlank() &&
+    !moneyLogKeyAlias.isNullOrBlank() &&
+    !moneyLogKeyPassword.isNullOrBlank()
+
 android {
     namespace = "com.openfinanceai"
     compileSdk = 35
@@ -11,8 +20,25 @@ android {
         applicationId = "com.openfinanceai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
+    }
+    signingConfigs {
+        if (hasMoneyLogSigning) {
+            create("moneyLogRelease") {
+                storeFile = file(moneyLogKeystorePath!!)
+                storePassword = moneyLogKeystorePassword
+                keyAlias = moneyLogKeyAlias
+                keyPassword = moneyLogKeyPassword
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (hasMoneyLogSigning) {
+                signingConfig = signingConfigs.getByName("moneyLogRelease")
+            }
+        }
     }
     buildFeatures { compose = true }
     compileOptions {
