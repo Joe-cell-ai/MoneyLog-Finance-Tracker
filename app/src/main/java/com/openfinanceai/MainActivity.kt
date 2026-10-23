@@ -1854,7 +1854,7 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
                     value = date, onValueChange = {}, readOnly = true,
                     label = { Text("Transaction date") },
                     trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date") } },
-                    modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }, singleLine = true
+                    modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }, singleLine = true, shape = RoundedCornerShape(14.dp)
                 )
                 if (showDatePicker) {
                     val initialMillis = runCatching { transactionDateOrNull(transaction)?.atStartOfDay(java.time.ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: System.currentTimeMillis() }.getOrDefault(System.currentTimeMillis())
@@ -1952,15 +1952,29 @@ private fun AddTransactionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add transaction") },
+        shape = RoundedCornerShape(28.dp),
+        containerColor = Page,
+        titleContentColor = Ink,
+        textContentColor = Ink,
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Add transaction", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Ink)
+                Text("Record income or an expense", fontSize = 12.sp, color = Muted)
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(selected = !isIncome, onClick = { isIncome = false; if (category in listOf("Salary", "Other income", "Income")) category = savedCategories.firstOrNull { it !in listOf("Salary", "Other income", "Income") } ?: "Other" }, label = { Text("Expense") }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ExpenseTint, selectedLabelColor = ExpenseRed))
-                    FilterChip(selected = isIncome, onClick = { isIncome = true; if (category !in listOf("Salary", "Other income", "Income")) category = "Salary" }, label = { Text("Income") }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = IncomeTint, selectedLabelColor = IncomeGreen))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = !isIncome, onClick = { isIncome = false; if (category in listOf("Salary", "Other income", "Income")) category = savedCategories.firstOrNull { it !in listOf("Salary", "Other income", "Income") } ?: "Other" }, label = { Text("Expense", fontWeight = FontWeight.SemiBold) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ExpenseTint, selectedLabelColor = ExpenseRed), modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp))
+                    FilterChip(selected = isIncome, onClick = { isIncome = true; if (category !in listOf("Salary", "Other income", "Income")) category = "Salary" }, label = { Text("Income", fontWeight = FontWeight.SemiBold) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = IncomeTint, selectedLabelColor = IncomeGreen), modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp))
                 }
-                OutlinedTextField(title, { title = it }, label = { Text("Description") }, singleLine = true)
-                OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text("Amount (₹)") }, singleLine = true)
+                OutlinedTextField(title, { title = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp), textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
                 ExposedDropdownMenuBox(
                     expanded = categoryMenuExpanded,
                     onExpandedChange = { categoryMenuExpanded = it }
@@ -1971,7 +1985,8 @@ private fun AddTransactionDialog(
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                         label = { Text("Category") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryMenuExpanded) },
-                        singleLine = true
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp)
                     )
                     ExposedDropdownMenu(
                         expanded = categoryMenuExpanded,
@@ -2009,8 +2024,10 @@ private fun AddTransactionDialog(
                         FilterChip(selected = paymentMethod == method, onClick = { paymentMethod = method }, label = { Text(method) })
                     }
                 }
-                OutlinedTextField(notes, { notes = it }, label = { Text("Notes (optional; use #tags for reports)") }, minLines = 2)
-                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+                OutlinedTextField(notes, { notes = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Notes (optional; use #tags for reports)") }, minLines = 2, shape = RoundedCornerShape(14.dp))
+                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
+                }
             }
         },
         confirmButton = {
@@ -2024,7 +2041,7 @@ private fun AddTransactionDialog(
                 } else {
                     onSave(title.trim(), parsed, isIncome, category.ifBlank { "Other" }, date, paymentMethod, notes.trim())
                 }
-            }, colors = ButtonDefaults.buttonColors(containerColor = if (isIncome) IncomeGreen else Green), modifier = Modifier.fillMaxWidth()) { Text("Save transaction") }
+            }, colors = ButtonDefaults.buttonColors(containerColor = if (isIncome) IncomeGreen else Green), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save transaction", fontWeight = FontWeight.Bold) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
