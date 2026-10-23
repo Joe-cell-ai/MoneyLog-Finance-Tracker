@@ -2098,7 +2098,11 @@ private fun AppearanceScreen() {
 private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.LocalDate.now()): java.time.LocalDate? {
     val raw = due.trim()
     if (raw.isBlank() || raw.equals("Set due date", ignoreCase = true) || raw.equals("Not set", ignoreCase = true)) return null
-    runCatching { java.time.LocalDate.parse(raw).let { return if (it.isBefore(today)) it.withYear(today.year).plusYears(1) else it } }
+    runCatching {
+        val parsed = java.time.LocalDate.parse(raw)
+        val candidate = runCatching { parsed.withYear(today.year) }.getOrNull() ?: return null
+        return if (candidate.isBefore(today)) candidate.plusYears(1) else candidate
+    }
     val dayMonth = Regex("^\\s*(\\d{1,2})\\s+([A-Za-z]{3,9})(?:\\s+(\\d{4}))?\\s*$").find(raw)
     val monthDay = Regex("^\\s*([A-Za-z]{3,9})\\s+(\\d{1,2})(?:,?\\s+(\\d{4}))?\\s*$").find(raw)
     val match = dayMonth ?: monthDay
