@@ -648,6 +648,9 @@ private fun ReportsScreen(
     onMonthChange: (YearMonth) -> Unit
 ) {
     var reportView by remember { mutableStateOf("By category") }
+    var searchVisible by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var showNotifications by remember { mutableStateOf(false) }
     val categories = transactions.filterNot { it.income }.groupBy { it.category }
         .map { it.key to it.value.sumOf { transaction -> transaction.amount } }.sortedByDescending { it.second }
     val totalSpend = categories.sumOf { it.second }
@@ -657,8 +660,28 @@ private fun ReportsScreen(
     val views = listOf("Calendar", "By category", "By tag", "Total")
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
-            Text("Monthly report", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Explore your month by date, category and tag", color = Muted)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Monthly report", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
+                    Text("Explore your month by date, category and tag", color = Muted)
+                }
+                IconButton(onClick = { searchVisible = !searchVisible; if (!searchVisible) searchQuery = "" }) {
+                    Icon(Icons.Default.Search, contentDescription = "Search report")
+                }
+                IconButton(onClick = { showNotifications = true }) {
+                    Icon(Icons.Default.Notifications, contentDescription = "Notifications")
+                }
+            }
+            if (searchVisible) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Search categories and tags") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
+                )
+            }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }) { Icon(Icons.Default.ChevronLeft, "Previous month") }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -668,22 +691,21 @@ private fun ReportsScreen(
                 IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }) { Icon(Icons.Default.ChevronRight, "Next month") }
             }
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Modifier.fillMaxWidth().background(Color(0xFFECEFF1), RoundedCornerShape(14.dp)).padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 views.forEach { view ->
-                    FilterChip(
-                        selected = reportView == view,
-                        onClick = { reportView = view },
-                        label = { Text(when (view) { "By category" -> "Categories"; "By tag" -> "Tags"; else -> view }, fontSize = 12.sp, maxLines = 1) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Green,
-                            selectedLabelColor = Color.White,
-                            containerColor = Color.White,
-                            labelColor = Ink
-                        )
-                    )
+                    val label = when (view) { "By category" -> "Categories"; "By tag" -> "Tags"; else -> view }
+                    Box(
+                        Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                            .background(if (reportView == view) Green else Color.Transparent)
+                            .clickable { reportView = view }
+                            .padding(vertical = 11.dp, horizontal = 2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(label, fontSize = 11.sp, maxLines = 1, color = if (reportView == view) Color.White else Ink, fontWeight = if (reportView == view) FontWeight.SemiBold else FontWeight.Medium)
+                    }
                 }
             }
             Text("Choose a report view · Tags use hashtags in transaction notes.", color = Muted, fontSize = 11.sp)
@@ -757,36 +779,71 @@ private fun ReportsScreen(
             } }
         }
         if (reportView == "By category") {
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MetricCard("Income", Money.format(income), Modifier.weight(1f), IncomeTint, IncomeGreen)
+                    MetricCard("Expense", Money.format(expenses), Modifier.weight(1f), ExpenseTint, ExpenseRed)
+                    MetricCard("Savings", Money.format(income - expenses), Modifier.weight(1f), SkyTint, Blue)
+                }
+            }
             item { Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Spending by category", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        androidx.compose.foundation.Canvas(Modifier.size(190.dp)) {
-                            if (totalSpend > 0L) {
-                                var startAngle = -90f
-                                categories.forEach { entry ->
-                                    val sweep = entry.second.toFloat() / totalSpend * 360f
-                                    drawArc(categoryColor(entry.first), startAngle, sweep, false, style = Stroke(width = size.minDimension * .2f))
-                                    startAngle += sweep
-                                }
-                            } else drawArc(Mint, 0f, 360f, false, style = Stroke(width = size.minDimension * .2f))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            androidx.compose.foundation.Canvas(Modifier.size(158.dp)) {
+                                if (totalSpend > 0L) {
+                                    var startAngle = -90f
+                                    categories.forEach { entry ->
+                                        val sweep = entry.second.toFloat() / totalSpend * 360f
+                                        drawArc(categoryColor(entry.first), startAngle, sweep, false, style = Stroke(width = size.minDimension * .22f))
+                                        startAngle += sweep
+                                    }
+                                } else drawArc(Mint, 0f, 360f, false, style = Stroke(width = size.minDimension * .22f))
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(if (totalSpend > 0L) "${(totalSpend * 100 / totalSpend)}%" else "0%", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                                Text("of spend", color = Muted, fontSize = 10.sp)
+                            }
                         }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(Money.format(totalSpend), color = Ink, fontWeight = FontWeight.Bold)
-                            Text("Total expenses", color = Muted, fontSize = 10.sp)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (categories.isEmpty()) Text("No category totals yet.", color = Muted, fontSize = 12.sp)
+                            categories.take(5).forEach { (category, amount) ->
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Box(Modifier.size(8.dp).background(categoryColor(category), CircleShape))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(category, color = Ink, fontSize = 11.sp, maxLines = 1)
+                                        Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Muted, fontSize = 10.sp)
+                                    }
+                                }
+                            }
                         }
                     }
-                    if (categories.isEmpty()) Text("No category totals yet.", color = Muted)
-                    categories.forEach { (category, amount) ->
-                        Row(Modifier.fillMaxWidth().background(categoryTint(category), RoundedCornerShape(12.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(10.dp).background(categoryColor(category), CircleShape))
-                            Spacer(Modifier.width(8.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(category, color = Ink, fontWeight = FontWeight.Medium)
+                }
+            } }
+            item { Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Top spending categories", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    val visibleCategories = categories.filter { it.first.contains(searchQuery, ignoreCase = true) }
+                    if (visibleCategories.isEmpty()) {
+                        Text(if (searchQuery.isBlank()) "No expenses recorded this month yet." else "No matching categories.", color = Muted, fontSize = 12.sp)
+                    }
+                    visibleCategories.forEachIndexed { index, (category, amount) ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(Modifier.size(40.dp).background(categoryTint(category), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Category, contentDescription = null, tint = categoryColor(category))
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text("${index + 1}. ${category}", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                                 Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}% of expenses" else "0%", color = Muted, fontSize = 11.sp)
                             }
-                            Text(Money.format(amount), color = Ink, fontWeight = FontWeight.Bold)
+                            Text(Money.format(amount), color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
+                        if (index < visibleCategories.lastIndex) HorizontalDivider(color = Page)
                     }
                 }
             } }
@@ -820,6 +877,14 @@ private fun ReportsScreen(
                 }
             } }
         }
+    }
+    if (showNotifications) {
+        AlertDialog(
+            onDismissRequest = { showNotifications = false },
+            title = { Text("Notifications") },
+            text = { Text("You're all caught up. New reminders and alerts will appear here when available.") },
+            confirmButton = { TextButton(onClick = { showNotifications = false }) { Text("OK") } }
+        )
     }
 }
 
