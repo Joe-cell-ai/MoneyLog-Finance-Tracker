@@ -626,7 +626,7 @@ private fun SectionHeading(title: String, action: String, onClick: () -> Unit = 
 private fun TransactionRow(transaction: Transaction, onLongPress: () -> Unit = {}) {
     Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp)).combinedClickable(onClick = onLongPress, onLongClick = onLongPress).padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(42.dp).background(categoryTint(transaction.category), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
-            Icon(if (transaction.income) Icons.Default.Payments else Icons.Default.ShoppingBag, null, tint = categoryColor(transaction.category)
+            Icon(if (transaction.income) Icons.Default.Payments else Icons.Default.ShoppingBag, null, tint = categoryColor(transaction.category))
         }
         Spacer(Modifier.width(11.dp))
         Column(Modifier.weight(1f)) {
@@ -690,7 +690,7 @@ private fun ReportsScreen(
     val totalSpend = categories.sumOf { it.second }
     val tagTotals = transactions.flatMap { transaction ->
         Regex("#([\\p{L}\\p{N}_-]+)").findAll(transaction.notes).map { it.groupValues[1] to transaction.amount }.toList()
-    }.groupBy { it.first }.mapValues { entry -> entry.value.sum() }.toList().sortedByDescending { it.second }
+    }.groupBy { it.first }.mapValues { entry -> entry.value.sumOf { it.second } }.toList().sortedByDescending { it.second }
     val views = listOf("Overview", "Calendar", "By category", "By tag", "Total")
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
@@ -849,7 +849,6 @@ private fun ReportsScreen(
     }
 }
 
-@Composable
 @Composable
 private fun MetricCard(title: String, value: String, modifier: Modifier = Modifier, tint: Color = Color.White, valueColor: Color = Green) {
     Card(modifier, colors = CardDefaults.cardColors(containerColor = tint), shape = RoundedCornerShape(17.dp)) {
