@@ -20,6 +20,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -758,7 +760,8 @@ private fun ReportsScreen(
             } }
             item { Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Income vs expenses", fontWeight = FontWeight.Bold, color = Ink)                    Text("Income · " + Money.format(income), color = IncomeGreen)
+                    Text("Income vs expenses", fontWeight = FontWeight.Bold, color = Ink)
+                    Text("Income · " + Money.format(income), color = IncomeGreen)
                     LinearProgressIndicator(progress = { if (income + expenses > 0L) income.toFloat() / (income + expenses) else 0f }, modifier = Modifier.fillMaxWidth(), color = IncomeGreen)
                     Text("Expenses · " + Money.format(expenses), color = ExpenseRed)
                     LinearProgressIndicator(progress = { if (income + expenses > 0L) expenses.toFloat() / (income + expenses) else 0f }, modifier = Modifier.fillMaxWidth(), color = ExpenseRed)
@@ -1505,7 +1508,8 @@ private fun CredSyncScreen() {
                     Text("I consent to optional payment notification capture", color = Ink, fontWeight = FontWeight.SemiBold)
                     Text("Android notification access is system-wide. This app only processes full payment-alert text when the source is identified as CRED or ICICI iMobile; other apps’ notification titles may be checked to identify the source but their full text is not saved. Captured records stay locally. Withdraw consent here and disable Notification access in Android Settings to stop capture.", color = Muted, fontSize = 12.sp)
                 }
-            }            Button(onClick = {
+            }
+            Button(onClick = {
                 runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             }, enabled = notificationConsent, modifier = Modifier.fillMaxWidth()) {
                 Text(if (notificationConsent) "Enable Android notification access" else "Agree above to continue")
@@ -1940,6 +1944,90 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
         )
     }
 }.getOrNull()
+
+
+private fun loadLoans(context: Context): List<Loan>? = runCatching {
+    val raw = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+        .getString("loans", null) ?: return null
+    val array = JSONArray(raw)
+    (0 until array.length()).map { index ->
+        val item = array.getJSONObject(index)
+        val balance = item.getLong("balance")
+        Loan(
+            lender = item.getString("lender"),
+            balance = balance,
+            emi = item.getLong("emi"),
+            due = item.optString("due", "Not set"),
+            annualRate = item.optDouble("annualRate", 0.0),
+            originalPrincipal = item.optLong("originalPrincipal", balance),
+            paymentsMade = item.optLong("paymentsMade", 0L)
+        )
+    }
+}.getOrNull()
+
+private fun saveLoans(context: Context, loans: List<Loan>) {
+    val array = JSONArray()
+    loans.forEach { loan ->
+        array.put(JSONObject()
+            .put("lender", loan.lender)
+            .put("balance", loan.balance)
+            .put("emi", loan.emi)
+            .put("due", loan.due)
+            .put("annualRate", loan.annualRate)
+            .put("originalPrincipal", loan.originalPrincipal)
+            .put("paymentsMade", loan.paymentsMade))
+    }
+    context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+        .edit().putString("loans", array.toString()).apply()
+}
+
+private fun csvEscape(value: String): String =
+    if (value.any { it == ',' || it == '"' || it == '\\n' || it == '\\r' }) {
+        "\"" + value.replace("\"", "\"\"") + "\""
+    } else value
+
+@Composable
+private fun ImportTransactionsScreen(
+    message: String,
+    previewCount: Int,
+    onChooseFile: () -> Unit,
+    onImport: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(Page).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Text("Import transactions", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
+            Text("Choose a bank statement CSV file. Review the detected rows before importing.", color = Muted)
+        }
+        item {
+            InfoCard(
+                "CSV import",
+                "Use a CSV with columns such as Date, Description/Narration, Amount, and optionally Category or separate Debit and Credit columns. Duplicate transactions are skipped.",
+                Icons.Default.UploadFile
+            )
+        }
+        item {
+            Button(onClick = onChooseFile, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.FolderOpen, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Choose CSV file")
+            }
+        }
+        if (message.isNotBlank()) item {
+            Text(message, color = Ink)
+        }
+        item {
+            Text("New transactions ready: $previewCount", color = Ink, fontWeight = FontWeight.SemiBold)
+            Button(
+                onClick = onImport,
+                enabled = previewCount > 0,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Import transactions") }
+        }
+    }
+}
 
 private fun parseTransactionCsv(csv: String): List<Transaction> {
     val rows = mutableListOf<List<String>>()
