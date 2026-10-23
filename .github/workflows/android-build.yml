@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/cloudflare-ai-backend
+      - feature/premium-colourful-ui
   pull_request:
     branches:
       - feature/cloudflare-ai-backend
