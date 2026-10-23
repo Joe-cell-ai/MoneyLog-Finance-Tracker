@@ -188,7 +188,7 @@ async function handleFiles(request: Request, env: StorageEnv, userId: string, pa
     if (request.method === "GET") {
       const object = await env.FILES.get(row.object_key);
       if (!object) return error("file_not_found", 404);
-      return new Response(object.body, {
+      return new Response(await object.arrayBuffer(), {
         headers: {
           "content-type": row.content_type,
           "content-length": String(row.size_bytes),
