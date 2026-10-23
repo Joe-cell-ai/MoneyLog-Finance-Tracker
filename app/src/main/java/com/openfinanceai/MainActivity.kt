@@ -1755,24 +1755,34 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
         if (paymentTooLow) item {
             InfoCard("EMI may not cover interest", "At the entered interest rate, the EMI is not greater than the estimated monthly interest. The balance may not reduce unless the EMI or rate changes.", Icons.Default.Warning)
         }
-        item { SectionHeading("Estimated EMI breakdown", "Next 6 months") }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("EMI Schedule", fontSize = 19.sp, color = Ink, fontWeight = FontWeight.Bold)
+                    Text("Next 6 installments · estimate", fontSize = 12.sp, color = Muted)
+                }
+                Box(Modifier.clip(RoundedCornerShape(50)).background(LavenderTint).padding(horizontal = 11.dp, vertical = 7.dp)) {
+                    Text("ESTIMATE", color = Color(0xFF5A62B5), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
         item { Text("Schedule status is unconfirmed until you compare each installment with your lender statement. This screen does not automatically mark EMIs as paid, due or overdue.", color = Muted, fontSize = 11.sp) }
         item {
-            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(12.dp)).padding(12.dp)) {
-                Text("Payment", Modifier.weight(1f), color = Muted, fontSize = 11.sp)
-                Text("Interest", Modifier.weight(1f), color = Muted, fontSize = 11.sp)
-                Text("Principal", Modifier.weight(1f), color = Muted, fontSize = 11.sp)
+            Row(Modifier.fillMaxWidth().background(Color(0xFFEAF0ED), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 11.dp)) {
+                Text("INSTALLMENT", Modifier.weight(1.25f), color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("INTEREST", Modifier.weight(1f), color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("PRINCIPAL", Modifier.weight(1f), color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
         }
         items(schedule.indices.toList()) { index ->
             val (interest, principalPart, closingBalance) = schedule[index]
-            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(13.dp)).combinedClickable(onClick = { onEmiLongPress() }, onLongClick = { onEmiLongPress() }).padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(if (index == 0) loan.due else "Month ${index + 1}", color = Ink, fontWeight = FontWeight.SemiBold)
-                    Text("Balance ${Money.format(closingBalance)}", color = Muted, fontSize = 10.sp)
+            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp)).combinedClickable(onClick = { onEmiLongPress() }, onLongClick = { onEmiLongPress() }).padding(horizontal = 12.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1.25f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(if (index == 0) loan.due else "Month ${index + 1}", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    Text("Closing ${Money.format(closingBalance)}", color = Muted, fontSize = 10.sp)
                 }
-                Text(Money.format(interest), Modifier.weight(1f), color = ExpenseRed, fontSize = 12.sp)
-                Text(Money.format(principalPart), Modifier.weight(1f), color = Green, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(Money.format(interest), Modifier.weight(1f), color = ExpenseRed, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                Text(Money.format(principalPart), Modifier.weight(1f), color = Green, fontWeight = FontWeight.Bold, fontSize = 11.sp)
             }
         }
     }
