@@ -93,9 +93,7 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9001)
         }
-        EmiReminderReceiver.scheduleMonthly(this, "Fibe", 6200L, 5, 1005)
-        EmiReminderReceiver.scheduleMonthly(this, "KreditBee", 4800L, 8, 1008)
-        EmiReminderReceiver.scheduleMonthly(this, "Pocketly", 3200L, 10, 1010)
+        listOf(1005, 1008, 1010).forEach { EmiReminderReceiver.cancelReminder(this, it) }
         setContent { FinanceApp() }
     }
 }
@@ -163,6 +161,15 @@ private fun FinanceApp() {
             Loan("KreditBee", 24000, 4800, "8 Nov"),
             Loan("Pocketly", 12800, 3200, "10 Nov")
         ).also { saveLoans(context, it) })
+    }
+
+    LaunchedEffect(loans) {
+        loans.forEach { loan ->
+            if (loan.due.equals("Set due date", ignoreCase = true) || loan.due.isBlank()) return@forEach
+            val dueDay = Regex("^\\s*(\\d{1,2})").find(loan.due)?.groupValues?.getOrNull(1)?.toIntOrNull()?.coerceIn(1, 28) ?: return@forEach
+            val reminderId = 3000 + (loan.lender.lowercase(Locale.ROOT).hashCode() and 0x3fff)
+            EmiReminderReceiver.scheduleMonthly(context, loan.lender, loan.emi, dueDay, reminderId)
+        }
     }
 
     val csvExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
@@ -366,7 +373,7 @@ private fun FinanceApp() {
                     text = { Text("What would you like to do with this transaction?") },
                     confirmButton = { TextButton(onClick = { transactionToEdit = transaction; transactionForActions = null }) { Text("Edit") } },
                     dismissButton = { Row { TextButton(onClick = { transactionTips = transaction; transactionForActions = null }) { Text("Tips") }; TextButton(onClick = {
-                        val index = transactions.indexOf(transaction)
+                        val index = transactions.indexOfFirst { it === transaction }
                         if (index >= 0) { transactions = transactions.toMutableList().also { it.removeAt(index) }; saveTransactions(context, transactions) }
                         transactionForActions = null
                     }) { Text("Delete", color = ExpenseRed) }; TextButton(onClick = { transactionForActions = null }) { Text("Cancel") } } }
@@ -394,7 +401,8 @@ private fun FinanceApp() {
                     text = { Text("Edit this loan or delete it and its EMI tracking entry?") },
                     confirmButton = { TextButton(onClick = { loanToEdit = loan; loanForActions = null }) { Text("Edit") } },
                     dismissButton = { Row { TextButton(onClick = {
-                        loans = loans.toMutableList().also { list -> val index = list.indexOf(loan); if (index >= 0) list.removeAt(index) }
+                        EmiReminderReceiver.cancelMonthly(context, loan.lender)
+                        loans = loans.toMutableList().also { list -> val index = list.indexOfFirst { it === loan }; if (index >= 0) list.removeAt(index) }
                         saveLoans(context, loans)
                         loanForActions = null
                     }) { Text("Delete", color = ExpenseRed) }; TextButton(onClick = { loanForActions = null }) { Text("Cancel") } } }
@@ -402,7 +410,8 @@ private fun FinanceApp() {
             }
             loanToEdit?.let { loan ->
                 EditLoanDialog(loan, onDismiss = { loanToEdit = null }) { edited ->
-                    loans = loans.toMutableList().also { list -> val index = list.indexOf(loan); if (index >= 0) list[index] = edited }
+                    if (!edited.lender.equals(loan.lender, ignoreCase = true)) EmiReminderReceiver.cancelMonthly(context, loan.lender)
+                    loans = loans.toMutableList().also { list -> val index = list.indexOfFirst { it === loan }; if (index >= 0) list[index] = edited }
                     saveLoans(context, loans)
                     loanToEdit = null
                 }
@@ -2026,12 +2035,12 @@ private fun CredSyncScreen() {
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("Bank & Credit Integrations", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Selected sources: CRED, ICICI iMobile and CIBIL", color = Muted)
+            Text("Selected sources: CRED, Google Pay, PhonePe, Paytm and ICICI iMobile", color = Muted)
         }
-        item { InfoCard("Current connection status", "CRED and ICICI iMobile can be monitored through payment notifications if those apps post readable payment alerts and you enable Android Notification access. This is not a direct bank API connection and may miss or misread alerts. Verified CIBIL reports are not connected yet.", Icons.Default.Info) }
+        item { InfoCard("Current connection status", "With your explicit consent and Android Notification access, MoneyLog can inspect readable payment notifications from CRED, Google Pay, PhonePe, Paytm and ICICI iMobile. This is not a direct bank API connection and may miss or misread alerts. Verify every captured entry against your bank record. Verified CIBIL reports are not connected yet.", Icons.Default.Info) }
         item {
-            Text("1 · CRED + ICICI iMobile alerts", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            InfoCard("What this app can do now", "With your consent, the listener checks notifications for payment-related wording and amounts and saves matching entries locally. It does not sign in to CRED or ICICI, read account balances, fetch complete statements, or verify that a payment settled. Check each captured transaction against your bank record.", Icons.Default.NotificationsActive)
+            Text("1 · UPI and bank payment alerts", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            InfoCard("What this app can do now", "With your consent, the listener checks selected payment notifications for payment-related wording and amounts and saves matching entries locally. It does not sign in to payment apps, read account balances, fetch complete statements, or verify that a payment settled. Check each captured transaction against your bank record.", Icons.Default.NotificationsActive)
             Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(12.dp), verticalAlignment = Alignment.Top) {
                 Checkbox(checked = notificationConsent, onCheckedChange = { accepted ->
                     notificationConsent = accepted
