@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9001)
         }
+        listOf(1005, 1008, 1010).forEach { EmiReminderReceiver.cancelReminder(this, it) }
         setContent { FinanceApp() }
     }
 }
