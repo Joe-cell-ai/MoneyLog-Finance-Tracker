@@ -247,8 +247,7 @@ private fun FinanceApp() {
             primary = Green,
             onPrimary = Color.White,
             primaryContainer = Mint,
-            onPrimaryContainer = Ink,
-            secondary = SavingsBlue,
+            onPrimaryContainer = Ink,            secondary = SavingsBlue,
             onSecondary = Color.White,
             tertiary = Purple,
             onTertiary = Color.White,
@@ -497,8 +496,7 @@ private fun HomeScreen(
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Expense breakdown", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(Modifier.weight(0.95f), contentAlignment = Alignment.Center) {
-                            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
+                        Box(Modifier.weight(0.95f), contentAlignment = Alignment.Center) {                            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
                                 if (categorySpend > 0L) {
                                     var start = -90f
                                     monthExpenseCategories.forEach { entry ->
@@ -516,12 +514,15 @@ private fun HomeScreen(
                         Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             if (monthExpenseCategories.isEmpty()) Text("Add expenses to see categories.", color = Muted, fontSize = 12.sp)
                             monthExpenseCategories.take(5).forEach { (name, amount) ->
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Box(Modifier.size(9.dp).background(categoryColor(name), CircleShape))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(name, color = Ink, fontSize = 11.sp, maxLines = 1)
-                                        Text(if (categorySpend > 0L) "${amount * 100 / categorySpend}%" else "0%", color = Muted, fontSize = 10.sp)
-                                    }
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(Modifier.size(8.dp).background(categoryColor(name), CircleShape))
+                                    Text(name, modifier = Modifier.weight(1f), color = Ink, fontSize = 10.sp, maxLines = 1)
+                                    Text(if (categorySpend > 0L) "${amount * 100 / categorySpend}%" else "0%", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(Money.format(amount), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                                 }
                             }
                         }
@@ -684,14 +685,14 @@ private fun ReportsScreen(
     selectedMonth: YearMonth,
     onMonthChange: (YearMonth) -> Unit
 ) {
-    var reportView by remember { mutableStateOf("Overview") }
+    var reportView by remember { mutableStateOf("By category") }
     val categories = transactions.filterNot { it.income }.groupBy { it.category }
         .map { it.key to it.value.sumOf { transaction -> transaction.amount } }.sortedByDescending { it.second }
     val totalSpend = categories.sumOf { it.second }
     val tagTotals = transactions.flatMap { transaction ->
         Regex("#([\\p{L}\\p{N}_-]+)").findAll(transaction.notes).map { it.groupValues[1] to transaction.amount }.toList()
     }.groupBy { it.first }.mapValues { entry -> entry.value.sumOf { it.second } }.toList().sortedByDescending { it.second }
-    val views = listOf("Overview", "Calendar", "By category", "By tag", "Total")
+    val views = listOf("Calendar", "By category", "By tag", "Total")
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Text("Monthly report", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
@@ -704,15 +705,26 @@ private fun ReportsScreen(
                 }
                 IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }) { Icon(Icons.Default.ChevronRight, "Next month") }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 views.forEach { view ->
-                    FilterChip(selected = reportView == view, onClick = { reportView = view },
-                        label = { Text(when(view) { "By category" -> "Category"; "By tag" -> "Tag"; else -> view }, fontSize = 9.sp, maxLines = 1) },
-                        modifier = Modifier.weight(1f),
-                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = LavenderTint, selectedLabelColor = Purple))
+                    FilterChip(
+                        selected = reportView == view,
+                        onClick = { reportView = view },
+                        label = { Text(when (view) { "By category" -> "Categories"; "By tag" -> "Tags"; else -> view }, fontSize = 12.sp, maxLines = 1) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Green,
+                            selectedLabelColor = Color.White,
+                            containerColor = Color.White,
+                            labelColor = Ink
+                        )
+                    )
                 }
             }
-            Text("Tag view reads hashtags from transaction notes, for example #home, #travel or #work.", color = Muted, fontSize = 11.sp)
+            Text("Choose a report view · Tags use hashtags in transaction notes.", color = Muted, fontSize = 11.sp)
         }
         if (reportView == "Overview" || reportView == "Total") {
             item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -747,8 +759,7 @@ private fun ReportsScreen(
             } }
             item { Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Income vs expenses", fontWeight = FontWeight.Bold, color = Ink)
-                    Text("Income · " + Money.format(income), color = IncomeGreen)
+                    Text("Income vs expenses", fontWeight = FontWeight.Bold, color = Ink)                    Text("Income · " + Money.format(income), color = IncomeGreen)
                     LinearProgressIndicator(progress = { if (income + expenses > 0L) income.toFloat() / (income + expenses) else 0f }, modifier = Modifier.fillMaxWidth(), color = IncomeGreen)
                     Text("Expenses · " + Money.format(expenses), color = ExpenseRed)
                     LinearProgressIndicator(progress = { if (income + expenses > 0L) expenses.toFloat() / (income + expenses) else 0f }, modifier = Modifier.fillMaxWidth(), color = ExpenseRed)
@@ -997,8 +1008,7 @@ private fun CalendarScreen(loans: List<Loan>, transactions: List<Transaction>) {
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {                        IconButton(onClick = {
                             val nextMonth = visibleMonth.minusMonths(1)
                             visibleMonth = nextMonth
                             selectedDate = nextMonth.atDay(1)
@@ -1247,8 +1257,7 @@ private fun CategoriesScreen() {
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     val categoryColors = listOf(Green, ExpenseRed, SavingsBlue, Purple, Orange, Teal)
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item {
-            Text("Categories", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
+        item {            Text("Categories", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
             Text("Manage the labels used to organize your money", color = Muted)
             Spacer(Modifier.height(8.dp))
             Button(onClick = { draft = ""; editing = null; showAdd = true }, modifier = Modifier.fillMaxWidth(),
@@ -1497,8 +1506,7 @@ private fun CredSyncScreen() {
                     Text("I consent to optional payment notification capture", color = Ink, fontWeight = FontWeight.SemiBold)
                     Text("Android notification access is system-wide. This app only processes full payment-alert text when the source is identified as CRED or ICICI iMobile; other apps’ notification titles may be checked to identify the source but their full text is not saved. Captured records stay locally. Withdraw consent here and disable Notification access in Android Settings to stop capture.", color = Muted, fontSize = 12.sp)
                 }
-            }
-            Button(onClick = {
+            }            Button(onClick = {
                 runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             }, enabled = notificationConsent, modifier = Modifier.fillMaxWidth()) {
                 Text(if (notificationConsent) "Enable Android notification access" else "Agree above to continue")
@@ -1747,8 +1755,7 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
+@OptIn(ExperimentalMaterial3Api::class)@Composable
 private fun AddTransactionDialog(
     onDismiss: () -> Unit,
     onSave: (String, Long, Boolean, String, String, String, String) -> Unit
@@ -1997,57 +2004,3 @@ private fun parseTransactionCsv(csv: String): List<Transaction> {
         )
     }.also { require(it.isNotEmpty()) { "No valid transaction rows found. Check the CSV column names and amounts." } }
 }
-
-@Composable
-private fun ImportTransactionsScreen(
-    message: String,
-    previewCount: Int,
-    onChooseFile: () -> Unit,
-    onImport: () -> Unit
-) {
-    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item {
-            Text("Import transactions", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Import a bank statement CSV saved on your device.", color = Muted)
-        }
-        item { InfoCard("Supported columns", "Description / Narration and Amount, or Description with separate Debit and Credit columns. Date, Type and Category are optional.", Icons.Default.FileUpload) }
-        item { Button(onClick = onChooseFile, modifier = Modifier.fillMaxWidth()) { Text("Choose CSV file") } }
-        if (message.isNotBlank()) item { InfoCard("Import check", message, Icons.Default.Info) }
-        if (previewCount > 0) item {
-            InfoCard("Ready to import", "$previewCount new transaction(s) found. Existing matching rows will be skipped.", Icons.Default.CheckCircle)
-            Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Import $previewCount transactions") }
-        }
-        item { Text("Privacy: the selected file is read on this device. Imported transactions are stored locally in app preferences. Review your statement before importing; bank CSV formats can vary.", color = Muted, fontSize = 12.sp) }
-    }
-}
-
-
-
-private fun csvEscape(value: String): String = "\"" + value.replace("\"", "\"\"") + "\""
-
-private fun saveLoans(context: android.content.Context, loans: List<Loan>) {
-    val array = JSONArray()
-    loans.forEach { loan ->
-        array.put(JSONObject().apply {
-            put("lender", loan.lender)
-            put("balance", loan.balance)
-            put("emi", loan.emi)
-            put("due", loan.due)
-            put("annualRate", loan.annualRate)
-            put("originalPrincipal", loan.originalPrincipal)
-            put("paymentsMade", loan.paymentsMade)
-        })
-    }
-    context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
-        .edit().putString("loans", array.toString()).apply()
-}
-
-private fun loadLoans(context: android.content.Context): List<Loan>? = runCatching {
-    val raw = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
-        .getString("loans", null) ?: return null
-    val array = JSONArray(raw)
-    (0 until array.length()).map { index ->
-        val item = array.getJSONObject(index)
-        Loan(item.getString("lender"), item.getLong("balance"), item.getLong("emi"), item.optString("due", "Not set"), item.optDouble("annualRate", 0.0), item.optLong("originalPrincipal", item.getLong("balance")), item.optLong("paymentsMade", 0L))
-    }
-}.getOrNull()
