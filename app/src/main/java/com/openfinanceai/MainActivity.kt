@@ -578,8 +578,8 @@ private fun SectionHeading(title: String, action: String, onClick: () -> Unit = 
 
 @Composable
 private fun TransactionRow(transaction: Transaction, onLongPress: () -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp)).combinedClickable(onClick = onLongPress, onLongClick = onLongPress).padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(42.dp).clip(CircleShape).background(categoryColor(transaction.category)), contentAlignment = Alignment.Center) {
+    Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).combinedClickable(onClick = onLongPress, onLongClick = onLongPress).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(44.dp).clip(CircleShape).background(categoryColor(transaction.category)), contentAlignment = Alignment.Center) {
             Icon(
                 when {
                     transaction.income -> Icons.Default.AccountBalanceWallet
@@ -598,10 +598,10 @@ private fun TransactionRow(transaction: Transaction, onLongPress: () -> Unit = {
         }
         Spacer(Modifier.width(11.dp))
         Column(Modifier.weight(1f)) {
-            Text(transaction.title, color = Ink, fontWeight = FontWeight.SemiBold)
-            Text("${transaction.category} · ${transaction.date}", color = Muted, fontSize = 11.sp)
+            Text(transaction.title, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1)
+            Text("${transaction.category} · ${transaction.date}", color = Muted, fontSize = 11.sp, maxLines = 1)
         }
-        Text((if (transaction.income) "+" else "−") + Money.format(transaction.amount), color = if (transaction.income) IncomeGreen else ExpenseRed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text((if (transaction.income) "+" else "−") + Money.format(transaction.amount), color = if (transaction.income) IncomeGreen else ExpenseRed, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
     }
 }
 
@@ -1039,11 +1039,13 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
         }
         items(loans) { loan ->
             val loanTint = when (loans.indexOf(loan).mod(3)) { 1 -> SkyTint; 2 -> IncomeTint; else -> Color.White }
-            Card(modifier = Modifier.combinedClickable(onClick = { onDetails(loan) }, onLongClick = { onLoanLongPress(loan) }), colors = CardDefaults.cardColors(containerColor = loanTint), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Card(modifier = Modifier.combinedClickable(onClick = { onDetails(loan) }, onLongClick = { onLoanLongPress(loan) }), colors = CardDefaults.cardColors(containerColor = loanTint), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AccountBalance, null, tint = Green)
-                        Spacer(Modifier.width(10.dp))
+                        Box(Modifier.size(44.dp).clip(CircleShape).background(if (loanTint == SkyTint) Color(0xFFDCEBFF) else if (loanTint == IncomeTint) Color(0xFFDDF8E8) else Mint), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.AccountBalance, null, tint = if (loanTint == SkyTint) SavingsBlue else Green, modifier = Modifier.size(22.dp))
+                        }
+                        Spacer(Modifier.width(11.dp))
                         Text(loan.lender, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Bold)
                         Text(Money.format(loan.balance), color = Ink, fontWeight = FontWeight.Bold)
                     }
@@ -1065,7 +1067,7 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
                         }
                     }
                     val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
-                    Text("Principal repaid estimate · ${(progress * 100).toInt()}%", color = Muted, fontSize = 11.sp)
+                    Text("Principal repaid estimate · ${(progress * 100).toInt()}%", color = Color(0xFF263238), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                     LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth(), color = Green, trackColor = Mint)
                     Text("EMI payments recorded: ${loan.paymentsMade}. Progress estimates principal reduction from the balances entered; it is not a lender-confirmed payment history.", color = Muted, fontSize = 11.sp)
                 }
@@ -1721,12 +1723,26 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
     }
     val paymentTooLow = monthlyRate > 0.0 && loan.emi.toDouble() <= loan.balance.toDouble() * monthlyRate
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Loan Details & EMI Schedule", fontSize = 25.sp, color = Ink, fontWeight = FontWeight.Bold) }
-        item { MetricCard("Outstanding · ${loan.lender}", Money.format(loan.balance), Modifier.fillMaxWidth()) }
-        item { MetricCard("Monthly EMI", Money.format(loan.emi), Modifier.fillMaxWidth()) }
-        item { MetricCard("Annual interest rate", "${loan.annualRate}%", Modifier.fillMaxWidth()) }
+        item {
+            Text("Loan Details", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
+            Text(loan.lender, color = Muted, fontSize = 13.sp)
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Green), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("OUTSTANDING BALANCE", color = Color.White.copy(alpha = .82f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text(Money.format(loan.balance), color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                    Text("Monthly EMI · ${Money.format(loan.emi)}", color = Color.White)
+                }
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                MetricCard("Interest rate", "${loan.annualRate}%", Modifier.weight(1f), tint = Color(0xFFFFF0E5), valueColor = Color(0xFFB75B16))
+                MetricCard("EMIs recorded", loan.paymentsMade.toString(), Modifier.weight(1f), tint = Color(0xFFE6F0FF), valueColor = SavingsBlue)
+            }
+        }
         item { MetricCard("Original principal", Money.format(loan.originalPrincipal), Modifier.fillMaxWidth()) }
-        item { MetricCard("EMI payments recorded", loan.paymentsMade.toString(), Modifier.fillMaxWidth()) }
         item {
             val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
             Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1782,9 +1798,12 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long) -> Un
     var emi by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf(false) }
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Add Loan", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold) }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Text("Add Loan", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
+            Text("Add your loan details to track balances and EMIs.", color = Muted, fontSize = 13.sp)
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(lender, { lender = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Lender / Bank") }, singleLine = true)
                     OutlinedTextField(principal, { principal = it.filter(Char::isDigit); if (outstanding.isBlank()) outstanding = principal }, modifier = Modifier.fillMaxWidth(), label = { Text("Original principal (₹)") }, singleLine = true)
