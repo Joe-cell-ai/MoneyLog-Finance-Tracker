@@ -61,10 +61,12 @@ class EmiReminderReceiver : BroadcastReceiver() {
         }
 
         fun cancelMonthly(context: Context, lender: String) {
-            val notificationId = 3000 + (lender.lowercase(java.util.Locale.ROOT).hashCode() and 0x3fff)
-            val intent = Intent(context, EmiReminderReceiver::class.java)
+            cancelReminder(context, 3000 + (lender.lowercase(java.util.Locale.ROOT).hashCode() and 0x3fff))
+        }
+
+        fun cancelReminder(context: Context, notificationId: Int) {
             val pending = PendingIntent.getBroadcast(
-                context, notificationId, intent,
+                context, notificationId, Intent(context, EmiReminderReceiver::class.java),
                 PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
             )
             if (pending != null) {
