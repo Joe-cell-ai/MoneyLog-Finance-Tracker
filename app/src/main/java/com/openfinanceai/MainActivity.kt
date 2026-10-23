@@ -1982,7 +1982,7 @@ private fun saveLoans(context: Context, loans: List<Loan>) {
 }
 
 private fun csvEscape(value: String): String =
-    if (value.any { it == ',' || it == '"' || it == '\\n' || it == '\\r' }) {
+    if (value.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
         "\"" + value.replace("\"", "\"\"") + "\""
     } else value
 
@@ -2005,7 +2005,7 @@ private fun ImportTransactionsScreen(
             InfoCard(
                 "CSV import",
                 "Use a CSV with columns such as Date, Description/Narration, Amount, and optionally Category or separate Debit and Credit columns. Duplicate transactions are skipped.",
-                Icons.Default.UploadFile
+                Icons.Default.Info
             )
         }
         item {
