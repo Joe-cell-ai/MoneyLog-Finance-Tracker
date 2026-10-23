@@ -544,7 +544,29 @@ private fun HomeScreen(
             }
         }
         item { SectionHeading("Recent transactions", "See all", onAll) }
-        items((monthTransactions.ifEmpty { transactions }).take(4)) { transaction -> TransactionRow(transaction, onLongPress = { onTransactionLongPress(transaction) }) }
+        if (monthTransactions.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Muted, modifier = Modifier.size(28.dp))
+                        Text("No transactions for this month", color = Ink, fontWeight = FontWeight.SemiBold)
+                        Text("Add an income or expense to see it here.", color = Muted, fontSize = 12.sp)
+                    }
+                }
+            }
+        } else {
+            items(monthTransactions.take(4)) { transaction ->
+                TransactionRow(transaction, onLongPress = { onTransactionLongPress(transaction) })
+            }
+        }
     }
 
     if (showMonthPicker) {
