@@ -105,6 +105,7 @@ private fun FinanceApp() {
     var tab by remember { mutableStateOf("Home") }
     var selectedOverviewMonth by remember { mutableStateOf(YearMonth.now()) }
     var showAdd by remember { mutableStateOf(false) }
+    var showAddAsIncome by remember { mutableStateOf(false) }
     var transactionForActions by remember { mutableStateOf<Transaction?>(null) }
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
     var transactionTips by remember { mutableStateOf<Transaction?>(null) }
@@ -311,7 +312,7 @@ private fun FinanceApp() {
             },
             floatingActionButton = {
                 if (tab == "Home" || tab == "Activity") {
-                    FloatingActionButton(onClick = { showAdd = true }, containerColor = Green, contentColor = Color.White) {
+                    FloatingActionButton(onClick = { showAddAsIncome = false; showAdd = true }, containerColor = Green, contentColor = Color.White) {
                         Icon(Icons.Default.Add, "Add transaction")
                     }
                 }
@@ -319,7 +320,7 @@ private fun FinanceApp() {
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 when (tab) {
-                    "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = "Activity" }, { showAdd = true }, { tab = it }, { transactionForActions = it })
+                    "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = "Activity" }, { isIncome -> showAddAsIncome = isIncome; showAdd = true }, { tab = it }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
                     "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = it })
                     "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" }, { loanForActions = it })
@@ -404,6 +405,7 @@ private fun FinanceApp() {
             if (showAdd) {
                 AddTransactionDialog(
                     onDismiss = { showAdd = false },
+                    initialIncome = showAddAsIncome,
                     onSave = { title, amount, isIncome, category, date, paymentMethod, notes ->
                         transactions = listOf(Transaction(title, category, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes)) + transactions
                         saveTransactions(context, transactions)
@@ -424,7 +426,7 @@ private fun HomeScreen(
     selectedMonth: YearMonth,
     onMonthChange: (YearMonth) -> Unit,
     onAll: () -> Unit,
-    onAdd: () -> Unit,
+    onAdd: (Boolean) -> Unit,
     onOpen: (String) -> Unit,
     onTransactionLongPress: (Transaction) -> Unit
 ) {
@@ -450,8 +452,8 @@ private fun HomeScreen(
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                QuickAction("Add expense", Icons.Default.Remove, Modifier.weight(1f), onAdd)
-                QuickAction("Add income", Icons.Default.Add, Modifier.weight(1f), onAdd)
+                QuickAction("Add expense", Icons.Default.Remove, Modifier.weight(1f)) { onAdd(false) }
+                QuickAction("Add income", Icons.Default.Add, Modifier.weight(1f)) { onAdd(true) }
             }
         }
         item {
@@ -2166,6 +2168,7 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
 @OptIn(ExperimentalMaterial3Api::class)@Composable
 private fun AddTransactionDialog(
     onDismiss: () -> Unit,
+    initialIncome: Boolean = false,
     onSave: (String, Long, Boolean, String, String, String, String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
@@ -2182,7 +2185,7 @@ private fun AddTransactionDialog(
             (defaultCategories + custom).distinctBy { it.trim().lowercase(Locale.ROOT) }
         }.getOrDefault(defaultCategories)
     }
-    var isIncome by remember { mutableStateOf(false) }
+    var isIncome by remember { mutableStateOf(initialIncome) }
     var category by remember { mutableStateOf(savedCategories.firstOrNull { it == "Food & groceries" } ?: "Other") }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     var date by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
