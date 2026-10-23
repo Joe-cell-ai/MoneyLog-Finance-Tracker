@@ -106,6 +106,7 @@ private fun FinanceApp() {
     var selectedOverviewMonth by remember { mutableStateOf(YearMonth.now()) }
     var showAdd by remember { mutableStateOf(false) }
     var showAddAsIncome by remember { mutableStateOf(false) }
+    var categoryRefreshToken by remember { mutableIntStateOf(0) }
     var transactionForActions by remember { mutableStateOf<Transaction?>(null) }
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
     var transactionTips by remember { mutableStateOf<Transaction?>(null) }
@@ -332,7 +333,7 @@ private fun FinanceApp() {
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance }, transactions)
                     "Budgets" -> BudgetsScreen(transactions)
                     "Credit health" -> CreditHealthScreen()
-                    "Categories" -> CategoriesScreen()
+                    "Categories" -> CategoriesScreen(onCategoriesChanged = { categoryRefreshToken++ })
                     "Tag Management" -> TagManagementScreen()
                     "Backup & security" -> BackupSecurityScreen(
                         onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
@@ -410,6 +411,7 @@ private fun FinanceApp() {
                 AddTransactionDialog(
                     onDismiss = { showAdd = false },
                     initialIncome = showAddAsIncome,
+                    categoryRefreshToken = categoryRefreshToken,
                     onSave = { title, amount, isIncome, category, date, paymentMethod, notes, tag ->
                         transactions = listOf(Transaction(title, category, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes, tag = tag)) + transactions
                         saveTransactions(context, transactions)
@@ -1618,7 +1620,7 @@ private fun InfoScreen(title: String, body: String, icon: ImageVector) {
 }
 
 @Composable
-private fun CategoriesScreen() {
+private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
     val defaultCategories = listOf(
@@ -1644,6 +1646,7 @@ private fun CategoriesScreen() {
         val array = JSONArray()
         values.forEach { array.put(it) }
         preferences.edit().putString("custom_categories", array.toString()).apply()
+        onCategoriesChanged()
     }
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<String?>(null) }
@@ -2340,13 +2343,14 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
 private fun AddTransactionDialog(
     onDismiss: () -> Unit,
     initialIncome: Boolean = false,
+    categoryRefreshToken: Int = 0,
     onSave: (String, Long, Boolean, String, String, String, String, String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     val context = LocalContext.current
     val defaultCategories = listOf("Food & groceries", "Housing", "Transport", "Bills & utilities", "Health", "Shopping", "Entertainment", "Education", "Loan repayment", "Salary", "Other income")
-    val savedCategories = remember {
+    val savedCategories = remember(context, categoryRefreshToken) {
         runCatching {
             val raw = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE).getString("custom_categories", null)
             if (raw.isNullOrBlank()) defaultCategories else {
