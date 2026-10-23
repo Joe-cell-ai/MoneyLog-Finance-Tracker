@@ -1,15 +1,32 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#FFFFFFFF" android:pathData="M29,18 L73,18 Q78,18 78,23 L78,82 L73,87 L68,82 L63,87 L58,82 L53,87 L48,82 L43,87 L38,82 L33,87 L28,82 L28,23 Q28,18 29,18 Z"/>
-    <path android:fillColor="#FF70B2A1" android:pathData="M36,31 L61,31 Q63,31 63,33 Q63,35 61,35 L36,35 Q34,35 34,33 Q34,31 36,31 Z M36,39 L51,39 Q53,39 53,41 Q53,43 51,43 L36,43 Q34,43 34,41 Q34,39 36,39 Z M36,51 L60,51 Q62,51 62,53 Q62,55 60,55 L36,55 Q34,55 34,53 Q34,51 36,51 Z M36,59 L50,59 Q52,59 52,61 Q52,63 50,63 L36,63 Q34,63 34,61 Q34,59 36,59 Z"/>
-    <path android:fillColor="#FFF5224D" android:pathData="M75,27 A7,7 0,1 0,75 41 A7,7 0,1 0,75 27 Z"/>
-    <path android:fillColor="#FFFFFFFF" android:pathData="M71,33 L79,33 L79,35 L71,35 Z"/>
-    <path android:fillColor="#FF10A34A" android:pathData="M75,45 A7,7 0,1 0,75 59 A7,7 0,1 0,75 45 Z"/>
-    <path android:fillColor="#FFFFFFFF" android:pathData="M74,48 L76,48 L76,51 L79,51 L79,53 L76,53 L76,56 L74,56 L74,53 L71,53 L71,51 L74,51 Z"/>
-    <path android:fillColor="#FF1677E8" android:pathData="M75,63 A7,7 0,1 0,75 77 A7,7 0,1 0,75 63 Z"/>
-    <path android:fillColor="#FFFFFFFF" android:pathData="M72,69 C72,67 74,66 76,67 L78,69 L80,68 L81,70 L80,73 C78,76 72,76 70,73 L70,71 Z"/>
-    <path android:fillColor="#FFFFC928" android:pathData="M35,58 A14,14 0,1 0,35 86 A14,14 0,1 0,35 58 Z"/>
-    <path android:fillColor="#FFFF9F0A" android:pathData="M35,61 A11,11 0,1 0,35 83 A11,11 0,1 0,35 61 Z"/>
-    <path android:fillColor="#FFFFFFFF" android:pathData="M29,68 L40,68 L40,70 L29,70 Z M29,72 L38,72 L38,74 L29,74 Z M35,68 C41,68 41,74 35,75 L40,80 L37,80 L31,74 L34,73 C37,73 38,71 35,70 L29,70 L29,68 Z"/>
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Rounded wallet body -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M24,31 C24,25 29,21 35,21 L75,21 C80,21 84,25 84,30 L84,35 L30,35 C25,35 21,39 21,44 L21,73 C21,79 26,84 32,84 L77,84 C83,84 87,80 87,74 L87,45 C87,41 84,38 80,38 L31,38 C27,38 24,41 24,45 Z" />
+    <path
+        android:fillColor="#FF6558D3"
+        android:pathData="M25,43 L81,43 C85,43 88,46 88,50 L88,69 C88,73 85,76 81,76 L25,76 C21,76 18,73 18,69 L18,50 C18,46 21,43 25,43 Z" />
+    <path
+        android:fillColor="#FF8D82F4"
+        android:pathData="M24,48 L81,48 L81,70 L24,70 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M72,53 L88,53 L88,66 L72,66 C68,66 65,63 65,59.5 C65,56 68,53 72,53 Z" />
+    <path
+        android:fillColor="#FFFFC857"
+        android:pathData="M74,57 A3,3 0,1 0,74 63 A3,3 0,1 0,74 57 Z" />
+    <!-- Rising chart bars and trend line -->
+    <path
+        android:fillColor="#FF1FAE83"
+        android:pathData="M30,62 L30,54 L37,54 L37,62 Z M41,62 L41,47 L48,47 L48,62 Z M52,62 L52,39 L59,39 L59,62 Z" />
+    <path
+        android:fillColor="#FFFFC857"
+        android:pathData="M29,49 L42,42 L51,45 L65,30 L69,34 L53,50 L43,47 L31,54 Z" />
+    <path
+        android:fillColor="#FFFFC857"
+        android:pathData="M61,29 L70,28 L69,37 Z" />
 </vector>
