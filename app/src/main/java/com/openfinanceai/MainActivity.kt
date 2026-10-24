@@ -3,10 +3,8 @@
 package com.openfinanceai
 
 import android.os.Bundle
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.provider.Settings
 import android.Manifest
 import android.content.pm.PackageManager
@@ -124,21 +122,6 @@ private fun FinanceApp() {
             Transaction("Fuel", "Transport", "Yesterday", 1800, false),
             Transaction("Coffee shop", "Food & drink", "20 Oct", 240, false)
         ).also { saveTransactions(context, it) })
-    }
-    DisposableEffect(context) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                loadTransactions(context ?: return)?.let { transactions = it }
-            }
-        }
-        val filter = IntentFilter(PaymentNotificationListener.ACTION_TRANSACTION_CAPTURED)
-        if (Build.VERSION.SDK_INT >= 33) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("DEPRECATION")
-            context.registerReceiver(receiver, filter)
-        }
-        onDispose { runCatching { context.unregisterReceiver(receiver) } }
     }
     var selectedLoan by remember { mutableStateOf<Loan?>(null) }
     var importMessage by remember { mutableStateOf("") }
@@ -340,7 +323,6 @@ private fun FinanceApp() {
                         onExportCsv = { csvExportLauncher.launch("open-finance-transactions.csv") },
                         message = importMessage
                     )
-                    "CRED sync", "Live payment tracking" -> CredSyncScreen()
                     "Import transactions" -> ImportTransactionsScreen(importMessage, importedPreview.size, { csvPicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) }, {
                         transactions = (importedPreview + transactions).distinctBy { transactionKey(it) }
                         saveTransactions(context, transactions)
@@ -348,8 +330,8 @@ private fun FinanceApp() {
                         importedPreview = emptyList()
                     })
                     "Appearance" -> AppearanceScreen()
-                    "Privacy & Security" -> PrivacySecurityScreen { tab = "CRED sync" }
-                    "Notifications" -> NotificationsSettingsScreen { tab = "CRED sync" }
+                    "Privacy & Security" -> PrivacySecurityScreen { tab = "Privacy & Security" }
+                    "Notifications" -> NotificationsSettingsScreen { tab = "Notifications" }
                     "About" -> AboutSettingsScreen()
                     "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: EmptyLoansScreen { tab = "Add loan" }
                     "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi ->
@@ -1461,9 +1443,9 @@ private fun CoachScreen(income: Long, expenses: Long, emi: Long) {
         }
         item {
             InfoCard(
-                "Live AI service: Not connected",
-                "These answers are generated locally from tracked totals. They are not live AI responses or current lender quotes. A future connected service must show its provider and update time, protect API keys on a trusted backend, and ask before sharing financial details.",
-                Icons.Default.CloudOff
+                "Offline guidance",
+                "Guidance is calculated on this device from the transactions and loans you enter. MoneyLog does not send your financial data to a live AI service or fetch live lender offers.",
+                Icons.Default.Lightbulb
             )
         }
         item { Text("Guidance is informational, not regulated financial advice.", color = Muted, fontSize = 11.sp) }
@@ -2036,7 +2018,6 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)) {
                     listOf(
-                        Triple("Live payment tracking", "Manage optional notification capture", Icons.Default.Sync),
                         Triple("Import transactions", "Import a bank statement CSV", Icons.Default.FileUpload),
                         Triple("CIBIL & credit health", "View your reported score and guidance", Icons.Default.Speed),
                         Triple("Loan details & EMI schedule", "Review tracked loans and installments", Icons.Default.AccountBalance),
@@ -2044,7 +2025,6 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
                     ).forEachIndexed { index, item ->
                         Row(Modifier.fillMaxWidth().clickable {
                             onOpen(when (item.first) {
-                                "Live payment tracking" -> "CRED sync"
                                 "CIBIL & credit health" -> "Credit health"
                                 "Loan details & EMI schedule" -> "Loan details"
                                 else -> item.first
@@ -2178,7 +2158,7 @@ private fun AboutSettingsScreen() {
             }
         }
         item { InfoCard("Built for everyday money tracking", "Record income and expenses, manage categories and tags, track loans and EMIs, review budgets, and export your records when needed.", Icons.Default.Favorite) }
-        item { InfoCard("Please verify your records", "MoneyLog is a personal tracking tool. Imported or notification-captured transactions and estimated loan schedules should be checked against your bank or lender statements.", Icons.Default.Info) }
+        item { InfoCard("Please verify your records", "MoneyLog is a personal tracking tool. Imported transactions and estimated loan schedules should be checked against your bank or lender statements.", Icons.Default.Info) }
     }
 }
 
@@ -2196,9 +2176,9 @@ private fun CreditHealthScreen() {
         item { Text("CIBIL & Credit Health", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold) }
         item {
             InfoCard(
-                "Live bureau status: Not connected",
-                "No authorized live CIBIL/bureau API is configured in this build. A score entered below is user-reported, not verified. When an authorized integration is added, show its source and the successful fetch time; never substitute a generated score.",
-                Icons.Default.CloudOff
+                "Offline credit health",
+                "MoneyLog does not connect to CIBIL or any credit bureau. You can manually enter the score shown on your own report; it remains user-reported and is not verified by this app.",
+                Icons.Default.VerifiedUser
             )
         }
         item {
@@ -2241,7 +2221,7 @@ private fun CreditHealthScreen() {
                 }
             }
             item { InfoCard("What affects your score?", "Repayment history, credit utilisation, length of credit history, credit mix and recent enquiries can influence a credit score. This app cannot assess your actual bureau factors without a verified report.", Icons.Default.Insights) }
-            item { InfoCard("Get your verified score", "Check your score and report through the official TransUnion CIBIL website or an authorized credit bureau service. Review account balances and late-payment records for errors. Never share your bureau password or OTP with this app.", Icons.Default.OpenInNew) }
+            item { InfoCard("Check your credit report safely", "Use the official TransUnion CIBIL website to view your report. MoneyLog does not request your bureau password or OTP and does not import or verify a live report.", Icons.Default.OpenInNew) }
         } else {
             item { InfoCard("Protect your payment history", "Pay every EMI by its due date and keep enough balance before the auto-debit date. Set reminders a few days early.", Icons.Default.EventAvailable) }
             item { InfoCard("Manage credit utilisation", "Try to keep revolving credit-card utilisation low, ideally below 30%, and pay the full statement balance when possible.", Icons.Default.PieChart) }
@@ -2369,63 +2349,6 @@ private fun BackupSecurityScreen(
                 }
             }
         }
-    }
-}
-@Composable
-private fun CredSyncScreen() {
-    val context = LocalContext.current
-    val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
-    var notificationConsent by remember { mutableStateOf(preferences.getBoolean("notification_capture_consent", false)) }
-    fun openWeb(url: String) {
-        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
-    }
-    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Text("Bank & Credit Integrations", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Selected sources: CRED, Google Pay, PhonePe, Paytm and ICICI iMobile", color = Muted)
-        }
-        item { InfoCard("Current connection status", "With your explicit consent and Android Notification access, MoneyLog can inspect readable payment notifications from CRED, Google Pay, PhonePe, Paytm and ICICI iMobile. This is not a direct bank API connection and may miss or misread alerts. Verify every captured entry against your bank record. Verified CIBIL reports are not connected yet.", Icons.Default.Info) }
-        item {
-            Text("1 · UPI and bank payment alerts", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            InfoCard("What this app can do now", "With your consent, the listener checks selected payment notifications for payment-related wording and amounts and saves matching entries locally. It does not sign in to payment apps, read account balances, fetch complete statements, or verify that a payment settled. Check each captured transaction against your bank record.", Icons.Default.NotificationsActive)
-            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(12.dp), verticalAlignment = Alignment.Top) {
-                Checkbox(checked = notificationConsent, onCheckedChange = { accepted ->
-                    notificationConsent = accepted
-                    preferences.edit().putBoolean("notification_capture_consent", accepted).apply()
-                })
-                Column(Modifier.weight(1f).padding(top = 10.dp)) {
-                    Text("I consent to optional payment notification capture", color = Ink, fontWeight = FontWeight.SemiBold)
-                    Text("Android notification access is system-wide. This app only processes full payment-alert text when the source is identified as CRED or ICICI iMobile; other apps’ notification titles may be checked to identify the source but their full text is not saved. Captured records stay locally. Withdraw consent here and disable Notification access in Android Settings to stop capture.", color = Muted, fontSize = 12.sp)
-                }
-            }
-            Button(onClick = {
-                runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            }, enabled = notificationConsent, modifier = Modifier.fillMaxWidth()) {
-                Text(if (notificationConsent) "Enable Android notification access" else "Agree above to continue")
-            }
-            OutlinedButton(onClick = {
-                notificationConsent = false
-                preferences.edit().putBoolean("notification_capture_consent", false).apply()
-                runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            }, modifier = Modifier.fillMaxWidth()) { Text("Withdraw consent / manage Android access") }
-        }
-        item {
-            Text("2 · Direct bank-data connection", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            InfoCard("CRED and ICICI", "CRED's own Money/Networth feature can use the Account Aggregator framework, but that does not give this app access to CRED's private integrations. ICICI's developer portal is a starting point for approved API projects, not automatic access to a personal iMobile account. A production connection needs provider approval, a compliant secure backend and a separate customer consent flow. Never collect bank passwords, UPI PINs or OTPs.", Icons.Default.AccountBalance)
-            OutlinedButton(onClick = { openWeb("https://api-portal.icici.bank.in/") }, modifier = Modifier.fillMaxWidth()) { Text("Open ICICI Bank developer portal") }
-            OutlinedButton(onClick = { openWeb("https://www.financialservices.gov.in/account-aggregator-framework") }, modifier = Modifier.fillMaxWidth()) { Text("Read official Account Aggregator framework") }
-        }
-        item {
-            Text("3 · CIBIL Insights / current report", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            InfoCard("Verified report requirement", "To show a current verified CIBIL score/report inside this app, the app owner needs TransUnion CIBIL's approved consumer-report product/API access, commercial onboarding, production approval and a compliant identity/consent flow. Until that is approved and integrated, this app only stores a score you manually enter; it must not label it as a live or verified CIBIL result.", Icons.Default.VerifiedUser)
-            OutlinedButton(onClick = { openWeb("https://apimarketplace.transunioncibil.com/products/credit-data/dtc-consumer-connect-services") }, modifier = Modifier.fillMaxWidth()) { Text("Open official CIBIL Consumer Connect details") }
-            OutlinedButton(onClick = { openWeb("https://apimarketplace.transunioncibil.com/getting-started") }, modifier = Modifier.fillMaxWidth()) { Text("Open CIBIL API onboarding") }
-        }
-        item {
-            Text("4 · Statement import and backup", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            InfoCard("Local file access only", "You can import a bank statement CSV or export a backup using Android's document picker. Only the file you select is granted to the app; no broad storage permission is needed. Review imported rows and keep exported financial files private.", Icons.Default.FileUpload)
-        }
-        item { InfoCard("Important safety rule", "Do not enter bank passwords, UPI PINs, card PINs, OTPs or bureau passwords into this app or send them in chat. Provider API credentials must be kept on a secured backend, never hard-coded into the Android app or public GitHub.", Icons.Default.Lock) }
     }
 }
 @Composable

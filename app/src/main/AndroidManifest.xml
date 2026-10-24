@@ -1,7 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Network access for live CIBIL/loan insights and current financial information. -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:allowBackup="false"
@@ -16,15 +13,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <service
-            android:name=".PaymentNotificationListener"
-            android:label="MoneyLog payment tracking"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
         <receiver android:name=".EmiReminderReceiver" android:exported="false" />
     </application>
 </manifest>
