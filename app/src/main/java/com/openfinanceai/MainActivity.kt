@@ -479,12 +479,6 @@ private fun HomeScreen(
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                QuickAction("Add expense", Icons.Default.Remove, Modifier.weight(1f)) { onAdd(false) }
-                QuickAction("Add income", Icons.Default.Add, Modifier.weight(1f)) { onAdd(true) }
-            }
-        }
-        item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Monthly overview", modifier = Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
                 Row(
@@ -816,6 +810,7 @@ private fun ReportsScreen(
     var showNotifications by remember { mutableStateOf(false) }
     var showAllCategories by remember { mutableStateOf(false) }
     var showMonthMenu by remember { mutableStateOf(false) }
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
     val categories = transactions.filterNot { it.income }.groupBy { it.category }
         .map { it.key to it.value.sumOf { transaction -> transaction.amount } }.sortedByDescending { it.second }
     val totalSpend = categories.sumOf { it.second }
@@ -856,10 +851,6 @@ private fun ReportsScreen(
                                 )
                             }
                         }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }, modifier = Modifier.size(22.dp)) { Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month", tint = Color(0xFF49688F), modifier = Modifier.size(16.dp)) }
-                        IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }, modifier = Modifier.size(22.dp)) { Icon(Icons.Default.ChevronRight, contentDescription = "Next month", tint = Color(0xFF49688F), modifier = Modifier.size(16.dp)) }
                     }
                 }
                 IconButton(onClick = { showAllCategories = true }) {
@@ -1043,7 +1034,7 @@ private fun ReportsScreen(
                     }
                     visibleCategories.forEachIndexed { index, (category, amount) ->
                         Row(
-                            Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                            Modifier.fillMaxWidth().clickable { selectedCategory = category }.padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
@@ -1106,6 +1097,32 @@ private fun ReportsScreen(
                 }
             } }
         }
+    }
+    selectedCategory?.let { category ->
+        val categoryTransactions = transactions.filter { !it.income && it.category == category }
+        val categoryTotal = categoryTransactions.sumOf { it.amount }
+        val categoryShare = if (totalSpend > 0L) categoryTotal * 100 / totalSpend else 0L
+        AlertDialog(
+            onDismissRequest = { selectedCategory = null },
+            title = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(category, color = Ink, fontWeight = FontWeight.Bold)
+                    Text("${Money.format(categoryTotal)} · ${categoryShare}% of expenses", color = Muted, fontSize = 13.sp)
+                }
+            },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (categoryTransactions.isEmpty()) {
+                        Text("No transactions in this category for the selected month.", color = Muted, fontSize = 12.sp)
+                    } else {
+                        categoryTransactions.take(8).forEach { transaction ->
+                            TransactionRow(transaction, onLongPress = { onOpen("Transactions") })
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { selectedCategory = null }) { Text("Done") } }
+        )
     }
     if (showNotifications) {
         AlertDialog(
