@@ -2605,10 +2605,32 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
     val upcomingAmber = Color(0xFFF59E0B)
     val upcomingTint = Color(0xFFFFF7ED)
     val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
-    val totalInterestEstimate = schedule.sumOf { it.first }
-    val totalRepaymentEstimate = loan.emi * 6L
     val monthsRemaining = if (loan.emi > 0L) kotlin.math.ceil(loan.balance.toDouble() / loan.emi.toDouble()).toInt().coerceAtLeast(0) else 0
+    var totalInterestEstimate = 0L
+    var totalRepaymentEstimate = 0L
+    var estimateValid = loan.balance > 0L && loan.emi > 0L && !paymentTooLow
+    if (estimateValid) {
+        var remaining = loan.balance.toDouble()
+        var count = 0
+        while (remaining > 0.0 && count < 1200) {
+            val interest = kotlin.math.round(remaining * monthlyRate).toLong()
+            val payment = minOf(loan.emi, kotlin.math.ceil(remaining + interest).toLong())
+            val principalPart = payment - interest
+            if (principalPart <= 0L) {
+                estimateValid = false
+                break
+            }
+            totalInterestEstimate += interest
+            totalRepaymentEstimate += payment
+            remaining = (remaining - principalPart).coerceAtLeast(0.0)
+            count++
+        }
+        if (count >= 1200 && remaining > 0.0) estimateValid = false
+    }
     var selectedSection by remember(loan.lender) { mutableStateOf("Schedule") }
+    var bankEmiAmount by remember(loan.lender) { mutableStateOf("") }
+    var bankEmiDate by remember(loan.lender) { mutableStateOf("") }
+    var bankCheckAttempted by remember(loan.lender) { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(page),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 28.dp),
@@ -2637,15 +2659,15 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                     }
                     Box(Modifier.width(1.dp).height(42.dp).background(page))
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("INTEREST RATE", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Text("TOTAL INTEREST*", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
                         Spacer(Modifier.height(7.dp))
-                        Text("${loan.annualRate}%", color = forest, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Text(if (estimateValid) Money.format(totalInterestEstimate) else "—", color = forest, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
                     }
                     Box(Modifier.width(1.dp).height(42.dp).background(page))
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("EMIS RECORDED", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Text("TOTAL REPAYMENT*", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
                         Spacer(Modifier.height(7.dp))
-                        Text(loan.paymentsMade.toString(), color = forest, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Text(if (estimateValid) Money.format(totalRepaymentEstimate) else "—", color = forest, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
                     }
                 }
             }
@@ -2671,24 +2693,10 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(Color.White).padding(12.dp)) {
-                    Text("Est. next 6 EMI interest", color = Muted, fontSize = 10.sp)
-                    Spacer(Modifier.height(6.dp))
-                    Text(Money.format(totalInterestEstimate), color = forest, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                }
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(Color.White).padding(12.dp)) {
-                    Text("Est. 6 EMI total", color = Muted, fontSize = 10.sp)
-                    Spacer(Modifier.height(6.dp))
-                    Text(Money.format(totalRepaymentEstimate), color = forest, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-        item {
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color.White).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf("Schedule", "Overview", "Bank Schedule").forEach { section ->
+                listOf("Schedule", "Overview", "Bank Verify").forEach { section ->
                     val selected = selectedSection == section
-                    Box(Modifier.weight(if (section == "Bank Schedule") 1.2f else 1f).clip(RoundedCornerShape(11.dp)).background(if (selected) forest else Color.Transparent).clickable { selectedSection = section }.padding(horizontal = 5.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.weight(if (section == "Bank Verify") 1.2f else 1f).clip(RoundedCornerShape(11.dp)).background(if (selected) forest else Color.Transparent).clickable { selectedSection = section }.padding(horizontal = 5.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
                         Text(section, color = if (selected) Color.White else Muted, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1, textAlign = TextAlign.Center)
                     }
                 }
@@ -2712,22 +2720,46 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(if (selectedSection == "Bank Schedule") "Bank Schedule" else "EMI Schedule", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text(if (selectedSection == "Bank Schedule") "Compare with your lender statement" else "Next 6 installments · estimate", color = Muted, fontSize = 11.sp)
+                        Text(if (selectedSection == "Bank Verify") "Bank Schedule Verify" else "EMI Schedule", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text(if (selectedSection == "Bank Schedule") "Compare your lender statement" else "Next 6 installments · estimate", color = Muted, fontSize = 11.sp)
                     }
                     Box(Modifier.clip(RoundedCornerShape(50)).background(mint).padding(horizontal = 10.dp, vertical = 7.dp)) {
                         Text(if (selectedSection == "Bank Schedule") "VERIFY" else "ESTIMATE", color = forest, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
-            item {
+            if (selectedSection == "Bank Verify") {
+                item {
+                    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Compare a bank-statement installment", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("Enter the EMI amount and date exactly as shown on your lender statement. This compares one installment only; it does not connect to your bank.", color = Muted, fontSize = 11.sp)
+                            OutlinedTextField(value = bankEmiAmount, onValueChange = { bankEmiAmount = it.filter { ch -> ch.isDigit() || ch == '.' }; bankCheckAttempted = false }, label = { Text("Bank EMI amount (₹)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = bankEmiDate, onValueChange = { bankEmiDate = it; bankCheckAttempted = false }, label = { Text("Bank EMI date (e.g. 5 Nov 2026)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            Button(onClick = { bankCheckAttempted = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = forest)) { Text("Compare installment") }
+                            if (bankCheckAttempted) {
+                                val amount = bankEmiAmount.toDoubleOrNull()
+                                val formatter = java.time.format.DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("d MMM yyyy").toFormatter(Locale.ENGLISH)
+                                val bankDate = runCatching { java.time.LocalDate.parse(bankEmiDate.trim(), formatter) }.getOrNull()
+                                val expectedDate = firstDueDate
+                                val validInput = amount != null && amount >= 0.0 && bankDate != null
+                                val amountMatches = amount != null && kotlin.math.abs(amount - loan.emi.toDouble()) < 0.5
+                                val dateMatches = bankDate != null && expectedDate != null && bankDate == expectedDate
+                                Text(if (!validInput) "Unable to compare: enter a valid amount and date such as 5 Nov 2026." else if (amountMatches && dateMatches) "Amount and date match MoneyLog's current estimate." else "Difference found: " + listOfNotNull(if (!amountMatches) "bank amount differs from the EMI entered in MoneyLog" else null, if (!dateMatches) "bank date differs from MoneyLog's next due date" else null).joinToString("; ") + ".", color = if (validInput && amountMatches && dateMatches) forest else Color(0xFFB45309), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text("This is a manual comparison, not bank verification. Confirm against the lender's official schedule.", color = Muted, fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+            }
+            if (selectedSection != "Bank Verify") item {
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(mint).padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("DATE", Modifier.weight(1.05f), color = forest, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Text("AMOUNT", Modifier.weight(1f), color = forest, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
                     Text("STATUS", Modifier.weight(.85f), color = forest, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
                 }
             }
-            items(schedule.indices.toList()) { index ->
+            if (selectedSection != "Bank Verify") items(schedule.indices.toList()) { index ->
                 val (interest, principalPart, closingBalance) = schedule[index]
                 val installmentDate = firstDueDate?.plusMonths(index.toLong())
                 val installmentLabel = installmentDate?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
@@ -2749,7 +2781,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                     }
                 }
             }
-            if (paymentTooLow) item {
+            if (selectedSection != "Bank Verify" && paymentTooLow) item {
                 InfoCard("EMI may not cover interest", "At the entered interest rate, the EMI is not greater than the estimated monthly interest. The balance may not reduce unless the EMI or rate changes.", Icons.Default.Warning)
             }
             item {
