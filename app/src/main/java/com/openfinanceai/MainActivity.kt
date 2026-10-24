@@ -3,10 +3,8 @@
 package com.openfinanceai
 
 import android.os.Bundle
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.provider.Settings
 import android.Manifest
 import android.content.pm.PackageManager
@@ -124,21 +122,6 @@ private fun FinanceApp() {
             Transaction("Fuel", "Transport", "Yesterday", 1800, false),
             Transaction("Coffee shop", "Food & drink", "20 Oct", 240, false)
         ).also { saveTransactions(context, it) })
-    }
-    DisposableEffect(context) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                loadTransactions(context ?: return)?.let { transactions = it }
-            }
-        }
-        val filter = IntentFilter(PaymentNotificationListener.ACTION_TRANSACTION_CAPTURED)
-        if (Build.VERSION.SDK_INT >= 33) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("DEPRECATION")
-            context.registerReceiver(receiver, filter)
-        }
-        onDispose { runCatching { context.unregisterReceiver(receiver) } }
     }
     var selectedLoan by remember { mutableStateOf<Loan?>(null) }
     var importMessage by remember { mutableStateOf("") }
@@ -347,8 +330,8 @@ private fun FinanceApp() {
                         importedPreview = emptyList()
                     })
                     "Appearance" -> AppearanceScreen()
-                    "Privacy & Security" -> PrivacySecurityScreen { tab = "CRED sync" }
-                    "Notifications" -> NotificationsSettingsScreen { tab = "CRED sync" }
+                    "Privacy & Security" -> PrivacySecurityScreen { tab = "Privacy & Security" }
+                    "Notifications" -> NotificationsSettingsScreen { tab = "Notifications" }
                     "About" -> AboutSettingsScreen()
                     "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: EmptyLoansScreen { tab = "Add loan" }
                     "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi ->
