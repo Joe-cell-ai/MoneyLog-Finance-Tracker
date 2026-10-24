@@ -198,9 +198,9 @@ private fun FinanceApp() {
     val csvExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) runCatching {
             val csv = buildString {
-                appendLine("Date,Description,Category,Type,Amount,Payment Method,Notes")
+                appendLine("Date,Description,Category,Type,Amount,Payment Method,Notes,Tag")
                 transactions.forEach { t ->
-                    appendLine(listOf(t.date, t.title, t.category, if (t.income) "Income" else "Expense", t.amount.toString(), t.paymentMethod, t.notes)
+                    appendLine(listOf(t.date, t.title, t.category, if (t.income) "Income" else "Expense", t.amount.toString(), t.paymentMethod, t.notes, t.tag)
                         .joinToString(",") { csvEscape(it) })
                 }
             }
@@ -3624,6 +3624,9 @@ private fun parseTransactionCsv(csv: String): List<Transaction> {
     val creditIndex = findHeader("credit", "deposit", "deposits", "money in")
     val typeIndex = findHeader("type", "transaction type", "dr/cr")
     val categoryIndex = findHeader("category")
+    val paymentMethodIndex = findHeader("payment method", "payment mode", "mode")
+    val notesIndex = findHeader("notes", "note", "remarks", "comments")
+    val tagIndex = findHeader("tag", "tags")
     require(titleIndex != null && (amountIndex != null || debitIndex != null || creditIndex != null)) {
         "Could not identify columns. Include Description/Narration and Amount, or separate Debit and Credit columns."
     }
@@ -3647,7 +3650,10 @@ private fun parseTransactionCsv(csv: String): List<Transaction> {
             category = values.getOrNull(categoryIndex ?: -1)?.takeIf { it.isNotBlank() } ?: if (isIncome) "Income" else "Imported",
             date = values.getOrNull(dateIndex ?: -1)?.takeIf { it.isNotBlank() } ?: "Imported",
             amount = rawAmount,
-            income = isIncome
+            income = isIncome,
+            paymentMethod = values.getOrNull(paymentMethodIndex ?: -1)?.takeIf { it.isNotBlank() } ?: "Not set",
+            notes = values.getOrNull(notesIndex ?: -1).orEmpty(),
+            tag = values.getOrNull(tagIndex ?: -1).orEmpty().removePrefix("#").trim()
         )
     }.also { require(it.isNotEmpty()) { "No valid transaction rows found. Check the CSV column names and amounts." } }
 }
