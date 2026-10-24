@@ -128,13 +128,14 @@ class MainActivity : ComponentActivity() {
 private fun FinanceApp() {
     val appearanceContext = LocalContext.current
     val appearancePreferences = remember { appearanceContext.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
     LaunchedEffect(Unit) {
         applyAppearance(
             appearancePreferences.getString("appearance_theme", "Light") ?: "Light",
             appearancePreferences.getString("appearance_accent", "Green") ?: "Green",
             appearancePreferences.getString("appearance_layout", "Comfortable") ?: "Comfortable",
             appearancePreferences.getString("appearance_font_size", "Medium") ?: "Medium",
-            androidx.compose.foundation.isSystemInDarkTheme()
+            systemDark
         )
     }
     var tab by remember { mutableStateOf("Home") }
@@ -2419,7 +2420,8 @@ private fun AppearanceScreen() {
     var accent by remember { mutableStateOf(preferences.getString("appearance_accent", "Green") ?: "Green") }
     var layout by remember { mutableStateOf(preferences.getString("appearance_layout", "Comfortable") ?: "Comfortable") }
     var fontSize by remember { mutableStateOf(preferences.getString("appearance_font_size", "Medium") ?: "Medium") }
-    LaunchedEffect(theme, accent, layout, fontSize, androidx.compose.foundation.isSystemInDarkTheme()) { applyAppearance(theme, accent, layout, fontSize, androidx.compose.foundation.isSystemInDarkTheme()) }
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    LaunchedEffect(theme, accent, layout, fontSize, systemDark) { applyAppearance(theme, accent, layout, fontSize, systemDark) }
     val accents = listOf("Green" to Color(0xFF07966F), "Blue" to Color(0xFF3478F6), "Purple" to Color(0xFF8B4DE8), "Orange" to Color(0xFFF59E0B), "Pink" to Color(0xFFEC4899))
     fun save(key: String, value: String) { preferences.edit().putString(key, value).apply() }
     LazyColumn(
