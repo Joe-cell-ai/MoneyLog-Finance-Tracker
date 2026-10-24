@@ -51,24 +51,47 @@ import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
-private val Green = Color(0xFF6558D3) // Premium indigo-violet primary
-private val Mint = Color(0xFFF0EDFF) // Soft lavender surface tint
-private val IncomeGreen = Color(0xFF168568)
-private val ExpenseRed = Color(0xFFD94F69)
-private val SavingsBlue = Color(0xFF3478D4)
-private val Ink = Color(0xFF22243A)
-private val Muted = Color(0xFF74788D)
-private val Page = Color(0xFFF7F7FB)
-private val IncomeTint = Color(0xFFE8F7F1)
-private val ExpenseTint = Color(0xFFFFEEF1)
-private val SkyTint = Color(0xFFEAF3FF)
-private val PeachTint = Color(0xFFFFF1E6)
-private val PinkTint = Color(0xFFFFEFF6)
-private val LavenderTint = Color(0xFFF0EDFF)
-private val Teal = Color(0xFF2D9A91)
-private val Orange = Color(0xFFE69A45)
-private val Purple = Color(0xFF8A63D2)
-private val Blue = Color(0xFF3478D4)
+private var Green by mutableStateOf(Color(0xFF07966F))
+private var Mint by mutableStateOf(Color(0xFFE6FBF3))
+private var IncomeGreen by mutableStateOf(Color(0xFF168568))
+private var ExpenseRed by mutableStateOf(Color(0xFFD94F69))
+private var SavingsBlue by mutableStateOf(Color(0xFF3478D4))
+private var Ink by mutableStateOf(Color(0xFF22243A))
+private var Muted by mutableStateOf(Color(0xFF74788D))
+private var Page by mutableStateOf(Color(0xFFF7F7FB))
+private var IncomeTint by mutableStateOf(Color(0xFFE6FBF3))
+private var ExpenseTint by mutableStateOf(Color(0xFFFFEEF1))
+private var SkyTint by mutableStateOf(Color(0xFFEAF3FF))
+private var PeachTint by mutableStateOf(Color(0xFFFFF1E6))
+private var PinkTint by mutableStateOf(Color(0xFFFFEFF6))
+private var LavenderTint by mutableStateOf(Color(0xFFF0EDFF))
+private var Teal by mutableStateOf(Color(0xFF2D9A91))
+private var Orange by mutableStateOf(Color(0xFFE69A45))
+private var Purple by mutableStateOf(Color(0xFF8A63D2))
+private var Blue by mutableStateOf(Color(0xFF3478D4))
+private var AppDarkTheme by mutableStateOf(false)
+private var AppCompactLayout by mutableStateOf(false)
+private var AppFontScale by mutableStateOf(1f)
+
+private fun applyAppearance(theme: String, accent: String, layout: String, fontSize: String) {
+    val accentColor = when (accent) {
+        "Blue" -> Color(0xFF3478F6)
+        "Purple" -> Color(0xFF8B4DE8)
+        "Orange" -> Color(0xFFF59E0B)
+        "Pink" -> Color(0xFFEC4899)
+        else -> Color(0xFF07966F)
+    }
+    AppDarkTheme = theme == "Dark"
+    AppCompactLayout = layout == "Compact"
+    AppFontScale = when (fontSize) { "Small" -> 0.90f; "Large" -> 1.12f; else -> 1f }
+    Green = accentColor
+    Mint = accentColor.copy(alpha = if (AppDarkTheme) 0.24f else 0.12f)
+    IncomeTint = Mint
+    LavenderTint = Mint
+    Page = if (AppDarkTheme) Color(0xFF121713) else Color(0xFFF7F7FB)
+    Ink = if (AppDarkTheme) Color(0xFFF1F5F2) else Color(0xFF22243A)
+    Muted = if (AppDarkTheme) Color(0xFFB0BDB5) else Color(0xFF74788D)
+}
 private val Money = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
 private val CategoryPalette = listOf(Color(0xFF356AE6), Color(0xFF159765), Color(0xFF8953D8), Color(0xFFD97732), Color(0xFFDB4765), Color(0xFF148D91), Color(0xFFB18A16), Color(0xFF477DAD), Color(0xFFAF5AB5), Color(0xFF567A35), Color(0xFFCF5A36), Color(0xFF5470C6))
 private fun categoryColor(category: String): Color = when (category.trim().lowercase(Locale.ROOT)) {
@@ -103,6 +126,16 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun FinanceApp() {
+    val appearanceContext = LocalContext.current
+    val appearancePreferences = remember { appearanceContext.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
+    LaunchedEffect(Unit) {
+        applyAppearance(
+            appearancePreferences.getString("appearance_theme", "Light") ?: "Light",
+            appearancePreferences.getString("appearance_accent", "Green") ?: "Green",
+            appearancePreferences.getString("appearance_layout", "Comfortable") ?: "Comfortable",
+            appearancePreferences.getString("appearance_font_size", "Medium") ?: "Medium"
+        )
+    }
     var tab by remember { mutableStateOf("Home") }
     var selectedOverviewMonth by remember { mutableStateOf(YearMonth.now()) }
     var showAdd by remember { mutableStateOf(false) }
@@ -269,6 +302,14 @@ private fun FinanceApp() {
             large = RoundedCornerShape(28.dp)
         )
     ) {
+        CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.platform.LocalDensity.current.run {
+                copy(
+                    density = density * if (AppCompactLayout) 0.94f else 1f,
+                    fontScale = fontScale * AppFontScale
+                )
+            }
+        ) {
         Scaffold(
             containerColor = Page,
             topBar = {},
@@ -415,6 +456,7 @@ private fun FinanceApp() {
                     }
                 )
             }
+        }
         }
     }
 }
@@ -2359,6 +2401,7 @@ private fun AppearanceScreen() {
     var accent by remember { mutableStateOf(preferences.getString("appearance_accent", "Green") ?: "Green") }
     var layout by remember { mutableStateOf(preferences.getString("appearance_layout", "Comfortable") ?: "Comfortable") }
     var fontSize by remember { mutableStateOf(preferences.getString("appearance_font_size", "Medium") ?: "Medium") }
+    LaunchedEffect(theme, accent, layout, fontSize) { applyAppearance(theme, accent, layout, fontSize) }
     val accents = listOf("Green" to Color(0xFF07966F), "Blue" to Color(0xFF3478F6), "Purple" to Color(0xFF8B4DE8), "Orange" to Color(0xFFF59E0B), "Pink" to Color(0xFFEC4899))
     fun save(key: String, value: String) { preferences.edit().putString(key, value).apply() }
     LazyColumn(
@@ -2444,7 +2487,7 @@ private fun AppearanceScreen() {
                         Column(Modifier.weight(1f)) { Text("Food & Dining", color = Ink, fontWeight = FontWeight.SemiBold); Text("Example transaction", color = Muted, fontSize = 11.sp) }
                         Text("−₹450", color = ExpenseRed, fontWeight = FontWeight.Bold)
                     }
-                    Text("Theme, accent, layout and font choices are saved locally but are not yet applied across every screen. Currency selection is also saved locally and does not convert stored transaction amounts.", color = Muted, fontSize = 11.sp)
+                    Text("Theme, accent, layout and font size apply across the app and are saved on this device. Currency selection is saved locally; it does not convert stored transaction amounts.", color = Muted, fontSize = 11.sp)
                     Text("Currency", color = Ink, fontWeight = FontWeight.Bold)
                     listOf("INR (₹)", "USD ($)", "EUR (€)").forEach { value ->
                         Row(Modifier.fillMaxWidth().clickable { currency = value; save("appearance_currency", value) }, verticalAlignment = Alignment.CenterVertically) {
