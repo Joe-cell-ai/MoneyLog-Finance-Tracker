@@ -1275,166 +1275,144 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
 
 @Composable
 private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Loan) -> Unit, onLoanLongPress: (Loan) -> Unit) {
+    val canvas = Color(0xFFF4F7FC)
+    val navy = Color(0xFF0E1C36)
+    val slate = Color(0xFF7A869A)
+    val forest = Color(0xFF006644)
+    val green = Color(0xFF00A86B)
+    val greenTint = Color(0xFFE3F9ED)
+    val orange = Color(0xFFFF7A00)
+    val orangeTint = Color(0xFFFFF3E5)
+    val accents = listOf(Color(0xFFEF4444), Color(0xFFFF7A00), Color(0xFF6366F1), Color(0xFF00A86B), Color(0xFFB84DDB), Color(0xFF0891B2))
+    val tints = listOf(Color(0xFFFFE8EA), Color(0xFFFFF0DF), Color(0xFFEEEEFF), Color(0xFFE3F9ED), Color(0xFFF9E8FF), Color(0xFFE2F7FA))
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Page),
+        modifier = Modifier.fillMaxSize().background(canvas),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Loans & EMIs", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
-                    Text("Track balances, monthly payments and due dates", color = Muted, fontSize = 12.sp)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("Loan Tracker", fontSize = 26.sp, color = navy, fontWeight = FontWeight.Bold)
+                    Text("Your loans, clearly under control", color = slate, fontSize = 12.sp)
                 }
-                Box(Modifier.size(46.dp).clip(RoundedCornerShape(16.dp)).background(LavenderTint), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.AccountBalance, null, tint = Green, modifier = Modifier.size(24.dp))
+                Button(
+                    onClick = onAddLoan,
+                    colors = ButtonDefaults.buttonColors(containerColor = forest, contentColor = Color.White),
+                    shape = RoundedCornerShape(24.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Add Loan", fontWeight = FontWeight.Bold, maxLines = 1)
                 }
-            }
-            Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = onAddLoan,
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Default.Add, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Add a loan", fontWeight = FontWeight.Bold)
             }
         }
         item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Green),
-                shape = RoundedCornerShape(24.dp)
-            ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White.copy(alpha = .9f), modifier = Modifier.size(19.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("TOTAL OUTSTANDING", color = Color.White.copy(alpha = .82f), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("TOTAL OUTSTANDING", color = slate, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = .7.sp)
+                        Text(Money.format(loans.sumOf { it.balance }), color = navy, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                        Text("${loans.size} loans tracked", color = slate, fontSize = 11.sp)
                     }
-                    Text(Money.format(loans.sumOf { it.balance }), fontSize = 29.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                    HorizontalDivider(color = Color.White.copy(alpha = .22f))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Combined monthly EMIs", color = Color.White.copy(alpha = .78f), fontSize = 11.sp)
-                            Text(Money.format(loans.sumOf { it.emi }), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("Loans tracked", color = Color.White.copy(alpha = .78f), fontSize = 11.sp)
-                            Text("${loans.size}", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                        }
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("MONTHLY COMMITMENT", color = slate, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        Text(Money.format(loans.sumOf { it.emi }), color = forest, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
         if (loans.isEmpty()) item {
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(22.dp)) {
-                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.size(56.dp).clip(CircleShape).background(LavenderTint), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.AccountBalance, null, tint = Green, modifier = Modifier.size(28.dp))
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Box(Modifier.size(58.dp).clip(CircleShape).background(greenTint), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.AccountBalance, null, tint = forest, modifier = Modifier.size(28.dp))
                     }
-                    Text("No loans added yet", color = Ink, fontWeight = FontWeight.Bold)
-                    Text("Add your first loan to see its balance, monthly EMI and next due date here.", color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
-                    TextButton(onClick = onAddLoan) { Text("Add your first loan") }
+                    Text("No loans added yet", color = navy, fontWeight = FontWeight.Bold)
+                    Text("Add your first loan to track its EMI, repayment progress and outstanding balance.", color = slate, fontSize = 12.sp, textAlign = TextAlign.Center)
+                    Button(onClick = onAddLoan, colors = ButtonDefaults.buttonColors(containerColor = forest)) { Text("Add Loan") }
                 }
             }
         }
         if (loans.isNotEmpty()) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Your loans", fontSize = 17.sp, color = Ink, fontWeight = FontWeight.Bold)
+                    Text("Your loans", fontSize = 18.sp, color = navy, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.weight(1f))
-                    Text("${loans.size} tracked", fontSize = 11.sp, color = Muted)
+                    Text("${loans.size} total", fontSize = 11.sp, color = slate)
                 }
             }
         }
         items(loans) { loan ->
             val index = loans.indexOf(loan)
-            val premiumAccents = listOf(Color(0xFF5B55D6), Color(0xFF087F8C), Color(0xFFB45309), Color(0xFF9D3FB0), Color(0xFF2563B9), Color(0xFF16805D))
-            val premiumTints = listOf(Color(0xFFF0EEFF), Color(0xFFE7F8FA), Color(0xFFFFF3E5), Color(0xFFFBEFFC), Color(0xFFEAF2FF), Color(0xFFE8F8F0))
-            val iconTint = premiumAccents[index.mod(premiumAccents.size)]
-            val iconBackground = premiumTints[index.mod(premiumTints.size)]
+            val accent = accents[index.mod(accents.size)]
+            val tint = tints[index.mod(tints.size)]
+            val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
+            val dueDate = nextLoanDueDate(loan.due)
+            val isUpcoming = dueDate != null && !dueDate.isBefore(java.time.LocalDate.now()) &&
+                java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), dueDate) <= 7
             Card(
                 modifier = Modifier.fillMaxWidth().combinedClickable(
                     onClick = { onDetails(loan) },
                     onLongClick = { onLoanLongPress(loan) }
                 ),
-                colors = CardDefaults.cardColors(containerColor = premiumTints[index.mod(premiumTints.size)]),
-                shape = RoundedCornerShape(22.dp)
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(18.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(46.dp).clip(RoundedCornerShape(15.dp)).background(iconBackground), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.AccountBalance, null, tint = iconTint, modifier = Modifier.size(23.dp))
+                        Box(Modifier.size(48.dp).clip(CircleShape).background(tint), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.AccountBalance, null, tint = accent, modifier = Modifier.size(23.dp))
                         }
                         Spacer(Modifier.width(11.dp))
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(loan.lender, color = Ink, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
-                            Text("Loan account", color = Muted, fontSize = 11.sp)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(loan.lender, color = navy, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
+                            Text("${Money.format(loan.originalPrincipal)}  •  ${if (loan.annualRate > 0.0) "${loan.annualRate}%" else "Rate not set"}", color = slate, fontSize = 11.sp, maxLines = 1)
                         }
-                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(Money.format(loan.balance), color = Ink, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            Text("outstanding", color = Muted, fontSize = 10.sp)
+                        IconButton(onClick = { onLoanLongPress(loan) }, modifier = Modifier.size(34.dp)) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Loan actions", tint = slate)
                         }
                     }
-                    HorizontalDivider(color = Color(0xFFECECF4))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("MONTHLY EMI", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = .7.sp)
-                            Text(Money.format(loan.emi), color = Ink, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(Money.format(loan.emi), color = navy, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text("/month", color = slate, fontSize = 11.sp)
                         }
-                        Box(Modifier.clip(RoundedCornerShape(12.dp)).background(IncomeTint).padding(horizontal = 10.dp, vertical = 7.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.EventRepeat, null, tint = IncomeGreen, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(5.dp))
-                                Text("Monthly", color = IncomeGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        val statusColor = if (isUpcoming) orange else green
+                        val statusTint = if (isUpcoming) orangeTint else greenTint
+                        Box(Modifier.clip(RoundedCornerShape(50)).background(statusTint).padding(horizontal = 10.dp, vertical = 7.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Icon(if (isUpcoming) Icons.Default.Schedule else Icons.Default.CheckCircle, null, tint = statusColor, modifier = Modifier.size(14.dp))
+                                Text(if (isUpcoming) "Upcoming" else "On Track", color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
-                    }
-                    Row(Modifier.fillMaxWidth().background(Page, RoundedCornerShape(14.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("NEXT DUE", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = .5.sp)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.CalendarMonth, null, tint = iconTint, modifier = Modifier.size(15.dp))
-                                Spacer(Modifier.width(5.dp))
-                                Text(loan.due, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("ANNUAL RATE", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = .5.sp)
-                            Text(if (loan.annualRate > 0.0) "${loan.annualRate}% p.a." else "Not entered", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                    val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Principal repaid · estimate", color = Muted, fontSize = 11.sp)
-                        Spacer(Modifier.weight(1f))
-                        Text("${(progress * 100).toInt()}%", color = iconTint, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                     LinearProgressIndicator(
                         progress = { progress },
-                        modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(8.dp)),
-                        color = iconTint,
-                        trackColor = iconBackground
+                        modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50)),
+                        color = Color(0xFF00C853),
+                        trackColor = Color(0xFFE2E8F0)
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Info, null, tint = Muted, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text("Payments recorded: ${loan.paymentsMade}. Progress is estimated from entered balances, not lender-verified.", color = Muted, fontSize = 10.sp)
+                        Text("${(progress * 100).toInt()}% paid", color = forest, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.weight(1f))
+                        Text("${Money.format(loan.balance)} left", color = navy, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                        Text("View loan details", color = Green, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(4.dp))
-                        Icon(Icons.Default.ChevronRight, null, tint = Green, modifier = Modifier.size(18.dp))
+                    HorizontalDivider(color = Color(0xFFE9EEF5))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CalendarMonth, null, tint = accent, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Next due · ${loan.due}", color = slate, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                        Text("View details", color = forest, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.ChevronRight, null, tint = forest, modifier = Modifier.size(17.dp))
                     }
                 }
             }
         }
         if (loans.isNotEmpty()) item {
-            Text("Tap a loan to open its details. Long-press for loan actions.", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(vertical = 2.dp))
+            Text("Tap a card to view details. Use the three-dot menu or long-press for loan actions. Progress is estimated from saved balances.", color = slate, fontSize = 10.sp, modifier = Modifier.padding(vertical = 2.dp))
         }
     }
 }
