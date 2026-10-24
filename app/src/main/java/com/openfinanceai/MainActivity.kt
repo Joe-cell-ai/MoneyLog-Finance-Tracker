@@ -302,13 +302,12 @@ private fun FinanceApp() {
             large = RoundedCornerShape(28.dp)
         )
     ) {
+        val baseDensity = androidx.compose.ui.platform.LocalDensity.current
         CompositionLocalProvider(
-            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.platform.LocalDensity.current.run {
-                copy(
-                    density = density * if (AppCompactLayout) 0.94f else 1f,
-                    fontScale = fontScale * AppFontScale
-                )
-            }
+            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
+                density = baseDensity.density * if (AppCompactLayout) 0.94f else 1f,
+                fontScale = baseDensity.fontScale * AppFontScale
+            )
         ) {
         Scaffold(
             containerColor = Page,
