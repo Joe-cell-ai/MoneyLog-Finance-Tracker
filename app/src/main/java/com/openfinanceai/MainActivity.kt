@@ -2444,7 +2444,7 @@ private fun AppearanceScreen() {
                         Column(Modifier.weight(1f)) { Text("Food & Dining", color = Ink, fontWeight = FontWeight.SemiBold); Text("Example transaction", color = Muted, fontSize = 11.sp) }
                         Text("−₹450", color = ExpenseRed, fontWeight = FontWeight.Bold)
                     }
-                    Text("Preferences are saved on this device. Theme, accent, layout and font choices are currently preview preferences; they are not yet applied across every app screen. Currency selection is saved but does not convert stored transaction amounts.", color = Muted, fontSize = 11.sp)
+                    Text("Theme, accent, layout and font choices are saved locally but are not yet applied across every screen. Currency selection is also saved locally and does not convert stored transaction amounts.", color = Muted, fontSize = 11.sp)
                     Text("Currency", color = Ink, fontWeight = FontWeight.Bold)
                     listOf("INR (₹)", "USD ($)", "EUR (€)").forEach { value ->
                         Row(Modifier.fillMaxWidth().clickable { currency = value; save("appearance_currency", value) }, verticalAlignment = Alignment.CenterVertically) {
