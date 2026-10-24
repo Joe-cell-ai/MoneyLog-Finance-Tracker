@@ -1,6 +1,6 @@
 # MoneyLog: Finance Tracker
 
-**MoneyLog: Finance Tracker** is a privacy-first Android personal finance app built with Kotlin and Jetpack Compose. Track income, expenses, budgets, loans, EMIs, and recurring bills with dashboards, reports, financial insights, secure backups, CSV imports, reminders, and an optional finance coach.
+**MoneyLog: Finance Tracker** is an Android personal finance app built with Kotlin and Jetpack Compose. Track income, expenses, budgets, loans, EMIs, and recurring bills with dashboards, reports, financial insights, backups, CSV imports, and reminders.
 
 ## Features
 
@@ -10,7 +10,7 @@
 - Transaction reminders and supported notification-based payment capture
 - CSV import and local transaction storage
 - Credit-health information and finance insights
-- Privacy-conscious design and secure-backend setup guidance
+- Privacy-conscious design
 
 ## Build and test
 
@@ -18,16 +18,15 @@ GitHub Actions builds the Android debug APK on pushes to `main` or `master`, and
 
 ## Live data and financial safety
 
-- Android network permissions do **not** mean a live credit bureau or AI provider is connected.
-- Credit scores entered by the user are labelled user-reported and are not represented as verified TransUnion CIBIL data.
-- Until an authorized bureau integration is configured, the credit screen must clearly report that live bureau data is not connected.
-- The finance coach must not be described as a live AI service or a source of current lender offers unless a real provider integration has been deployed and tested.
-- Live results should identify their source and last successful update time, handle failed or stale requests visibly, and use a trusted backend for provider credentials.
-- Obtain explicit user consent before sending personal financial data to an AI provider. Never invent credit scores, bureau results, lender rates, or live offers.
+- MoneyLog does not currently include a deployed cloud backend or connected remote AI finance coach.
+- Credit scores entered by the user must be labelled user-reported, not represented as verified TransUnion CIBIL data.
+- The credit screen must clearly indicate that live bureau data is not connected unless an authorized integration is added and tested.
+- Do not present lender rates, live offers, or AI-generated responses as live data unless a real provider integration is intentionally added and verified.
+- Never invent credit scores, bureau results, lender rates, or live offers.
 
 ## Security and privacy
 
-Review [Secure backend setup](docs/SECURE_BACKEND_SETUP.md) before configuring any provider integration. Never commit API keys, signing keys, passwords, service-account files, or private configuration.
+Never commit API keys, signing keys, passwords, service-account files, or private configuration. Keep financial data handling transparent and obtain explicit consent before adding any future external provider integration.
 
 ## Project status
 
