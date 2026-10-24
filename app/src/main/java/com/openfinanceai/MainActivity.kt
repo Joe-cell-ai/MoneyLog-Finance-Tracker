@@ -2661,7 +2661,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                 rows.forEach { (date, amount) -> arr.put(JSONObject().put("date", date).put("amount", amount)) }
                 schedulePrefs.edit().putString("bank_schedule_${loan.lender}", arr.toString()).apply()
                 importedSchedule = rows
-                pdfMessage = "EMI schedule submitted successfully. Saved ${rows.size} dated installments for review."
+                pdfMessage = "Extracted ${rows.size} dated installments for review. Source authenticity is not verified; confirm with your lender."
             }.onFailure { error ->
                 pdfMessage = error.message ?: "Could not validate this PDF. No schedule was saved."
             }
@@ -2770,7 +2770,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("Compare a bank-statement installment", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                            Text("Or upload your lender's EMI schedule PDF. Only readable PDFs with a recognizable schedule and dated installment rows are accepted.", color = Muted, fontSize = 11.sp)
+                            Text("Or upload your lender's EMI schedule PDF. MoneyLog checks readable text and installment-row patterns only; it cannot authenticate the PDF or confirm that a bank/lender issued it. Verify the document through your lender before relying on it.", color = Muted, fontSize = 11.sp)
                             OutlinedButton(
                                 onClick = { pdfPicker.launch(arrayOf("application/pdf")) },
                                 enabled = !pdfBusy,
