@@ -2998,7 +2998,8 @@ private fun AddTransactionDialog(
     var title by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     val context = LocalContext.current
-    val defaultCategories = listOf("Food & groceries", "Housing", "Transport", "Bills & utilities", "Health", "Shopping", "Entertainment", "Education", "Loan repayment", "Salary", "Other income")
+    // Read the same on-device category list used by Settings > Categories.
+    // The refresh token changes whenever categories are added, renamed, or deleted.
     val savedCategories = remember(context, categoryRefreshToken) {
         runCatching {
             val raw = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -3008,12 +3009,26 @@ private fun AddTransactionDialog(
                 (0 until array.length()).map { array.getString(it).trim() }
                     .filter { it.isNotBlank() }
                     .distinctBy { it.lowercase(Locale.ROOT) }
+                    .ifEmpty { DEFAULT_MONEY_CATEGORIES }
             }
         }.getOrDefault(DEFAULT_MONEY_CATEGORIES)
     }
+    // Category Management has no income/expense type field, so show every saved
+    // category for either transaction type instead of hiding user-created entries.
+    val transactionCategoryOptions = (savedCategories + listOf("Salary", "Other income"))
+        .distinctBy { it.lowercase(Locale.ROOT) }
     var isIncome by remember { mutableStateOf(initialIncome) }
     var category by remember {
-        mutableStateOf(savedCategories.firstOrNull { it == "Food" } ?: savedCategories.firstOrNull() ?: "Other")
+        mutableStateOf(
+            savedCategories.firstOrNull {
+                it.equals(if (initialIncome) "Income" else "Food", ignoreCase = true)
+            } ?: savedCategories.firstOrNull() ?: if (initialIncome) "Salary" else "Other"
+        )
+    }
+    LaunchedEffect(savedCategories, transactionCategoryOptions) {
+        if (category !in transactionCategoryOptions) {
+            category = savedCategories.firstOrNull() ?: "Other"
+        }
     }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online")
@@ -3058,8 +3073,32 @@ private fun AddTransactionDialog(
                 ) {
                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = !isIncome, onClick = { isIncome = false; if (category in listOf("Salary", "Other income", "Income")) category = savedCategories.firstOrNull { it !in listOf("Salary", "Other income", "Income") } ?: "Other" }, label = { Text("Expense", fontWeight = FontWeight.SemiBold) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ExpenseTint, selectedLabelColor = ExpenseRed), modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp))
-                    FilterChip(selected = isIncome, onClick = { isIncome = true; if (category !in listOf("Salary", "Other income", "Income")) category = "Salary" }, label = { Text("Income", fontWeight = FontWeight.SemiBold) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = IncomeTint, selectedLabelColor = IncomeGreen), modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp))
+                    FilterChip(
+                        selected = !isIncome,
+                        onClick = {
+                            isIncome = false
+                            if (category.equals("Salary", true) || category.equals("Other income", true) || category.equals("Income", true)) {
+                                category = savedCategories.firstOrNull { !it.equals("Salary", true) && !it.equals("Other income", true) && !it.equals("Income", true) } ?: "Other"
+                            }
+                        },
+                        label = { Text("Expense", fontWeight = FontWeight.SemiBold) },
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ExpenseTint, selectedLabelColor = ExpenseRed),
+                        modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)
+                    )
+                    FilterChip(
+                        selected = isIncome,
+                        onClick = {
+                            isIncome = true
+                            if (!category.equals("Salary", true) && !category.equals("Other income", true) && !category.equals("Income", true)) {
+                                category = savedCategories.firstOrNull { it.equals("Income", true) }
+                                    ?: savedCategories.firstOrNull { it.equals("Salary", true) }
+                                    ?: "Salary"
+                            }
+                        },
+                        label = { Text("Income", fontWeight = FontWeight.SemiBold) },
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = IncomeTint, selectedLabelColor = IncomeGreen),
+                        modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)
+                    )
                 }
                 OutlinedTextField(title, { title = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                 OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp), textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
@@ -3080,7 +3119,7 @@ private fun AddTransactionDialog(
                         expanded = categoryMenuExpanded,
                         onDismissRequest = { categoryMenuExpanded = false }
                     ) {
-                        (if (isIncome) listOf("Salary", "Other income") else savedCategories.filterNot { it in listOf("Salary", "Other income", "Income") }).distinct().forEach { option ->
+                        transactionCategoryOptions.forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(option) },
                                 onClick = { category = option; categoryMenuExpanded = false }
