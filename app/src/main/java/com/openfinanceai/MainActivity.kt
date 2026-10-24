@@ -330,7 +330,7 @@ private fun FinanceApp() {
                         importedPreview = emptyList()
                     })
                     "Appearance" -> AppearanceScreen()
-                    "Privacy & Security" -> PrivacySecurityScreen { tab = "Privacy & Security" }
+                    "Privacy & Security" -> PrivacySecurityScreen { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) }
                     "Notifications" -> NotificationsSettingsScreen { tab = "Notifications" }
                     "About" -> AboutSettingsScreen()
                     "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: EmptyLoansScreen { tab = "Add loan" }
@@ -1936,7 +1936,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
         Triple("Budgets", "Set monthly spending limits", Icons.Default.TrackChanges),
         Triple("Backup & Export", "Save, restore and export records", Icons.Default.Security),
         Triple("Privacy & Security", "Data protection and permissions", Icons.Default.Shield),
-        Triple("Notifications", "Reminders and payment capture", Icons.Default.Notifications),
+        Triple("Notifications", "Manage app alerts and reminder preferences", Icons.Default.Notifications),
         Triple("Categories", "Manage transaction categories", Icons.Default.Category),
         Triple("Tag Management", "Manage transaction tags", Icons.Default.LocalOffer),
         Triple("About", "App version and information", Icons.Default.Info)
@@ -2069,7 +2069,7 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
                         Column(Modifier.weight(1f)) { Text("Notification access", color = Ink, fontWeight = FontWeight.SemiBold); Text("Required only for optional payment-alert capture", color = Muted, fontSize = 11.sp) }
                         Icon(Icons.Default.ChevronRight, null, tint = Muted)
                     }
-                    OutlinedButton(onClick = onOpenPaymentSettings, modifier = Modifier.fillMaxWidth()) { Text("Manage payment capture permissions") }
+                    OutlinedButton(onClick = onOpenPaymentSettings, modifier = Modifier.fillMaxWidth()) { Text( "Open Android notification settings") }
                 }
             }
         }
@@ -2083,8 +2083,7 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
 private fun NotificationsSettingsScreen(onOpenPaymentSettings: () -> Unit) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
-    var captureInfo by remember { mutableStateOf(preferences.getBoolean("notification_capture_consent", false)) }
-    var emiReminder by remember { mutableStateOf(preferences.getBoolean("settings_emi_reminders", true)) }
+        var emiReminder by remember { mutableStateOf(preferences.getBoolean("settings_emi_reminders", true)) }
     var budgetAlerts by remember { mutableStateOf(preferences.getBoolean("settings_budget_alerts", true)) }
     var monthlySummary by remember { mutableStateOf(preferences.getBoolean("settings_monthly_summary", false)) }
     fun persist(key: String, value: Boolean) { preferences.edit().putBoolean(key, value).apply() }
@@ -2094,14 +2093,14 @@ private fun NotificationsSettingsScreen(onOpenPaymentSettings: () -> Unit) {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(19.dp)) {
                 Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Transaction capture", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("Optional payment-alert capture needs your consent and Android Notification access.", color = Muted, fontSize = 12.sp)
+                    Text("MoneyLog does not read payment alerts or connect to banks. Use Android settings to control whether this app may show notifications.", color = Muted, fontSize = 12.sp)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.NotificationsActive, null, tint = Green)
                         Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) { Text("Consent to payment capture", color = Ink, fontWeight = FontWeight.Medium); Text(if (captureInfo) "Consent is enabled" else "Consent is off", color = Muted, fontSize = 11.sp) }
-                        Switch(checked = captureInfo, onCheckedChange = { value -> captureInfo = value; persist("notification_capture_consent", value) })
+                        Column(Modifier.weight(1f)) { Text("Android app notifications", color = Ink, fontWeight = FontWeight.Medium); Text("Manage this permission in Android settings", color = Muted, fontSize = 11.sp) }
+                        TextButton(onClick = onOpenPaymentSettings) { Text("Open Android settings") }
                     }
-                    Button(onClick = onOpenPaymentSettings, modifier = Modifier.fillMaxWidth()) { Text("Open payment capture settings") }
+                    Button(onClick = onOpenPaymentSettings, modifier = Modifier.fillMaxWidth()) { Text("Open Android notification settings") }
                 }
             }
         }
@@ -2445,7 +2444,7 @@ private fun AppearanceScreen() {
                         Column(Modifier.weight(1f)) { Text("Food & Dining", color = Ink, fontWeight = FontWeight.SemiBold); Text("Example transaction", color = Muted, fontSize = 11.sp) }
                         Text("−₹450", color = ExpenseRed, fontWeight = FontWeight.Bold)
                     }
-                    Text("Preferences are saved on this device. Theme, accent, layout and font choices are currently preview preferences; they are not yet applied across every app screen. Currency selection is saved but does not convert stored transaction amounts.", color = Muted, fontSize = 11.sp)
+                    Text("Theme, accent, layout and font choices are saved locally but are not yet applied across every screen. Currency selection is also saved locally and does not convert stored transaction amounts.", color = Muted, fontSize = 11.sp)
                     Text("Currency", color = Ink, fontWeight = FontWeight.Bold)
                     listOf("INR (₹)", "USD ($)", "EUR (€)").forEach { value ->
                         Row(Modifier.fillMaxWidth().clickable { currency = value; save("appearance_currency", value) }, verticalAlignment = Alignment.CenterVertically) {
