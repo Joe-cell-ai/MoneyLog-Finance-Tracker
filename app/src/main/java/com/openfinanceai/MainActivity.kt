@@ -342,7 +342,7 @@ private fun FinanceApp() {
                     "Credit health" -> CreditHealthScreen()
                     "Categories" -> CategoriesScreen(onCategoriesChanged = { categoryRefreshToken++ })
                     "Tag Management" -> TagManagementScreen()
-                    "Backup & security" -> BackupSecurityScreen(
+                    "Backup & Export" -> BackupSecurityScreen(
                         onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
                         onRestoreBackup = { backupRestoreLauncher.launch(arrayOf("application/json", "text/*")) },
                         onExportCsv = { csvExportLauncher.launch("open-finance-transactions.csv") },
@@ -1871,12 +1871,12 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
     val prefs = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
     val mainItems = listOf(
         Triple("Appearance", "Theme, colors and layout", Icons.Default.Palette),
-        Triple("Categories", "Manage your categories", Icons.Default.Category),
-        Triple("Tag Management", "Organize transaction tags", Icons.Default.LocalOffer),
-        Triple("Budgets", "Set spending limits", Icons.Default.TrackChanges),
-        Triple("Backup & security", "Backup, restore and protect data", Icons.Default.Security),
-        Triple("Privacy & Security", "Permissions and local data", Icons.Default.Shield),
-        Triple("Notifications", "Payment capture and reminders", Icons.Default.Notifications),
+        Triple("Budgets", "Set monthly spending limits", Icons.Default.TrackChanges),
+        Triple("Backup & Export", "Save, restore and export records", Icons.Default.Security),
+        Triple("Privacy & Security", "Data protection and permissions", Icons.Default.Shield),
+        Triple("Notifications", "Reminders and payment capture", Icons.Default.Notifications),
+        Triple("Categories", "Manage transaction categories", Icons.Default.Category),
+        Triple("Tag Management", "Manage transaction tags", Icons.Default.LocalOffer),
         Triple("About", "App version and information", Icons.Default.Info)
     )
     LazyColumn(
@@ -1917,7 +1917,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
                             "Categories" -> Blue
                             "Tag Management" -> IncomeGreen
                             "Budgets" -> Orange
-                            "Backup & security" -> Blue
+                            "Backup & Export" -> Blue
                             "Privacy & Security" -> Purple
                             "Notifications" -> ExpenseRed
                             else -> Muted
@@ -1927,7 +1927,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
                             "Categories" -> SkyTint
                             "Tag Management" -> IncomeTint
                             "Budgets" -> PeachTint
-                            "Backup & security" -> SkyTint
+                            "Backup & Export" -> SkyTint
                             "Privacy & Security" -> LavenderTint
                             "Notifications" -> ExpenseTint
                             else -> Page
