@@ -811,6 +811,7 @@ private fun ReportsScreen(
     var showAllCategories by remember { mutableStateOf(false) }
     var showMonthMenu by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var categoryDetailTab by remember { mutableIntStateOf(0) }
     val categories = transactions.filterNot { it.income }.groupBy { it.category }
         .map { it.key to it.value.sumOf { transaction -> transaction.amount } }.sortedByDescending { it.second }
     val totalSpend = categories.sumOf { it.second }
@@ -1102,26 +1103,125 @@ private fun ReportsScreen(
         val categoryTransactions = transactions.filter { !it.income && it.category == category }
         val categoryTotal = categoryTransactions.sumOf { it.amount }
         val categoryShare = if (totalSpend > 0L) categoryTotal * 100 / totalSpend else 0L
+        val averageSpend = if (categoryTransactions.isNotEmpty()) categoryTotal / categoryTransactions.size else 0L
+        val topPlaces = categoryTransactions.groupBy { it.title.ifBlank { "Other" } }
+            .map { it.key to it.value.sumOf { transaction -> transaction.amount } }
+            .sortedByDescending { it.second }.take(4)
         AlertDialog(
             onDismissRequest = { selectedCategory = null },
             title = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(category, color = Ink, fontWeight = FontWeight.Bold)
-                    Text("${Money.format(categoryTotal)} · ${categoryShare}% of expenses", color = Muted, fontSize = 13.sp)
-                }
-            },
-            text = {
-                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (categoryTransactions.isEmpty()) {
-                        Text("No transactions in this category for the selected month.", color = Muted, fontSize = 12.sp)
-                    } else {
-                        categoryTransactions.take(8).forEach { transaction ->
-                            TransactionRow(transaction, onLongPress = { onOpen("Transactions") })
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(Modifier.size(44.dp).background(categoryColor(category), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                            Icon(
+                                if (category.contains("food", true) || category.contains("dining", true) || category.contains("grocer", true)) Icons.Default.Restaurant
+                                else if (category.contains("transport", true) || category.contains("travel", true)) Icons.Default.DirectionsCar
+                                else Icons.Default.Category,
+                                contentDescription = null, tint = Color.White
+                            )
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(category, color = Ink, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                            Text("${Money.format(categoryTotal)}", color = Ink, fontWeight = FontWeight.Bold, fontSize = 23.sp)
+                            Text("${categoryShare}% of total expenses", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F6FC)), shape = RoundedCornerShape(12.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                                Text("Transactions", color = Muted, fontSize = 11.sp)
+                                Text("${categoryTransactions.size}", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                            }
+                        }
+                        Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F6FC)), shape = RoundedCornerShape(12.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                                Text("Avg. per transaction", color = Muted, fontSize = 11.sp)
+                                Text(Money.format(averageSpend), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                            }
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { selectedCategory = null }) { Text("Done") } }
+            text = {
+                Column(Modifier.heightIn(max = 420.dp)) {
+                    TabRow(
+                        selectedTabIndex = categoryDetailTab,
+                        containerColor = Color(0xFFEAF2F8),
+                        contentColor = Color(0xFF087F68),
+                        indicator = {}
+                    ) {
+                        Tab(selected = categoryDetailTab == 0, onClick = { categoryDetailTab = 0 }, text = { Text("Transactions", fontSize = 12.sp) })
+                        Tab(selected = categoryDetailTab == 1, onClick = { categoryDetailTab = 1 }, text = { Text("Insights", fontSize = 12.sp) })
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    if (categoryDetailTab == 0) {
+                        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (categoryTransactions.isEmpty()) {
+                                Text("No transactions in this category for the selected month.", color = Muted, fontSize = 12.sp)
+                            } else {
+                                categoryTransactions.take(8).forEach { transaction ->
+                                    TransactionRow(transaction, onLongPress = { onOpen("Transactions") })
+                                }
+                                if (categoryTransactions.size > 8) {
+                                    Text("Showing 8 of ${categoryTransactions.size} transactions", color = Muted, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    } else {
+                        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE9F8F3)), shape = RoundedCornerShape(14.dp)) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Icon(Icons.Default.Lightbulb, contentDescription = null, tint = Color(0xFF07866D))
+                                        Text("Spending insights", color = Ink, fontWeight = FontWeight.Bold)
+                                    }
+                                    Text("You spent ${categoryShare}% of your recorded expenses in $category.", color = Ink, fontSize = 12.sp)
+                                    Text("${categoryTransactions.size} transactions · average ${Money.format(averageSpend)} each", color = Muted, fontSize = 12.sp)
+                                }
+                            }
+                            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Top spending places", color = Ink, fontWeight = FontWeight.Bold)
+                                    if (topPlaces.isEmpty()) {
+                                        Text("Add transactions to see your top spending places.", color = Muted, fontSize = 12.sp)
+                                    } else {
+                                        topPlaces.forEach { place ->
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(place.first, Modifier.weight(1f), color = Ink, fontSize = 12.sp, maxLines = 1)
+                                                    Text(Money.format(place.second), color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                                }
+                                                Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFFEAF0F6))) {
+                                                    Box(Modifier.fillMaxWidth(if (categoryTotal > 0L) place.second.toFloat() / categoryTotal else 0f).fillMaxHeight().clip(RoundedCornerShape(6.dp)).background(categoryColor(category)))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF0EEFF)), shape = RoundedCornerShape(14.dp)) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF6558D3))
+                                        Text("Suggestions", color = Ink, fontWeight = FontWeight.Bold)
+                                    }
+                                    Text(
+                                        if (categoryTransactions.size >= 8) "Review your most frequent purchases and set a monthly limit for $category."
+                                        else "Keep recording purchases in $category to build a more useful spending pattern.",
+                                        color = Ink, fontSize = 12.sp
+                                    )
+                                    Text(
+                                        if (averageSpend > 0L) "Your average transaction is ${Money.format(averageSpend)}. Compare similar purchases and look for lower-cost alternatives."
+                                        else "Once transactions are recorded, MoneyLog can suggest practical ways to save.",
+                                        color = Ink, fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { selectedCategory = null; categoryDetailTab = 0 }) { Text("Done") } }
         )
     }
     if (showNotifications) {
