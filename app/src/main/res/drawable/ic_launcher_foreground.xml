@@ -3,30 +3,28 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Rounded wallet body -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M24,31 C24,25 29,21 35,21 L75,21 C80,21 84,25 84,30 L84,35 L30,35 C25,35 21,39 21,44 L21,73 C21,79 26,84 32,84 L77,84 C83,84 87,80 87,74 L87,45 C87,41 84,38 80,38 L31,38 C27,38 24,41 24,45 Z" />
-    <path
-        android:fillColor="#FF6558D3"
-        android:pathData="M25,43 L81,43 C85,43 88,46 88,50 L88,69 C88,73 85,76 81,76 L25,76 C21,76 18,73 18,69 L18,50 C18,46 21,43 25,43 Z" />
-    <path
-        android:fillColor="#FF8D82F4"
-        android:pathData="M24,48 L81,48 L81,70 L24,70 Z" />
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M72,53 L88,53 L88,66 L72,66 C68,66 65,63 65,59.5 C65,56 68,53 72,53 Z" />
-    <path
-        android:fillColor="#FFFFC857"
-        android:pathData="M74,57 A3,3 0,1 0,74 63 A3,3 0,1 0,74 57 Z" />
-    <!-- Rising chart bars and trend line -->
-    <path
-        android:fillColor="#FF1FAE83"
-        android:pathData="M30,62 L30,54 L37,54 L37,62 Z M41,62 L41,47 L48,47 L48,62 Z M52,62 L52,39 L59,39 L59,62 Z" />
-    <path
-        android:fillColor="#FFFFC857"
-        android:pathData="M29,49 L42,42 L51,45 L65,30 L69,34 L53,50 L43,47 L31,54 Z" />
-    <path
-        android:fillColor="#FFFFC857"
-        android:pathData="M61,29 L70,28 L69,37 Z" />
+    <!-- White rounded-square rim stays inside Android's adaptive-icon safe area. -->
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M34,16 L74,16 C84,16 92,24 92,34 L92,74 C92,84 84,92 74,92 L34,92 C24,92 16,84 16,74 L16,34 C16,24 24,16 34,16 Z"/>
+    <!-- Blue app tile; the launcher supplies the outer circular mask. -->
+    <path android:fillColor="#FF176DE5"
+        android:pathData="M35,21 L73,21 C81,21 87,27 87,35 L87,73 C87,81 81,87 73,87 L35,87 C27,87 21,81 21,73 L21,35 C21,27 27,21 35,21 Z"/>
+    <path android:fillColor="#FF1839D5"
+        android:pathData="M55,21 L73,21 C81,21 87,27 87,35 L87,73 C87,81 81,87 73,87 L55,87 Z"/>
+    <!-- Growth bars -->
+    <path android:fillColor="#FF45E7C0"
+        android:pathData="M31,57 L39,57 L39,67 L31,67 Z M43,48 L51,48 L51,67 L43,67 Z M55,39 L63,39 L63,67 L55,67 Z M67,30 L75,30 L75,67 L67,67 Z"/>
+    <!-- Rising trend line -->
+    <path android:fillColor="#FF54F0C4"
+        android:pathData="M29,55 L40,43 L49,48 L61,36 L65,40 L50,55 L41,50 L32,60 Z"/>
+    <!-- White wallet body -->
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M29,56 L48,61 L70,54 C74,53 78,56 78,60 L78,73 C78,78 74,81 69,81 L34,81 C29,81 26,77 26,72 L26,61 C26,58 27,57 29,56 Z"/>
+    <!-- Wallet flap and blue snap -->
+    <path android:fillColor="#FFEAF5FF"
+        android:pathData="M48,61 L75,55 L75,65 L48,70 Z"/>
+    <path android:fillColor="#FF2A8FEA"
+        android:pathData="M66,64 L82,64 L82,75 L66,75 C62,75 59,72 59,69.5 C59,66 62,64 66,64 Z"/>
+    <path android:fillColor="#FF75D9FF"
+        android:pathData="M68,67 A2.5,2.5 0,1 0,68 72 A2.5,2.5 0,1 0,68 67 Z"/>
 </vector>
