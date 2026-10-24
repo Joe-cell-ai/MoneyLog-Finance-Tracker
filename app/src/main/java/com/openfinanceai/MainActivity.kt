@@ -2579,7 +2579,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                     if (document.numberOfPages !in 1..300) error("The PDF has an invalid or unsupported page count.")
                     PDFTextStripper().getText(document)
                 }
-                val normalized = extractedText.replace('\\u00A0', ' ').replace(Regex("[ \\t]+"), " ")
+                val normalized = extractedText.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ")
                 val looksLikeSchedule = Regex("(?i)\\b(emi|installment|instalment|repayment|due date|principal|outstanding)\\b").containsMatchIn(normalized)
                 if (!looksLikeSchedule) error("This PDF does not look like an EMI repayment schedule. No data was saved.")
                 val datePattern = Regex("(?i)(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|\\d{1,2}[- ](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[- ,]+\\d{2,4}|\\d{4}-\\d{2}-\\d{2})")
