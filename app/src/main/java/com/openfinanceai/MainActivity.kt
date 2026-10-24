@@ -365,16 +365,26 @@ private fun FinanceApp() {
                 }
             }
             transactionForActions?.let { transaction ->
-                AlertDialog(
-                    onDismissRequest = { transactionForActions = null },
-                    title = { Text(transaction.title) },
-                    text = { Text("What would you like to do with this transaction?") },
-                    confirmButton = { TextButton(onClick = { transactionToEdit = transaction; transactionForActions = null }) { Text("Edit") } },
-                    dismissButton = { Row { TextButton(onClick = { transactionTips = transaction; transactionForActions = null }) { Text("Tips") }; TextButton(onClick = {
+                TransactionDetailsDialog(
+                    transaction = transaction,
+                    allTransactions = transactions,
+                    onDismiss = { transactionForActions = null },
+                    onEdit = { transactionToEdit = transaction; transactionForActions = null },
+                    onDelete = {
                         val index = transactions.indexOfFirst { it === transaction }
-                        if (index >= 0) { transactions = transactions.toMutableList().also { it.removeAt(index) }; saveTransactions(context, transactions) }
+                        if (index >= 0) {
+                            transactions = transactions.toMutableList().also { it.removeAt(index) }
+                            saveTransactions(context, transactions)
+                        }
                         transactionForActions = null
-                    }) { Text("Delete", color = ExpenseRed) }; TextButton(onClick = { transactionForActions = null }) { Text("Cancel") } } }
+                    },
+                    onDuplicate = {
+                        val copy = transaction.copy(title = if (transaction.title.endsWith(" (copy)")) transaction.title else "${transaction.title} (copy)")
+                        transactions = listOf(copy) + transactions
+                        saveTransactions(context, transactions)
+                        transactionForActions = null
+                    },
+                    onTips = { transactionTips = transaction; transactionForActions = null }
                 )
             }
             transactionTips?.let { transaction ->
@@ -2292,6 +2302,130 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long) -> Un
     }
 }
 @OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TransactionDetailsDialog(
+    transaction: Transaction,
+    allTransactions: List<Transaction>,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onDuplicate: () -> Unit,
+    onTips: () -> Unit
+) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    val categoryTotal = allTransactions.filter { it.category.equals(transaction.category, ignoreCase = true) && it.income == transaction.income }.sumOf { it.amount }
+    val currency = Money
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.92f),
+            shape = RoundedCornerShape(30.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFCFCFF)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(13.dp)
+            ) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Box(Modifier.width(54.dp).height(5.dp).clip(RoundedCornerShape(50)).background(Color(0xFFC9CDE0)))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close transaction details", tint = Ink) }
+                        Text("TRANSACTION DETAILS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                        IconButton(onClick = onTips) { Icon(Icons.Default.Lightbulb, contentDescription = "Transaction tips", tint = Purple) }
+                    }
+                }
+                Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Box(Modifier.size(68.dp).clip(CircleShape).background(categoryTint(transaction.category)), contentAlignment = Alignment.Center) {
+                            Icon(if (transaction.income) Icons.Default.TrendingUp else Icons.Default.Restaurant, contentDescription = null, tint = categoryColor(transaction.category), modifier = Modifier.size(32.dp))
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(transaction.category, color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            Text(transaction.title, color = Muted, fontSize = 14.sp)
+                            Text((if (transaction.income) "+" else "−") + currency.format(transaction.amount), color = if (transaction.income) IncomeGreen else Ink, fontSize = 29.sp, fontWeight = FontWeight.Bold)
+                            Surface(color = if (transaction.income) IncomeTint else ExpenseTint, shape = RoundedCornerShape(50)) {
+                                Text(if (transaction.income) "  INCOME  " else "  EXPENSE  ", modifier = Modifier.padding(horizontal = 5.dp, vertical = 4.dp), color = if (transaction.income) IncomeGreen else ExpenseRed, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFEEF4FC)), shape = RoundedCornerShape(18.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(Modifier.size(48.dp).clip(CircleShape).background(IncomeGreen), contentAlignment = Alignment.Center) { Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White) }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text("Total in this category", color = Muted, fontSize = 12.sp)
+                                Text(currency.format(categoryTotal), color = Ink, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Icon(Icons.Default.ChevronRight, null, tint = Muted)
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        DetailQuickAction("Edit", Icons.Default.Edit, LavenderTint, Purple, onEdit)
+                        DetailQuickAction("Delete", Icons.Default.Delete, ExpenseTint, ExpenseRed) { showDeleteConfirm = true }
+                        DetailQuickAction("Duplicate", Icons.Default.ContentCopy, SkyTint, Blue, onDuplicate)
+                        DetailQuickAction("Add Note", Icons.Default.Notes, SkyTint, Blue, onEdit)
+                        DetailQuickAction("Add Tag", Icons.Default.LocalOffer, LavenderTint, Purple, onEdit)
+                    }
+                    Card(colors = CardDefaults.cardColors(containerColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE1E6F1)), shape = RoundedCornerShape(18.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 4.dp)) {
+                            TransactionDetailRow(Icons.Default.FolderOpen, "Category", transaction.category)
+                            TransactionDetailRow(Icons.Default.LocalOffer, "Tag", transaction.tag.ifBlank { "No tag added" })
+                            TransactionDetailRow(Icons.Default.CalendarMonth, "Date", transaction.date)
+                            TransactionDetailRow(Icons.Default.CreditCard, "Payment Method", transaction.paymentMethod.ifBlank { "Not set" })
+                            TransactionDetailRow(Icons.Default.Storefront, "Merchant / Description", transaction.title)
+                            TransactionDetailRow(Icons.Default.Notes, "Notes", transaction.notes.ifBlank { "No notes added" })
+                            if (transaction.source.isNotBlank()) TransactionDetailRow(Icons.Default.NotificationsActive, "Captured from", transaction.source)
+                            if (transaction.captureStatus.isNotBlank()) TransactionDetailRow(Icons.Default.Info, "Capture status", transaction.captureStatus)
+                        }
+                    }
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE6F8F5)), shape = RoundedCornerShape(18.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Lightbulb, null, tint = Teal, modifier = Modifier.size(28.dp))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("MoneyLog tip", color = Teal, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(if (transaction.income) "Check that this income is categorized correctly to keep reports accurate." else "Use consistent categories and tags to make monthly reports more useful.", color = Ink, fontSize = 12.sp)
+                            }
+                            IconButton(onClick = onTips) { Icon(Icons.Default.ChevronRight, null, tint = Teal) }
+                        }
+                    }
+                }
+                Button(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0BAA83), contentColor = Color.White)) {
+                    Icon(Icons.Default.Edit, null)
+                    Spacer(Modifier.width(9.dp))
+                    Text("Edit Transaction", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+            }
+        }
+    }
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete transaction?") },
+            text = { Text("This will permanently remove this transaction from MoneyLog on this device.") },
+            confirmButton = { TextButton(onClick = { showDeleteConfirm = false; onDelete() }) { Text("Delete", color = ExpenseRed) } },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
+private fun DetailQuickAction(label: String, icon: ImageVector, tint: Color, iconColor: Color, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.widthIn(min = 48.dp).clickable(onClick = onClick).padding(vertical = 3.dp)) {
+        Box(Modifier.size(43.dp).clip(CircleShape).background(tint), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = label, tint = iconColor, modifier = Modifier.size(21.dp))
+        }
+        Text(label, color = Ink, fontSize = 9.sp, textAlign = TextAlign.Center, maxLines = 1)
+    }
+}
+
+@Composable
+private fun TransactionDetailRow(icon: ImageVector, label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 11.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+        Icon(icon, null, tint = Color(0xFF50617D), modifier = Modifier.size(19.dp))
+        Text(label, color = Muted, fontSize = 12.sp, modifier = Modifier.weight(0.85f))
+        Text(value, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.End, modifier = Modifier.weight(1.15f))
+    }
+}
+
 @Composable
 private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Unit, onSave: (Transaction) -> Unit) {
     var title by remember(transaction) { mutableStateOf(transaction.title) }
