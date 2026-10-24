@@ -230,6 +230,12 @@ private fun FinanceApp() {
                 .put("tags", savedTags)
                 .put("appearanceTheme", prefs.getString("appearance_theme", "Light"))
                 .put("appearanceCurrency", prefs.getString("appearance_currency", "INR (₹)"))
+                .put("appearanceAccent", prefs.getString("appearance_accent", "Green"))
+                .put("appearanceLayout", prefs.getString("appearance_layout", "Comfortable"))
+                .put("appearanceFontSize", prefs.getString("appearance_font_size", "Medium"))
+                .put("settingsBudgetAlerts", prefs.getBoolean("settings_budget_alerts", true))
+                .put("settingsEmiReminders", prefs.getBoolean("settings_emi_reminders", true))
+                .put("settingsMonthlySummary", prefs.getBoolean("settings_monthly_summary", false))
                 .put("userReportedCreditScore", prefs.getInt("user_reported_credit_score", 0))
                 .put("monthlyCategoryBudgets", JSONObject(prefs.getString("monthly_category_budgets", "{}") ?: "{}"))
             context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(root.toString(2)) }
@@ -260,6 +266,12 @@ private fun FinanceApp() {
             root.optJSONArray("tags")?.let { editor.putString("custom_tags", it.toString()) }
             if (root.has("appearanceTheme")) editor.putString("appearance_theme", root.optString("appearanceTheme", "Light"))
             if (root.has("appearanceCurrency")) editor.putString("appearance_currency", root.optString("appearanceCurrency", "INR (₹)"))
+            if (root.has("appearanceAccent")) editor.putString("appearance_accent", root.optString("appearanceAccent", "Green"))
+            if (root.has("appearanceLayout")) editor.putString("appearance_layout", root.optString("appearanceLayout", "Comfortable"))
+            if (root.has("appearanceFontSize")) editor.putString("appearance_font_size", root.optString("appearanceFontSize", "Medium"))
+            if (root.has("settingsBudgetAlerts")) editor.putBoolean("settings_budget_alerts", root.optBoolean("settingsBudgetAlerts", true))
+            if (root.has("settingsEmiReminders")) editor.putBoolean("settings_emi_reminders", root.optBoolean("settingsEmiReminders", true))
+            if (root.has("settingsMonthlySummary")) editor.putBoolean("settings_monthly_summary", root.optBoolean("settingsMonthlySummary", false))
             if (root.has("userReportedCreditScore")) {
                 val restoredScore = root.optInt("userReportedCreditScore", 0)
                 if (restoredScore in 300..900) editor.putInt("user_reported_credit_score", restoredScore)
@@ -270,9 +282,16 @@ private fun FinanceApp() {
             transactions = restoredTransactions
             loans = restoredLoans
             categoryRefreshToken++
+            applyAppearance(
+                prefs.getString("appearance_theme", "Light") ?: "Light",
+                prefs.getString("appearance_accent", "Green") ?: "Green",
+                prefs.getString("appearance_layout", "Comfortable") ?: "Comfortable",
+                prefs.getString("appearance_font_size", "Medium") ?: "Medium",
+                systemDark
+            )
             saveTransactions(context, transactions)
             saveLoans(context, loans)
-            importMessage = "Backup restored: ${transactions.size} transactions, ${loans.size} loans and local settings."
+            importMessage = "Backup restored: ${transactions.size} transactions, ${loans.size} loans, categories, tags and supported settings."
         }.onFailure { importMessage = it.message ?: "Backup restore failed." }
     }
     val income = transactions.filter { it.income }.sumOf { it.amount }
@@ -3439,7 +3458,8 @@ private fun transactionKey(transaction: Transaction): String {
     fun normalize(value: String): String = value.trim()
         .replace(Regex("\\s+"), " ")
         .lowercase(Locale.ROOT)
-    return "${normalize(transaction.title)}|${normalize(transaction.date)}|${transaction.amount}|${transaction.income}"
+    val normalizedDate = transactionDateOrNull(transaction)?.toString() ?: normalize(transaction.date)
+    return "${normalize(transaction.title)}|${normalizedDate}|${transaction.amount}|${transaction.income}"
 }
 
 private fun saveTransactions(context: android.content.Context, transactions: List<Transaction>) {
