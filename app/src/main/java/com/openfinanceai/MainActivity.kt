@@ -15,6 +15,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.text.PDFTextStripper
 import androidx.compose.ui.platform.LocalContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -458,13 +461,6 @@ private fun HomeScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { onOpen("Calendar") }) { Icon(Icons.Default.CalendarMonth, null); Text(" Calendar") }
                 OutlinedButton(onClick = { onOpen("Insights") }) { Icon(Icons.Default.Insights, null); Text(" Insights") }
-            }
-        }
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ReportMetricCard("Income", Money.format(monthIncome), Icons.Default.AccountBalanceWallet, Modifier.weight(1f), Color(0xFFE3F9ED), Color(0xFF00A86B))
-                ReportMetricCard("Expense", Money.format(monthExpenses), Icons.Default.CreditCard, Modifier.weight(1f), Color(0xFFFFEBEB), Color(0xFFFD3C65))
-                ReportMetricCard("Savings", Money.format(monthIncome - monthExpenses), Icons.Default.Savings, Modifier.weight(1f), Color(0xFFE6F0FF), Color(0xFF0066FF))
             }
         }
         item {
@@ -2631,6 +2627,63 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
     var bankEmiAmount by remember(loan.lender) { mutableStateOf("") }
     var bankEmiDate by remember(loan.lender) { mutableStateOf("") }
     var bankCheckAttempted by remember(loan.lender) { mutableStateOf(false) }
+    val context = LocalContext.current
+    val schedulePrefs = remember(loan.lender) { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
+    var importedSchedule by remember(loan.lender) {
+        mutableStateOf(runCatching {
+            val raw = schedulePrefs.getString("bank_schedule_${loan.lender}", null) ?: ""
+            if (raw.isBlank()) emptyList() else {
+                val arr = JSONArray(raw)
+                (0 until arr.length()).map { n -> arr.getJSONObject(n).getString("date") to arr.getJSONObject(n).getLong("amount") }
+            }
+        }.getOrDefault(emptyList()))
+    }
+    var pdfMessage by remember(loan.lender) { mutableStateOf("") }
+    var pdfBusy by remember(loan.lender) { mutableStateOf(false) }
+    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            pdfBusy = true
+            pdfMessage = ""
+            val result = runCatching {
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: error("Could not read the selected PDF. Please choose it again.")
+                if (bytes.size < 8 || !bytes.copyOfRange(0, 5).toString(Charsets.US_ASCII).startsWith("%PDF-")) {
+                    error("Invalid PDF file. Choose a readable EMI schedule PDF.")
+                }
+                PDFBoxResourceLoader.init(context.applicationContext)
+                val text = PDDocument.load(bytes.inputStream()).use { document ->
+                    if (document.isEncrypted) error("Password-protected PDFs are not supported. Upload an unlocked PDF.")
+                    if (document.numberOfPages !in 1..300) error("The PDF has an invalid or unsupported page count.")
+                    PDFTextStripper().getText(document)
+                }
+                val normalized = text.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ")
+                val looksLikeSchedule = Regex("(?i)\\b(emi|installment|instalment|repayment|due date|principal|outstanding)\\b").containsMatchIn(normalized)
+                if (!looksLikeSchedule) error("This PDF does not look like an EMI repayment schedule. No data was saved.")
+                val datePattern = Regex("(?i)(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|\\d{1,2}[- ](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[- ,]+\\d{2,4}|\\d{4}-\\d{2}-\\d{2})")
+                val amountPattern = Regex("(?:₹|Rs\\.?\\s*)?([0-9]{1,3}(?:,[0-9]{2,3})+(?:\\.\\d{1,2})?|[0-9]+(?:\\.\\d{1,2})?)")
+                val rows = normalized.lines().mapNotNull { line ->
+                    val dateMatch = datePattern.find(line) ?: return@mapNotNull null
+                    val tail = line.substring(dateMatch.range.last + 1)
+                    val amount = amountPattern.findAll(tail).mapNotNull { match ->
+                        match.groupValues[1].replace(",", "").toDoubleOrNull()?.takeIf { it in 1.0..1000000000.0 }?.toLong()
+                    }.firstOrNull() ?: return@mapNotNull null
+                    dateMatch.value.trim() to amount
+                }.distinct().take(1200)
+                if (rows.size < 2) error("The PDF is readable, but I couldn't confidently identify at least two dated EMI rows. No data was saved. Use a text-based PDF with visible dates and amounts.")
+                if (rows.map { it.first }.distinct().size != rows.size) error("The schedule contains repeated dates that need manual review. No data was saved.")
+                rows
+            }
+            result
+        }.onSuccess { rows ->
+            val arr = JSONArray()
+            rows.forEach { (date, amount) -> arr.put(JSONObject().put("date", date).put("amount", amount)) }
+            schedulePrefs.edit().putString("bank_schedule_${loan.lender}", arr.toString()).apply()
+            importedSchedule = rows
+            pdfMessage = "EMI schedule submitted successfully. Saved ${rows.size} dated installments for review."
+        }.onFailure { pdfMessage = it.message ?: "Could not validate this PDF. No schedule was saved." }
+            pdfBusy = false
+        }
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(page),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 28.dp),
@@ -2733,6 +2786,29 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("Compare a bank-statement installment", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("Or upload your lender's EMI schedule PDF. Only readable PDFs with a recognizable schedule and dated installment rows are accepted.", color = Muted, fontSize = 11.sp)
+                            OutlinedButton(
+                                onClick = { pdfPicker.launch(arrayOf("application/pdf")) },
+                                enabled = !pdfBusy,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.PictureAsPdf, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(if (pdfBusy) "Validating PDF…" else "Upload EMI Schedule PDF")
+                            }
+                            if (pdfMessage.isNotBlank()) {
+                                Text(pdfMessage, color = if (pdfMessage.startsWith("EMI schedule submitted")) forest else Color(0xFFB45309), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                            if (importedSchedule.isNotEmpty()) {
+                                Text("Saved schedule · ${importedSchedule.size} installments", color = Ink, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                importedSchedule.take(12).forEachIndexed { index, row ->
+                                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFFF5F8F7)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text("${index + 1}. ${row.first}", modifier = Modifier.weight(1f), color = Ink, fontSize = 11.sp)
+                                        Text(Money.format(row.second), color = forest, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                if (importedSchedule.size > 12) Text("Showing first 12 rows. All ${importedSchedule.size} installments are saved.", color = Muted, fontSize = 10.sp)
+                            }
                             Text("Enter the EMI amount and date exactly as shown on your lender statement. This compares one installment only; it does not connect to your bank.", color = Muted, fontSize = 11.sp)
                             OutlinedTextField(value = bankEmiAmount, onValueChange = { bankEmiAmount = it.filter { ch -> ch.isDigit() || ch == '.' }; bankCheckAttempted = false }, label = { Text("Bank EMI amount (₹)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                             OutlinedTextField(value = bankEmiDate, onValueChange = { bankEmiDate = it; bankCheckAttempted = false }, label = { Text("Bank EMI date (e.g. 5 Nov 2026)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
