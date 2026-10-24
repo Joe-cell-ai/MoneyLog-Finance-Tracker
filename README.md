@@ -1,6 +1,6 @@
-# MoneyLog
+# MoneyLog: Finance Tracker
 
-**MoneyLog: Expense Tracker** is a privacy-first Android personal finance app built with Kotlin and Jetpack Compose. Track income, expenses, budgets, loans, EMIs, and recurring bills with dashboards, reports, financial insights, secure backups, CSV imports, reminders, and an optional finance coach.
+**MoneyLog: Finance Tracker** is a privacy-first Android personal finance app built with Kotlin and Jetpack Compose. Track income, expenses, budgets, loans, EMIs, and recurring bills with dashboards, reports, financial insights, secure backups, CSV imports, reminders, and an optional finance coach.
 
 ## Features
 
