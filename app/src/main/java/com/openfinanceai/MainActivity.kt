@@ -1080,7 +1080,7 @@ private fun ReportsScreen(
             title = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(category, color = Ink, fontWeight = FontWeight.Bold)
-                    Text("\${Money.format(categoryTotal)} · \${categoryShare}% of expenses", color = Muted, fontSize = 13.sp)
+                    Text("${Money.format(categoryTotal)} · ${categoryShare}% of expenses", color = Muted, fontSize = 13.sp)
                 }
             },
             text = {
