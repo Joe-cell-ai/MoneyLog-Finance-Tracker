@@ -451,12 +451,6 @@ private fun HomeScreen(
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                QuickAction("Add expense", Icons.Default.Remove, Modifier.weight(1f)) { onAdd(false) }
-                QuickAction("Add income", Icons.Default.Add, Modifier.weight(1f)) { onAdd(true) }
-            }
-        }
-        item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Monthly overview", modifier = Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
                 Row(
@@ -788,6 +782,8 @@ private fun ReportsScreen(
     var showNotifications by remember { mutableStateOf(false) }
     var showAllCategories by remember { mutableStateOf(false) }
     var showMonthMenu by remember { mutableStateOf(false) }
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var categoryDetailTab by remember { mutableStateOf("Transactions") }
     val categories = transactions.filterNot { it.income }.groupBy { it.category }
         .map { it.key to it.value.sumOf { transaction -> transaction.amount } }.sortedByDescending { it.second }
     val totalSpend = categories.sumOf { it.second }
@@ -828,10 +824,6 @@ private fun ReportsScreen(
                                 )
                             }
                         }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }, modifier = Modifier.size(22.dp)) { Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month", tint = Color(0xFF49688F), modifier = Modifier.size(16.dp)) }
-                        IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }, modifier = Modifier.size(22.dp)) { Icon(Icons.Default.ChevronRight, contentDescription = "Next month", tint = Color(0xFF49688F), modifier = Modifier.size(16.dp)) }
                     }
                 }
                 IconButton(onClick = { showAllCategories = true }) {
@@ -1015,7 +1007,7 @@ private fun ReportsScreen(
                     }
                     visibleCategories.forEachIndexed { index, (category, amount) ->
                         Row(
-                            Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                            Modifier.fillMaxWidth().clickable { selectedCategory = category; categoryDetailTab = "Transactions" }.padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
@@ -1078,6 +1070,57 @@ private fun ReportsScreen(
                 }
             } }
         }
+    }
+    selectedCategory?.let { category ->
+        val categoryTransactions = transactions.filter { !it.income && it.category == category }
+        val categoryTotal = categoryTransactions.sumOf { it.amount }
+        val categoryShare = if (totalSpend > 0L) categoryTotal * 100 / totalSpend else 0L
+        AlertDialog(
+            onDismissRequest = { selectedCategory = null },
+            title = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(category, color = Ink, fontWeight = FontWeight.Bold)
+                    Text("\${Money.format(categoryTotal)} · \${categoryShare}% of expenses", color = Muted, fontSize = 13.sp)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.fillMaxWidth().background(Color(0xFFE5EFFB), RoundedCornerShape(18.dp)).padding(4.dp)) {
+                        listOf("Transactions", "Insights").forEach { tabName ->
+                            Box(
+                                Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
+                                    .background(if (categoryDetailTab == tabName) Green else Color.Transparent)
+                                    .clickable { categoryDetailTab = tabName }
+                                    .padding(vertical = 9.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(tabName, color = if (categoryDetailTab == tabName) Color.White else Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                    if (categoryDetailTab == "Transactions") {
+                        if (categoryTransactions.isEmpty()) Text("No transactions in this category for the selected month.", color = Muted, fontSize = 12.sp)
+                        else Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            categoryTransactions.take(6).forEach { transaction ->
+                                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(transaction.title, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("${transaction.date} · ${transaction.paymentMethod}", color = Muted, fontSize = 11.sp)
+                                    }
+                                    Text(Money.format(transaction.amount), color = ExpenseRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                HorizontalDivider(color = Page)
+                            }
+                        }
+                    } else {
+                        Text("You recorded ${categoryTransactions.size} transaction(s) in $category for ${selectedMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy"))}.", color = Ink, fontSize = 13.sp)
+                        Text("This category represents ${categoryShare}% of your recorded expenses for the selected month.", color = Muted, fontSize = 12.sp)
+                        Text("Suggestion: review the largest transactions and consider setting a monthly category budget.", color = Green, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { selectedCategory = null }) { Text("Done") } }
+        )
     }
     if (showNotifications) {
         AlertDialog(
