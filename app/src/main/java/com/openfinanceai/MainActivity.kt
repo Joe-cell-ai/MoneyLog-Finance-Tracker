@@ -285,18 +285,7 @@ private fun FinanceApp() {
     ) {
         Scaffold(
             containerColor = Page,
-            topBar = {
-                Row(
-                    Modifier.fillMaxWidth().background(Color.White).statusBarsPadding().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.AccountBalanceWallet, null, tint = Green, modifier = Modifier.size(32.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("MONEYLOG", color = Muted, fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            },
+            topBar = {},
             bottomBar = {
                 NavigationBar(
                     containerColor = Color.White,
@@ -329,7 +318,7 @@ private fun FinanceApp() {
                 }
             }
         ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding)) {
+            Box(Modifier.fillMaxSize().padding(padding).padding(top = 20.dp)) {
                 when (tab) {
                     "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = "Activity" }, { isIncome -> showAddAsIncome = isIncome; showAdd = true }, { tab = it }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
