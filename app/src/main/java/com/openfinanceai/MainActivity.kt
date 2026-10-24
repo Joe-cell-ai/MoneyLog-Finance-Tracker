@@ -2608,7 +2608,7 @@ private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.
 private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
     val firstDueDate = nextLoanDueDate(loan.due)
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
-    val monthlyRate = (loan.annualRate.coerceAtLeast(0.0) / 1200.0)
+    val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
     val schedule = (0 until 6).map { index ->
         val interest = scheduleBalance * monthlyRate
         val principalPart = (loan.emi.toDouble() - interest).coerceAtLeast(0.0).coerceAtMost(scheduleBalance)
@@ -2618,74 +2618,177 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
         row
     }
     val paymentTooLow = monthlyRate > 0.0 && loan.emi.toDouble() <= loan.balance.toDouble() * monthlyRate
-    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val emerald = Color(0xFF087F5B)
+    val forest = Color(0xFF065F46)
+    val mint = Color(0xFFE6F7F0)
+    val page = Color(0xFFF5F7FA)
+    val paidGreen = Color(0xFF10B981)
+    val paidTint = Color(0xFFE6FBF3)
+    val upcomingAmber = Color(0xFFF59E0B)
+    val upcomingTint = Color(0xFFFFF7ED)
+    val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
+    val totalInterestEstimate = schedule.sumOf { it.first }
+    val totalRepaymentEstimate = loan.emi * 6L
+    val monthsRemaining = if (loan.emi > 0L) kotlin.math.ceil(loan.balance.toDouble() / loan.emi.toDouble()).toInt().coerceAtLeast(0) else 0
+    var selectedSection by remember(loan.lender) { mutableStateOf("Schedule") }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(page),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
         item {
-            Text("Loan Details", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text(loan.lender, color = Muted, fontSize = 13.sp)
-        }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = Green), shape = RoundedCornerShape(20.dp)) {
-                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("OUTSTANDING BALANCE", color = Color.White.copy(alpha = .82f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    Text(Money.format(loan.balance), color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                    Text("Monthly EMI · ${Money.format(loan.emi)}", color = Color.White)
-                }
-            }
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                MetricCard("Interest rate", "${loan.annualRate}%", Modifier.weight(1f), tint = Color(0xFFFFF0E5), valueColor = Color(0xFFB75B16))
-                MetricCard("EMIs recorded", loan.paymentsMade.toString(), Modifier.weight(1f), tint = Color(0xFFE6F0FF), valueColor = SavingsBlue)
-            }
-        }
-        item { MetricCard("Original principal", Money.format(loan.originalPrincipal), Modifier.fillMaxWidth()) }
-        item {
-            val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
-            Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Principal reduction estimate · ${(progress * 100).toInt()}%", color = Ink, fontWeight = FontWeight.SemiBold)
-                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth(), color = Green, trackColor = Mint)
-                Text("Estimated from original principal and current outstanding balance. Payment count is user-entered; this is not a lender-verified repayment record.", color = Muted, fontSize = 11.sp)
-            }
-        }
-        item { InfoCard("Estimated schedule", "Based on the current outstanding balance, entered EMI and interest rate. This is an estimate, not your lender's official schedule; verify exact figures and due dates against your loan statement.", Icons.Default.CalendarMonth) }
-        if (paymentTooLow) item {
-            InfoCard("EMI may not cover interest", "At the entered interest rate, the EMI is not greater than the estimated monthly interest. The balance may not reduce unless the EMI or rate changes.", Icons.Default.Warning)
-        }
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.AccountBalance, contentDescription = null, tint = emerald, modifier = Modifier.size(26.dp))
+                Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("EMI Schedule", fontSize = 19.sp, color = Ink, fontWeight = FontWeight.Bold)
-                    Text("Next 6 installments · estimate", fontSize = 12.sp, color = Muted)
+                    Text("Loan Details & EMI Schedule", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text(loan.lender, color = Muted, fontSize = 12.sp)
                 }
-                Box(Modifier.clip(RoundedCornerShape(50)).background(LavenderTint).padding(horizontal = 11.dp, vertical = 7.dp)) {
-                    Text("ESTIMATE", color = Color(0xFF5A62B5), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Box(Modifier.clip(RoundedCornerShape(50)).background(mint).padding(horizontal = 10.dp, vertical = 7.dp)) {
+                    Text("TRACKED", color = forest, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
-        item { Text("Schedule status is unconfirmed until you compare each installment with your lender statement. This screen does not automatically mark EMIs as paid, due or overdue.", color = Muted, fontSize = 11.sp) }
         item {
-            Row(Modifier.fillMaxWidth().background(Color(0xFFEAF0ED), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 11.dp)) {
-                Text("INSTALLMENT", Modifier.weight(1.25f), color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text("INTEREST", Modifier.weight(1f), color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text("PRINCIPAL", Modifier.weight(1f), color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+                Row(Modifier.fillMaxWidth().padding(vertical = 17.dp, horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("MONTHLY EMI", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Spacer(Modifier.height(7.dp))
+                        Text(Money.format(loan.emi), color = forest, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    }
+                    Box(Modifier.width(1.dp).height(42.dp).background(page))
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("INTEREST RATE", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Spacer(Modifier.height(7.dp))
+                        Text("${loan.annualRate}%", color = forest, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    }
+                    Box(Modifier.width(1.dp).height(42.dp).background(page))
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("EMIS RECORDED", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Spacer(Modifier.height(7.dp))
+                        Text(loan.paymentsMade.toString(), color = forest, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    }
+                }
             }
         }
-        items(schedule.indices.toList()) { index ->
-            val (interest, principalPart, closingBalance) = schedule[index]
-            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(15.dp)).combinedClickable(onClick = { onEmiLongPress() }, onLongClick = { onEmiLongPress() }).padding(horizontal = 12.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1.25f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    val installmentDate = firstDueDate?.plusMonths(index.toLong())
-                    val installmentLabel = installmentDate?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
-                        ?: if (loan.due.equals("Set due date", ignoreCase = true) || loan.due.isBlank()) "Set due date" else loan.due
-                    Text(installmentLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                    Text("Closing ${Money.format(closingBalance)}", color = Muted, fontSize = 10.sp)
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = forest), shape = RoundedCornerShape(22.dp)) {
+                Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(98.dp)) {
+                        CircularProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxSize(), color = Color(0xFF34D399), trackColor = Color.White.copy(alpha = .18f), strokeWidth = 8.dp, strokeCap = StrokeCap.Round)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("${(progress * 100).toInt()}%", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+                            Text("reduced", color = Color.White.copy(alpha = .75f), fontSize = 10.sp)
+                        }
+                    }
+                    Spacer(Modifier.width(18.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Text("OUTSTANDING BALANCE", color = Color.White.copy(alpha = .78f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(Money.format(loan.balance), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Text(if (loan.emi > 0L) "About $monthsRemaining EMI(s) remaining" else "Add an EMI to estimate remaining term", color = Color.White.copy(alpha = .85f), fontSize = 11.sp)
+                        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = Color(0xFF34D399), trackColor = Color.White.copy(alpha = .2f))
+                    }
                 }
-                Text(Money.format(interest), Modifier.weight(1f), color = ExpenseRed, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                Text(Money.format(principalPart), Modifier.weight(1f), color = Green, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(Color.White).padding(12.dp)) {
+                    Text("Est. next 6 EMI interest", color = Muted, fontSize = 10.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(Money.format(totalInterestEstimate), color = forest, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(Color.White).padding(12.dp)) {
+                    Text("Est. 6 EMI total", color = Muted, fontSize = 10.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(Money.format(totalRepaymentEstimate), color = forest, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color.White).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("Schedule", "Overview", "Bank Schedule").forEach { section ->
+                    val selected = selectedSection == section
+                    Box(Modifier.weight(if (section == "Bank Schedule") 1.2f else 1f).clip(RoundedCornerShape(11.dp)).background(if (selected) forest else Color.Transparent).clickable { selectedSection = section }.padding(horizontal = 5.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
+                        Text(section, color = if (selected) Color.White else Muted, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1, textAlign = TextAlign.Center)
+                    }
+                }
+            }
+        }
+        if (selectedSection == "Overview") {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Loan overview", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                        LoanOverviewRow("Original principal", Money.format(loan.originalPrincipal))
+                        LoanOverviewRow("Current outstanding", Money.format(loan.balance))
+                        LoanOverviewRow("Monthly EMI", Money.format(loan.emi))
+                        LoanOverviewRow("Annual interest rate", "${loan.annualRate}%")
+                        LoanOverviewRow("Payments recorded", loan.paymentsMade.toString())
+                        Text("Progress is estimated from the principal and outstanding balance entered in MoneyLog.", color = Muted, fontSize = 11.sp)
+                    }
+                }
+            }
+        } else {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(if (selectedSection == "Bank Schedule") "Bank Schedule" else "EMI Schedule", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text(if (selectedSection == "Bank Schedule") "Compare with your lender statement" else "Next 6 installments · estimate", color = Muted, fontSize = 11.sp)
+                    }
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(mint).padding(horizontal = 10.dp, vertical = 7.dp)) {
+                        Text(if (selectedSection == "Bank Schedule") "VERIFY" else "ESTIMATE", color = forest, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            item {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(mint).padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("DATE", Modifier.weight(1.05f), color = forest, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("AMOUNT", Modifier.weight(1f), color = forest, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                    Text("STATUS", Modifier.weight(.85f), color = forest, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                }
+            }
+            items(schedule.indices.toList()) { index ->
+                val (interest, principalPart, closingBalance) = schedule[index]
+                val installmentDate = firstDueDate?.plusMonths(index.toLong())
+                val installmentLabel = installmentDate?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+                    ?: if (loan.due.equals("Set due date", ignoreCase = true) || loan.due.isBlank()) "Set due date" else loan.due
+                val paid = index < loan.paymentsMade
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress() }, onLongClick = { onEmiLongPress() }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(installmentLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                        Text("Principal ${Money.format(principalPart)}", color = Muted, fontSize = 9.sp)
+                    }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(Money.format(loan.emi), color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Int. ${Money.format(interest)}", color = Muted, fontSize = 9.sp)
+                    }
+                    Box(Modifier.weight(.85f), contentAlignment = Alignment.CenterEnd) {
+                        Box(Modifier.clip(RoundedCornerShape(50)).background(if (paid) paidTint else upcomingTint).padding(horizontal = 8.dp, vertical = 6.dp)) {
+                            Text(if (paid) "Paid" else "Upcoming", color = if (paid) paidGreen else upcomingAmber, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
+                    }
+                }
+            }
+            if (paymentTooLow) item {
+                InfoCard("EMI may not cover interest", "At the entered interest rate, the EMI is not greater than the estimated monthly interest. The balance may not reduce unless the EMI or rate changes.", Icons.Default.Warning)
+            }
+            item {
+                Text(if (selectedSection == "Bank Schedule") "Bank Schedule is a comparison view, not a bank feed. Dates and amounts shown here are MoneyLog estimates; verify every installment against your lender's official statement." else "Schedule is estimated from the current outstanding balance, entered EMI and interest rate. Paid labels reflect only the payment count you entered; verify dates and amounts against your lender statement.", color = Muted, fontSize = 10.sp)
             }
         }
     }
 }
+
+@Composable
+private fun LoanOverviewRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), color = Muted, fontSize = 12.sp)
+        Text(value, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
 @Composable
 private fun EmptyLoansScreen(onAddLoan: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
