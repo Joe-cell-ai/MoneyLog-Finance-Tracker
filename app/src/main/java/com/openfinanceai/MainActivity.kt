@@ -355,6 +355,9 @@ private fun FinanceApp() {
                         importedPreview = emptyList()
                     })
                     "Appearance" -> AppearanceScreen()
+                    "Privacy & Security" -> PrivacySecurityScreen { tab = "CRED sync" }
+                    "Notifications" -> NotificationsSettingsScreen { tab = "CRED sync" }
+                    "About" -> AboutSettingsScreen()
                     "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: EmptyLoansScreen { tab = "Add loan" }
                     "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi ->
                         val newLoan = Loan(lender, balance, emi, "Set due date", rate, originalPrincipal, paymentsMade)
@@ -1863,51 +1866,240 @@ private fun TagManagementScreen() {
 
 @Composable
 private fun SettingsScreen(onOpen: (String) -> Unit) {
-    val entries = listOf(
-        "Categories" to Icons.Default.Label,
-        "Tag Management" to Icons.Default.Label,
-        "Budgets" to Icons.Default.AccountBalanceWallet,
-        "Calendar" to Icons.Default.CalendarMonth,
-        "Insights" to Icons.Default.Insights,
-        "Credit health" to Icons.Default.Speed,
-        "Appearance" to Icons.Default.Palette,
-        "Backup & security" to Icons.Default.Security,
-        "Live payment tracking" to Icons.Default.Sync,
-        "Import transactions" to Icons.Default.FileUpload
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
+    val mainItems = listOf(
+        Triple("Appearance", "Theme, colors and layout", Icons.Default.Palette),
+        Triple("Categories", "Manage your categories", Icons.Default.Category),
+        Triple("Tag Management", "Organize transaction tags", Icons.Default.LocalOffer),
+        Triple("Budgets", "Set spending limits", Icons.Default.TrackChanges),
+        Triple("Backup & security", "Backup, restore and protect data", Icons.Default.Security),
+        Triple("Privacy & Security", "Permissions and local data", Icons.Default.Shield),
+        Triple("Notifications", "Payment capture and reminders", Icons.Default.Notifications),
+        Triple("About", "App version and information", Icons.Default.Info)
     )
-    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(Page),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         item {
-            Text("Settings", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Personalize your workspace", color = Muted)
-        }
-        item { InfoCard("Preferences", "Premium indigo accents, soft colourful cards and light surfaces. Transactions and loans remain saved locally on this device. Open Appearance to save display preferences.", Icons.Default.Tune) }
-        item { Button(onClick = { onOpen("Categories") }, modifier = Modifier.fillMaxWidth()) { Text("Category management") } }
-        item { OutlinedButton(onClick = { onOpen("Tag Management") }, modifier = Modifier.fillMaxWidth()) { Text("Tag management") } }
-        item { OutlinedButton(onClick = { onOpen("Budgets") }, modifier = Modifier.fillMaxWidth()) { Text("Monthly category budgets") } }
-        item { OutlinedButton(onClick = { onOpen("Appearance") }, modifier = Modifier.fillMaxWidth()) { Text("Settings appearance") } }
-        item { OutlinedButton(onClick = { onOpen("Backup & security") }, modifier = Modifier.fillMaxWidth()) { Text("Backup & security") } }
-        item { OutlinedButton(onClick = { onOpen("CRED sync") }, modifier = Modifier.fillMaxWidth()) { Text("Live payment tracking") } }
-        item { OutlinedButton(onClick = { onOpen("Import transactions") }, modifier = Modifier.fillMaxWidth()) { Text("Import bank CSV") } }
-        item { OutlinedButton(onClick = { onOpen("Credit health") }, modifier = Modifier.fillMaxWidth()) { Text("CIBIL & credit health") } }
-        item { OutlinedButton(onClick = { onOpen("Loan details") }, modifier = Modifier.fillMaxWidth()) { Text("Loan details & EMI schedule") } }
-        item { Button(onClick = { onOpen("Add loan") }, modifier = Modifier.fillMaxWidth()) { Text("+ Add loan") } }
-        items(entries) { (label, icon) ->
-            val entryAccent = when (label) { "Categories" -> Purple; "Budgets" -> IncomeGreen; "Calendar" -> SavingsBlue; "Insights" -> Orange; "Credit health" -> ExpenseRed; "Appearance" -> Purple; else -> Green }
-            val entryTint = when (label) { "Categories", "Appearance" -> LavenderTint; "Budgets" -> IncomeTint; "Calendar" -> SkyTint; "Insights" -> PeachTint; "Credit health" -> ExpenseTint; else -> Color.White }
-            Row(
-                Modifier.fillMaxWidth().background(entryTint, RoundedCornerShape(14.dp)).clickable { onOpen(label) }.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF075E4D))
             ) {
-                Icon(icon, null, tint = entryAccent)
-                Spacer(Modifier.width(12.dp))
-                Text(label, Modifier.weight(1f), color = Ink)
-                Icon(Icons.Default.ChevronRight, null, tint = Muted)
+                Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(54.dp).clip(CircleShape).background(Color(0xFF0BAA83)), contentAlignment = Alignment.Center) {
+                        Text("M", color = Color.White, fontSize = 29.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.width(13.dp))
+                    Column {
+                        Text("MoneyLog", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text("Finance Tracker", color = Color.White.copy(alpha = .78f), fontSize = 13.sp)
+                        Spacer(Modifier.height(5.dp))
+                        Text("Simple · Secure · Private", color = Color(0xFFB8F3DE), fontSize = 11.sp)
+                    }
+                }
             }
         }
-        item { Text("MoneyLog · Finance tracker", color = Muted, fontSize = 11.sp) }
+        item {
+            Text("Settings", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
+            Text("Make MoneyLog work for you", color = Muted, fontSize = 13.sp)
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)) {
+                    mainItems.forEachIndexed { index, item ->
+                        val tint = when (item.first) {
+                            "Appearance" -> Purple
+                            "Categories" -> Blue
+                            "Tag Management" -> IncomeGreen
+                            "Budgets" -> Orange
+                            "Backup & security" -> Blue
+                            "Privacy & Security" -> Purple
+                            "Notifications" -> ExpenseRed
+                            else -> Muted
+                        }
+                        val soft = when (item.first) {
+                            "Appearance" -> LavenderTint
+                            "Categories" -> SkyTint
+                            "Tag Management" -> IncomeTint
+                            "Budgets" -> PeachTint
+                            "Backup & security" -> SkyTint
+                            "Privacy & Security" -> LavenderTint
+                            "Notifications" -> ExpenseTint
+                            else -> Page
+                        }
+                        Row(
+                            Modifier.fillMaxWidth().clickable { onOpen(item.first) }.padding(vertical = 11.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(soft), contentAlignment = Alignment.Center) {
+                                Icon(item.third, null, tint = tint, modifier = Modifier.size(21.dp))
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(item.first, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text(item.second, color = Muted, fontSize = 11.sp)
+                            }
+                            Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(20.dp))
+                        }
+                        if (index != mainItems.lastIndex) HorizontalDivider(color = Color(0xFFEDEFF4))
+                    }
+                }
+            }
+        }
+        item {
+            Text("More tools", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)) {
+                    listOf(
+                        Triple("Live payment tracking", "Manage optional notification capture", Icons.Default.Sync),
+                        Triple("Import transactions", "Import a bank statement CSV", Icons.Default.FileUpload),
+                        Triple("CIBIL & credit health", "View your reported score and guidance", Icons.Default.Speed),
+                        Triple("Loan details & EMI schedule", "Review tracked loans and installments", Icons.Default.AccountBalance),
+                        Triple("Add loan", "Track a new loan or EMI", Icons.Default.Add)
+                    ).forEachIndexed { index, item ->
+                        Row(Modifier.fillMaxWidth().clickable {
+                            onOpen(when (item.first) {
+                                "Live payment tracking" -> "CRED sync"
+                                "CIBIL & credit health" -> "Credit health"
+                                "Loan details & EMI schedule" -> "Loan details"
+                                else -> item.first
+                            })
+                        }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(item.third, null, tint = Green, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(item.first, color = Ink, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                                Text(item.second, color = Muted, fontSize = 11.sp)
+                            }
+                            Icon(Icons.Default.ChevronRight, null, tint = Muted)
+                        }
+                        if (index < 4) HorizontalDivider(color = Color(0xFFEDEFF4))
+                    }
+                }
+            }
+        }
+        item {
+            Text("Your financial records stay on this device unless you choose to export or share a file.", color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+            Text("MoneyLog · Finance Tracker", color = Green, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        }
     }
 }
 
+@Composable
+private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
+    LazyColumn(modifier = Modifier.fillMaxSize().background(Page), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        item { Text("Privacy & Security", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold); Text("Understand how your data is handled", color = Muted, fontSize = 13.sp) }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(19.dp)) {
+                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(42.dp).clip(CircleShape).background(IncomeTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.Lock, null, tint = IncomeGreen) }
+                        Spacer(Modifier.width(11.dp))
+                        Column { Text("Local data storage", color = Ink, fontWeight = FontWeight.Bold); Text("Transactions and loans stay on this device", color = Muted, fontSize = 11.sp) }
+                    }
+                    HorizontalDivider(color = Color(0xFFEDEFF4))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(42.dp).clip(CircleShape).background(SkyTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.NotificationsActive, null, tint = Blue) }
+                        Spacer(Modifier.width(11.dp))
+                        Column(Modifier.weight(1f)) { Text("Notification access", color = Ink, fontWeight = FontWeight.SemiBold); Text("Required only for optional payment-alert capture", color = Muted, fontSize = 11.sp) }
+                        Icon(Icons.Default.ChevronRight, null, tint = Muted)
+                    }
+                    OutlinedButton(onClick = onOpenPaymentSettings, modifier = Modifier.fillMaxWidth()) { Text("Manage payment capture permissions") }
+                }
+            }
+        }
+        item { InfoCard("App lock", "PIN and biometric app-lock protection are not implemented in this build. Do not treat the app as locked; protect your device with Android screen lock.", Icons.Default.Fingerprint) }
+        item { InfoCard("Backups contain sensitive information", "Create backups only when needed and store exported JSON/CSV files in a trusted private location. MoneyLog does not currently sync backups to a cloud account.", Icons.Default.PrivacyTip) }
+        item { InfoCard("Clear app data", "Clearing Android app storage or uninstalling may remove locally saved records. Export a backup first if you need to keep them.", Icons.Default.DeleteOutline) }
+    }
+}
+
+@Composable
+private fun NotificationsSettingsScreen(onOpenPaymentSettings: () -> Unit) {
+    val context = LocalContext.current
+    val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
+    var captureInfo by remember { mutableStateOf(preferences.getBoolean("notification_capture_consent", false)) }
+    var emiReminder by remember { mutableStateOf(preferences.getBoolean("settings_emi_reminders", true)) }
+    var budgetAlerts by remember { mutableStateOf(preferences.getBoolean("settings_budget_alerts", true)) }
+    var monthlySummary by remember { mutableStateOf(preferences.getBoolean("settings_monthly_summary", false)) }
+    fun persist(key: String, value: Boolean) { preferences.edit().putBoolean(key, value).apply() }
+    LazyColumn(modifier = Modifier.fillMaxSize().background(Page), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        item { Text("Notifications", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold); Text("Choose which MoneyLog alerts you want", color = Muted, fontSize = 13.sp) }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(19.dp)) {
+                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Transaction capture", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Optional payment-alert capture needs your consent and Android Notification access.", color = Muted, fontSize = 12.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.NotificationsActive, null, tint = Green)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) { Text("Consent to payment capture", color = Ink, fontWeight = FontWeight.Medium); Text(if (captureInfo) "Consent is enabled" else "Consent is off", color = Muted, fontSize = 11.sp) }
+                        Switch(checked = captureInfo, onCheckedChange = { value -> captureInfo = value; persist("notification_capture_consent", value) })
+                    }
+                    Button(onClick = onOpenPaymentSettings, modifier = Modifier.fillMaxWidth()) { Text("Open payment capture settings") }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(19.dp)) {
+                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Reminders & summaries", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    SettingToggleRow("EMI reminders", "Preference saved on this device", emiReminder) { emiReminder = it; persist("settings_emi_reminders", it) }
+                    HorizontalDivider(color = Color(0xFFEDEFF4))
+                    SettingToggleRow("Budget alerts", "Preference saved on this device", budgetAlerts) { budgetAlerts = it; persist("settings_budget_alerts", it) }
+                    HorizontalDivider(color = Color(0xFFEDEFF4))
+                    SettingToggleRow("Monthly summary", "Preference saved on this device", monthlySummary) { monthlySummary = it; persist("settings_monthly_summary", it) }
+                }
+            }
+        }
+        item { Text("Reminder toggles save your preferences. Scheduled push notifications for these three options are not yet wired up in this build.", color = Muted, fontSize = 11.sp) }
+    }
+}
+
+@Composable
+private fun SettingToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, color = Ink, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+            Text(subtitle, color = Muted, fontSize = 11.sp)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun AboutSettingsScreen() {
+    LazyColumn(modifier = Modifier.fillMaxSize().background(Page), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(22.dp)) {
+                Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Box(Modifier.size(72.dp).clip(CircleShape).background(Green), contentAlignment = Alignment.Center) { Text("M", color = Color.White, fontSize = 38.sp, fontWeight = FontWeight.Bold) }
+                    Text("MoneyLog", color = Ink, fontWeight = FontWeight.Bold, fontSize = 23.sp)
+                    Text("Finance Tracker", color = Muted)
+                    Text("Your money, clearly.", color = Green, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+        item { Text("About MoneyLog", fontSize = 25.sp, color = Ink, fontWeight = FontWeight.Bold) }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                    Row { Text("App", Modifier.weight(1f), color = Muted); Text("MoneyLog: Finance Tracker", color = Ink, fontWeight = FontWeight.Medium) }
+                    HorizontalDivider(color = Color(0xFFEDEFF4))
+                    Row { Text("Version", Modifier.weight(1f), color = Muted); Text("1.0.0", color = Ink, fontWeight = FontWeight.Medium) }
+                    HorizontalDivider(color = Color(0xFFEDEFF4))
+                    Row { Text("Data storage", Modifier.weight(1f), color = Muted); Text("On device", color = Ink, fontWeight = FontWeight.Medium) }
+                }
+            }
+        }
+        item { InfoCard("Built for everyday money tracking", "Record income and expenses, manage categories and tags, track loans and EMIs, review budgets, and export your records when needed.", Icons.Default.Favorite) }
+        item { InfoCard("Please verify your records", "MoneyLog is a personal tracking tool. Imported or notification-captured transactions and estimated loan schedules should be checked against your bank or lender statements.", Icons.Default.Info) }
+    }
+}
 
 @Composable
 private fun CreditHealthScreen() {
@@ -2016,15 +2208,86 @@ private fun BackupSecurityScreen(
     onExportCsv: () -> Unit,
     message: String
 ) {
-    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Backup & Security", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold) }
-        item { InfoCard("Local data", "Transactions and loans are saved in app-private storage and remain after app restarts. Keep an exported backup before changing devices or reinstalling.", Icons.Default.Lock) }
-        item { Button(onClick = onExportBackup, modifier = Modifier.fillMaxWidth()) { Text("Export full backup (JSON)") } }
-        item { OutlinedButton(onClick = onRestoreBackup, modifier = Modifier.fillMaxWidth()) { Text("Restore from backup") } }
-        item { OutlinedButton(onClick = onExportCsv, modifier = Modifier.fillMaxWidth()) { Text("Export transactions (CSV)") } }
-        if (message.isNotBlank()) item { InfoCard("Latest operation", message, Icons.Default.Info) }
-        item { InfoCard("Cloud backup", "Google Drive / OneDrive and scheduled automatic backups are not connected. Store exported files somewhere private and trusted.", Icons.Default.CloudUpload) }
-        item { InfoCard("Privacy", "Backups contain financial records. Keep them private and do not enter banking passwords, card PINs or OTPs into this app.", Icons.Default.PrivacyTip) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(Page),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Text("Backup & Export", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
+            Text("Keep a safe copy of your financial records", color = Muted, fontSize = 13.sp)
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(44.dp).clip(CircleShape).background(IncomeTint), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.CloudUpload, null, tint = IncomeGreen, modifier = Modifier.size(23.dp))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Back up your data", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("Export transactions, loans and settings to a file.", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                    Button(onClick = onExportBackup, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Green)) {
+                        Icon(Icons.Default.FileDownload, null); Spacer(Modifier.width(8.dp)); Text("Create backup (JSON)")
+                    }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(44.dp).clip(CircleShape).background(LavenderTint), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Restore, null, tint = Purple, modifier = Modifier.size(23.dp))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Restore data", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("Load a previous MoneyLog JSON backup.", color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                    OutlinedButton(onClick = onRestoreBackup, modifier = Modifier.fillMaxWidth().height(46.dp), shape = RoundedCornerShape(15.dp)) {
+                        Icon(Icons.Default.Restore, null); Spacer(Modifier.width(8.dp)); Text("Restore from file")
+                    }
+                }
+            }
+        }
+        item {
+            Text("Export data", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp)) {
+                    Row(Modifier.fillMaxWidth().clickable(onClick = onExportCsv).padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(SkyTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.Description, null, tint = Blue) }
+                        Spacer(Modifier.width(11.dp))
+                        Column(Modifier.weight(1f)) { Text("Export as CSV", color = Ink, fontWeight = FontWeight.SemiBold); Text("Transactions for spreadsheets", color = Muted, fontSize = 11.sp) }
+                        Icon(Icons.Default.FileDownload, null, tint = Green)
+                    }
+                    HorizontalDivider(color = Color(0xFFEDEFF4))
+                    Row(Modifier.fillMaxWidth().clickable(onClick = onExportBackup).padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(IncomeTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.DataObject, null, tint = IncomeGreen) }
+                        Spacer(Modifier.width(11.dp))
+                        Column(Modifier.weight(1f)) { Text("Export as JSON", color = Ink, fontWeight = FontWeight.SemiBold); Text("Full backup · recommended", color = Muted, fontSize = 11.sp) }
+                        Icon(Icons.Default.FileDownload, null, tint = Green)
+                    }
+                }
+            }
+        }
+        if (message.isNotBlank()) item { InfoCard("Latest operation", message, Icons.Default.CheckCircle) }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE7F5F3)), shape = RoundedCornerShape(16.dp)) {
+                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.Top) {
+                    Icon(Icons.Default.Lock, null, tint = Teal)
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text("Your data stays on your device", color = Teal, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("MoneyLog does not currently upload backups to Google Drive or another cloud service. Exported files contain sensitive financial information—store them somewhere private.", color = Ink, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
     }
 }
 @Composable
@@ -2090,18 +2353,102 @@ private fun AppearanceScreen() {
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
     var theme by remember { mutableStateOf(preferences.getString("appearance_theme", "Light") ?: "Light") }
     var currency by remember { mutableStateOf(preferences.getString("appearance_currency", "INR (₹)") ?: "INR (₹)") }
-    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Settings · Appearance", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold) }
+    var accent by remember { mutableStateOf(preferences.getString("appearance_accent", "Green") ?: "Green") }
+    var layout by remember { mutableStateOf(preferences.getString("appearance_layout", "Comfortable") ?: "Comfortable") }
+    var fontSize by remember { mutableStateOf(preferences.getString("appearance_font_size", "Medium") ?: "Medium") }
+    val accents = listOf("Green" to Color(0xFF07966F), "Blue" to Color(0xFF3478F6), "Purple" to Color(0xFF8B4DE8), "Orange" to Color(0xFFF59E0B), "Pink" to Color(0xFFEC4899))
+    fun save(key: String, value: String) { preferences.edit().putString(key, value).apply() }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(Page),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Theme", color = Ink, fontWeight = FontWeight.Bold)
+            Text("Appearance", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
+            Text("Make MoneyLog comfortable to use", color = Muted, fontSize = 13.sp)
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Theme", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Light", "Dark", "System").forEach { value -> FilterChip(selected = theme == value, onClick = { theme = value; preferences.edit().putString("appearance_theme", value).apply() }, label = { Text(value) }) }
+                        listOf("Light", "Dark", "System").forEach { value ->
+                            val selected = theme == value
+                            Column(
+                                Modifier.weight(1f).clip(RoundedCornerShape(15.dp))
+                                    .background(if (selected) IncomeTint else Page)
+                                    .then(if (selected) Modifier.border(1.5.dp, Green, RoundedCornerShape(15.dp)) else Modifier)
+                                    .clickable { theme = value; save("appearance_theme", value) }
+                                    .padding(vertical = 15.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(7.dp)
+                            ) {
+                                Icon(when (value) { "Light" -> Icons.Default.LightMode; "Dark" -> Icons.Default.DarkMode; else -> Icons.Default.SettingsBrightness }, null, tint = if (selected) Green else Muted, modifier = Modifier.size(25.dp))
+                                Text(value, color = if (selected) Green else Ink, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                                if (selected) Icon(Icons.Default.CheckCircle, null, tint = Green, modifier = Modifier.size(16.dp))
+                            }
+                        }
                     }
+                    Text("Accent color", color = Ink, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        accents.forEach { (name, color) ->
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.clickable { accent = name; save("appearance_accent", name) }) {
+                                Box(Modifier.size(34.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
+                                    if (accent == name) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(19.dp))
+                                }
+                                Text(name, color = if (accent == name) Ink else Muted, fontSize = 9.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Layout", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("Compact", "Comfortable").forEach { value ->
+                            val selected = layout == value
+                            Row(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if (selected) IncomeTint else Page)
+                                .then(if (selected) Modifier.border(1.dp, Green, RoundedCornerShape(14.dp)) else Modifier)
+                                .clickable { layout = value; save("appearance_layout", value) }.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Icon(if (value == "Compact") Icons.Default.ViewCompact else Icons.Default.ViewAgenda, null, tint = if (selected) Green else Muted)
+                                Column { Text(value, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold); Text(if (value == "Compact") "More items" else "More space", color = Muted, fontSize = 9.sp) }
+                            }
+                        }
+                    }
+                    Text("Font size", color = Ink, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Row(Modifier.fillMaxWidth().background(Page, RoundedCornerShape(14.dp)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf("Small", "Medium", "Large").forEach { value ->
+                            val selected = fontSize == value
+                            Box(Modifier.weight(1f).clip(RoundedCornerShape(11.dp)).background(if (selected) IncomeTint else Color.Transparent).clickable { fontSize = value; save("appearance_font_size", value) }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                Text(value, color = if (selected) Green else Muted, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Preview", color = Ink, fontWeight = FontWeight.Bold)
+                    Row(Modifier.fillMaxWidth().background(Page, RoundedCornerShape(15.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(40.dp).clip(CircleShape).background(accents.firstOrNull { it.first == accent }?.second ?: Green), contentAlignment = Alignment.Center) { Icon(Icons.Default.Restaurant, null, tint = Color.White) }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) { Text("Food & Dining", color = Ink, fontWeight = FontWeight.SemiBold); Text("Example transaction", color = Muted, fontSize = 11.sp) }
+                        Text("−₹450", color = ExpenseRed, fontWeight = FontWeight.Bold)
+                    }
+                    Text("Preferences are saved on this device. Theme, accent, layout and font choices are currently preview preferences; they are not yet applied across every app screen. Currency selection is saved but does not convert stored transaction amounts.", color = Muted, fontSize = 11.sp)
                     Text("Currency", color = Ink, fontWeight = FontWeight.Bold)
-                    listOf("INR (₹)", "USD ($)", "EUR (€)").forEach { value -> Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = currency == value, onClick = { currency = value; preferences.edit().putString("appearance_currency", value).apply() }); Text(value, color = Ink) } }
-                    Text("Your theme and currency selections are saved on this device. The reference palette remains forest green, mint, white and slate; dark-theme rendering and currency-wide amount conversion are not yet applied across every screen.", color = Muted, fontSize = 12.sp)
+                    listOf("INR (₹)", "USD ($)", "EUR (€)").forEach { value ->
+                        Row(Modifier.fillMaxWidth().clickable { currency = value; save("appearance_currency", value) }, verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = currency == value, onClick = { currency = value; save("appearance_currency", value) })
+                            Text(value, color = Ink)
+                        }
+                    }
                 }
             }
         }
