@@ -867,29 +867,29 @@ private fun ReportsScreen(
     }.groupBy { it.first }.mapValues { entry -> entry.value.sumOf { it.second } }.toList().sortedByDescending { it.second }
     val views = listOf("Calendar", "By category", "By tag", "Total")
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Color(0xFFF4F7FC)),
+        modifier = Modifier.fillMaxSize().background(Page),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color(0xFF173D70), modifier = Modifier.size(24.dp))
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Monthly Report", fontSize = 23.sp, color = Color(0xFF102D59), fontWeight = FontWeight.Bold)
+                    Text("Monthly Report", fontSize = 23.sp, color = Ink, fontWeight = FontWeight.Bold)
                     Box {
                         Row(
                             Modifier.clip(RoundedCornerShape(10.dp)).clickable { showMonthMenu = true }.padding(horizontal = 2.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
-                            Text(selectedMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy")), color = Color(0xFF49688F), fontSize = 14.sp)
+                            Text(selectedMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy")), color = Muted, fontSize = 14.sp)
                             Icon(Icons.Default.ExpandMore, contentDescription = "Select month", tint = Color(0xFF49688F), modifier = Modifier.size(18.dp))
                         }
                         DropdownMenu(
                             expanded = showMonthMenu,
                             onDismissRequest = { showMonthMenu = false },
-                            modifier = Modifier.heightIn(max = 360.dp).background(Color.White)
+                            modifier = Modifier.heightIn(max = 360.dp).background(MaterialTheme.colorScheme.surface)
                         ) {
                             (0..23).map { selectedMonth.plusMonths(12L - it) }.sortedDescending().forEach { month ->
                                 DropdownMenuItem(
@@ -902,17 +902,17 @@ private fun ReportsScreen(
                     }
                 }
                 IconButton(onClick = { showAllCategories = true }) {
-                    Icon(Icons.Default.Search, contentDescription = "Show all categories", tint = Color(0xFF173D70))
+                    Icon(Icons.Default.Search, contentDescription = "Show all categories", tint = Ink)
                 }
                 Box {
                     IconButton(onClick = { showNotifications = true }) {
-                        Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = Color(0xFF173D70))
+                        Icon(Icons.Default.Notifications, contentDescription = "Notifications", tint = Ink)
                     }
                     Box(Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 7.dp).size(7.dp).background(Color(0xFFEF4444), CircleShape))
                 }
             }
             Row(
-                Modifier.fillMaxWidth().background(Color(0xFFE5EFFB), RoundedCornerShape(24.dp)).padding(5.dp),
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(24.dp)).padding(5.dp),
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -926,7 +926,7 @@ private fun ReportsScreen(
                     }
                     Row(
                         Modifier.weight(1f).clip(RoundedCornerShape(22.dp))
-                            .background(if (reportView == view) Color(0xFF6258F5) else Color.Transparent)
+                            .background(if (reportView == view) Purple else Color.Transparent)
                             .clickable { reportView = view }
                             .padding(vertical = 14.dp, horizontal = 3.dp),
                         horizontalArrangement = Arrangement.Center,
@@ -934,7 +934,7 @@ private fun ReportsScreen(
                     ) {
                         Icon(tabIcon, contentDescription = null, modifier = Modifier.size(17.dp), tint = if (reportView == view) Color.White else Color(0xFF49688F))
                         Spacer(Modifier.width(4.dp))
-                        Text(label, fontSize = 11.sp, maxLines = 1, color = if (reportView == view) Color.White else Color(0xFF173D70), fontWeight = if (reportView == view) FontWeight.SemiBold else FontWeight.Medium)
+                        Text(label, fontSize = 11.sp, maxLines = 1, color = if (reportView == view) Color.White else Ink, fontWeight = if (reportView == view) FontWeight.SemiBold else FontWeight.Medium)
                     }
                 }
             }
@@ -963,7 +963,7 @@ private fun ReportsScreen(
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(top.first, color = Ink, fontWeight = FontWeight.Bold)
-                                Text(if (totalSpend > 0L) "${top.second * 100 / totalSpend}% of expenses" else "0%", color = Color(0xFF263238), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                Text(if (totalSpend > 0L) "${top.second * 100 / totalSpend}% of expenses" else "0%", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                             }
                             Text(Money.format(top.second), color = Ink, fontWeight = FontWeight.Bold)
                         }
@@ -1017,7 +1017,7 @@ private fun ReportsScreen(
             }
             item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Spending by category", color = Color(0xFF173D70), fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text("Spending by category", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Box(Modifier.weight(0.86f), contentAlignment = Alignment.Center) {
                             androidx.compose.foundation.Canvas(Modifier.size(126.dp)) {
@@ -1032,7 +1032,7 @@ private fun ReportsScreen(
                             }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("Total Expense", color = Color(0xFF8094B0), fontSize = 11.sp)
-                                Text(Money.format(totalSpend), color = Color(0xFF173D70), fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                                Text(Money.format(totalSpend), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             }
                         }
                         Column(Modifier.weight(1.14f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1041,7 +1041,7 @@ private fun ReportsScreen(
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                     Box(Modifier.size(8.dp).background(categoryColor(category), CircleShape))
                                     Text(category, modifier = Modifier.weight(1f), color = Color(0xFF173D70), fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
-                                    Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Color(0xFF263238), fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
+                                    Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                                 }
                             }
                         }
@@ -1067,7 +1067,7 @@ private fun ReportsScreen(
             }
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Top Spending Categories", modifier = Modifier.weight(1f), color = Color(0xFF173D70), fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text("Top Spending Categories", modifier = Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     TextButton(onClick = { showAllCategories = !showAllCategories }) {
                         Text(if (showAllCategories) "Show less  →" else "See all  →", color = Color(0xFF6258F5), fontSize = 12.sp)
                     }
@@ -1105,10 +1105,10 @@ private fun ReportsScreen(
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text(category, color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, softWrap = false)
-                                Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}% of expenses" else "0% of expenses", color = Color(0xFF263238), fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
+                                Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}% of expenses" else "0% of expenses", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                             }
                             Text(Money.format(amount).substringBeforeLast(".").takeIf { Money.format(amount).contains(".") } ?: Money.format(amount), color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, softWrap = false)
-                            Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Color(0xFF263238), fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
+                            Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                             Icon(Icons.Default.ChevronRight, contentDescription = "Open category", tint = Muted, modifier = Modifier.size(16.dp))
                         }
                         if (index < visibleCategories.lastIndex) HorizontalDivider(color = Page)
