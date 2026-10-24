@@ -2651,12 +2651,12 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                     error("Invalid PDF file. Choose a readable EMI schedule PDF.")
                 }
                 PDFBoxResourceLoader.init(context.applicationContext)
-                val text = PDDocument.load(bytes.inputStream()).use { document ->
+                val extractedText = PDDocument.load(bytes.inputStream()).use { document ->
                     if (document.isEncrypted) error("Password-protected PDFs are not supported. Upload an unlocked PDF.")
                     if (document.numberOfPages !in 1..300) error("The PDF has an invalid or unsupported page count.")
                     PDFTextStripper().getText(document)
                 }
-                val normalized = text.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ")
+                val normalized = extractedText.replace('\\u00A0', ' ').replace(Regex("[ \\t]+"), " ")
                 val looksLikeSchedule = Regex("(?i)\\b(emi|installment|instalment|repayment|due date|principal|outstanding)\\b").containsMatchIn(normalized)
                 if (!looksLikeSchedule) error("This PDF does not look like an EMI repayment schedule. No data was saved.")
                 val datePattern = Regex("(?i)(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|\\d{1,2}[- ](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[- ,]+\\d{2,4}|\\d{4}-\\d{2}-\\d{2})")
@@ -2673,14 +2673,15 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                 if (rows.map { it.first }.distinct().size != rows.size) error("The schedule contains repeated dates that need manual review. No data was saved.")
                 rows
             }
-            result
-        }.onSuccess { rows ->
-            val arr = JSONArray()
-            rows.forEach { (date, amount) -> arr.put(JSONObject().put("date", date).put("amount", amount)) }
-            schedulePrefs.edit().putString("bank_schedule_${loan.lender}", arr.toString()).apply()
-            importedSchedule = rows
-            pdfMessage = "EMI schedule submitted successfully. Saved ${rows.size} dated installments for review."
-        }.onFailure { pdfMessage = it.message ?: "Could not validate this PDF. No schedule was saved." }
+            result.onSuccess { rows ->
+                val arr = JSONArray()
+                rows.forEach { (date, amount) -> arr.put(JSONObject().put("date", date).put("amount", amount)) }
+                schedulePrefs.edit().putString("bank_schedule_${loan.lender}", arr.toString()).apply()
+                importedSchedule = rows
+                pdfMessage = "EMI schedule submitted successfully. Saved ${rows.size} dated installments for review."
+            }.onFailure { error ->
+                pdfMessage = error.message ?: "Could not validate this PDF. No schedule was saved."
+            }
             pdfBusy = false
         }
     }
