@@ -2835,7 +2835,27 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                     Text("STATUS", Modifier.weight(.85f), color = forest, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
                 }
             }
-            if (selectedSection != "Bank Verify") items(schedule.indices.toList()) { index ->
+            if (selectedSection != "Bank Verify") {
+                if (importedSchedule.isNotEmpty()) items(importedSchedule.indices.toList()) { index ->
+                    val row = importedSchedule[index]
+                    val dateLabel = row.first
+                    val amount = row.second
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(dateLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                            Text("Imported from lender PDF", color = Muted, fontSize = 9.sp)
+                        }
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(Money.format(amount), color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("Actual PDF amount", color = Muted, fontSize = 9.sp)
+                        }
+                        Box(Modifier.weight(.85f), contentAlignment = Alignment.CenterEnd) {
+                            Box(Modifier.clip(RoundedCornerShape(50)).background(SkyTint).padding(horizontal = 8.dp, vertical = 6.dp)) {
+                                Text("PDF", color = Blue, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            }
+                        }
+                    }
+                } else items(schedule.indices.toList()) { index ->
                 val (interest, principalPart, closingBalance) = schedule[index]
                 val installmentDate = firstDueDate?.plusMonths(index.toLong())
                 val installmentLabel = installmentDate?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
@@ -2856,6 +2876,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                         }
                     }
                 }
+            }
             }
             if (selectedSection != "Bank Verify" && paymentTooLow) item {
                 InfoCard("EMI may not cover interest", "At the entered interest rate, the EMI is not greater than the estimated monthly interest. The balance may not reduce unless the EMI or rate changes.", Icons.Default.Warning)
