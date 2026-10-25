@@ -3224,7 +3224,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             ?.substringBefore(".")?.toLongOrNull()
                         principalCandidate?.takeIf { it > 0L }?.let { fields.put("principal", it.toString()) }
 
-                        val parsedEmi = (recurringScheduleEmi?.takeIf { it > 0.0 }?.toString()
+                        val parsedEmi = (recurringScheduleEmi?.takeIf { (it.toDoubleOrNull() ?: 0.0) > 0.0 }
                             ?: captureLabeled(emiLabel)
                             ?: captureLabeledNearby(emiLabel)
                             ?: aprEmi)
@@ -3234,7 +3234,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         val verifiedEmi = when {
                             parsedEmi == null || parsedEmi <= 0L -> null
                             principalCandidate != null && principalCandidate >= 1000L && parsedEmi < 100L ->
-                                recurringScheduleEmi?.takeIf { it >= 100.0 }?.toLong()
+                                recurringScheduleEmi?.toDoubleOrNull()?.takeIf { it >= 100.0 }?.toLong()
                             else -> parsedEmi
                         }
                         verifiedEmi?.let { fields.put("emi", it.toString()) }
