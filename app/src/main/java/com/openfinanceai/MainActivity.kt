@@ -3058,7 +3058,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     var startDate by remember { mutableStateOf(java.time.LocalDate.now().plusMonths(1).withDayOfMonth(10).toString()) }
     var paymentsMade by remember { mutableStateOf("0") }
     var totalPayments by remember { mutableStateOf("") }
-    var rate by remember { mutableStateOf("12") }
+    var rate by remember { mutableStateOf("") }
     var emi by remember { mutableStateOf("") }
     var statementOutstanding by remember { mutableStateOf("") }
     var statementDate by remember { mutableStateOf("") }
@@ -3196,21 +3196,33 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         // first page that repeats the section heading.
                         val aprStartPage = pdfPages.indexOfFirst { it.contains("Computation of APR", ignoreCase = true) }
                         val aprPage = if (aprStartPage >= 0) pdfPages.drop(aprStartPage).joinToString("\n") else ""
-                        val scheduleStartPage = pdfPages.indexOfFirst { it.contains("Illustrative Repayment Schedule", ignoreCase = true) }
+                        val scheduleStartPage = pdfPages.indexOfFirst { page ->
+                            page.contains("Illustrative Repayment Schedule", ignoreCase = true) ||
+                                page.contains("Repayment Schedule", ignoreCase = true) ||
+                                page.contains("Repayment Schedule Statement", ignoreCase = true)
+                        }
                         val schedulePage = if (scheduleStartPage >= 0) pdfPages.drop(scheduleStartPage).joinToString("\n") else ""
                         val emiLabel = "(?:amount\\s+of\\s+emi\\s+payable|(?:monthly\\s+)?(?:emi\\s*(?:amount|payable)?|equated\\s+monthly\\s+installments?|equated\\s+monthly\\s+instalments?|monthly\\s+installments?(?:\\s+amount)?|monthly\\s+instalments?(?:\\s+amount)?|installment\\s+amount|instalment\\s+amount|monthly\\s+repayment|repayment\\s+installment|repayment\\s+instalment))"
-                        val scheduleRowPattern = Regex("^\\s*(\\d{1,3})\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
-                        val scheduleRows = schedulePage.lines().mapNotNull { line ->
-                            scheduleRowPattern.find(line)?.let { match ->
-                                match.groupValues[1].toIntOrNull()?.let { installmentNo ->
-                                    installmentNo to (match.groupValues[5].replace(",", "").toDoubleOrNull())
-                                }
+                        // Support both compact numeric schedules and schedules with a due-date column.
+                        // Column order is serial, (date), opening principal, installment/EMI,
+                        // principal component, interest component, closing principal.
+                        val scheduleRowPattern = Regex("^\\s*(\\d{1,3})\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
+                        val datedScheduleRowPattern = Regex("^\\s*(\\d{1,3})\\s+(?:\\d{1,2}[-/][A-Za-z]{3}[-/]\\d{2,4}|\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4}|\\d{4}-\\d{2}-\\d{2})\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
+                        val scheduleSource = if (schedulePage.isNotBlank()) schedulePage else extracted
+                        val scheduleRows = scheduleSource.lines().mapNotNull { line ->
+                            val dated = datedScheduleRowPattern.find(line)
+                            if (dated != null) {
+                                val installmentNo = dated.groupValues[1].toIntOrNull()
+                                val emiValue = dated.groupValues[3].replace(",", "").toDoubleOrNull()
+                                if (installmentNo != null && emiValue != null) installmentNo to emiValue else null
+                            } else {
+                                val compact = scheduleRowPattern.find(line) ?: return@mapNotNull null
+                                val installmentNo = compact.groupValues[1].toIntOrNull()
+                                val emiValue = compact.groupValues[3].replace(",", "").toDoubleOrNull()
+                                if (installmentNo != null && emiValue != null) installmentNo to emiValue else null
                             }
                         }
-                        val scheduleInstallments = (if (scheduleRows.isNotEmpty()) scheduleRows.mapNotNull { it.second } else extractedLines.mapNotNull { line ->
-                            Regex("^\\s*\\d{1,3}\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
-                                .find(line)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
-                        })
+                        val scheduleInstallments = scheduleRows.map { it.second }
                         val recurringScheduleEmi = scheduleInstallments.groupingBy { it }.eachCount()
                             .maxByOrNull { it.value }?.takeIf { it.value >= 2 }?.key?.toString()
                         val scheduleTenure = scheduleRows.maxOfOrNull { it.first }?.toString()
