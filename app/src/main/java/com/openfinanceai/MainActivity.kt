@@ -2618,6 +2618,22 @@ private fun AppearanceScreen() {
         }
     }
 }
+private fun parseScheduleDate(raw: String): java.time.LocalDate? {
+    val value = raw.trim()
+    val patterns = listOf(
+        "d MMM yyyy", "dd MMM yyyy", "d-MMM-yyyy", "dd-MMM-yyyy",
+        "d/MM/yyyy", "dd/MM/yyyy", "d-MM-yyyy", "dd-MM-yyyy",
+        "yyyy-MM-dd", "d MMMM yyyy", "dd MMMM yyyy", "MMM d, yyyy"
+    )
+    runCatching { return java.time.LocalDate.parse(value) }
+    patterns.forEach { pattern ->
+        runCatching {
+            return java.time.LocalDate.parse(value, java.time.format.DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH))
+        }
+    }
+    return null
+}
+
 private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.LocalDate.now()): java.time.LocalDate? {
     val raw = due.trim()
     if (raw.isBlank() || raw.equals("Set due date", ignoreCase = true) || raw.equals("Not set", ignoreCase = true)) return null
@@ -2927,6 +2943,11 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                     val row = importedSchedule[index]
                     val dateLabel = row.first
                     val amount = row.second
+                    val actualDate = parseScheduleDate(dateLabel)
+                    val importedStatus = schedulePrefs.getString("emi_status_${loan.lender}_${dateLabel}", null)
+                        ?: if (actualDate != null && actualDate.isBefore(java.time.LocalDate.now())) "Overdue" else "Upcoming"
+                    val statusColor = when (importedStatus) { "Paid" -> Color(0xFF0E7490); "Overdue" -> Color(0xFFEF4444); else -> Color(0xFFF59E0B) }
+                    val statusTint = when (importedStatus) { "Paid" -> Color(0xFFCCFBF1); "Overdue" -> Color(0xFFFFE4E6); else -> Color(0xFFFFF1D6) }
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(dateLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
@@ -2937,8 +2958,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                             Text("Actual PDF amount", color = Muted, fontSize = 9.sp)
                         }
                         Box(Modifier.weight(.85f), contentAlignment = Alignment.CenterEnd) {
-                            Box(Modifier.clip(RoundedCornerShape(50)).background(SkyTint).padding(horizontal = 8.dp, vertical = 6.dp)) {
-                                Text("PDF", color = Blue, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Box(Modifier.clip(RoundedCornerShape(50)).background(statusTint).padding(horizontal = 8.dp, vertical = 6.dp)) {
+                                Text(importedStatus, color = statusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                             }
                         }
                     }
@@ -2948,6 +2969,11 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                 val installmentLabel = installmentDate?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
                     ?: if (loan.due.equals("Set due date", ignoreCase = true) || loan.due.isBlank()) "Set due date" else loan.due
                 val paid = index < loan.paymentsMade
+                val statusDate = installmentDate
+                val overdue = !paid && statusDate != null && statusDate.isBefore(java.time.LocalDate.now())
+                val installmentStatus = if (paid) "Paid" else if (overdue) "Overdue" else "Upcoming"
+                val installmentStatusColor = if (paid) Color(0xFF0E7490) else if (overdue) Color(0xFFEF4444) else upcomingAmber
+                val installmentStatusTint = if (paid) Color(0xFFCCFBF1) else if (overdue) Color(0xFFFFE4E6) else upcomingTint
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress() }, onLongClick = { onEmiLongPress() }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(installmentLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
@@ -2958,8 +2984,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                         Text("Int. ${Money.format(interest)}", color = Muted, fontSize = 9.sp)
                     }
                     Box(Modifier.weight(.85f), contentAlignment = Alignment.CenterEnd) {
-                        Box(Modifier.clip(RoundedCornerShape(50)).background(if (paid) paidTint else upcomingTint).padding(horizontal = 8.dp, vertical = 6.dp)) {
-                            Text(if (paid) "Paid" else "Upcoming", color = if (paid) paidGreen else upcomingAmber, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        Box(Modifier.clip(RoundedCornerShape(50)).background(installmentStatusTint).padding(horizontal = 8.dp, vertical = 6.dp)) {
+                            Text(installmentStatus, color = installmentStatusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         }
                     }
                 }
