@@ -3099,8 +3099,10 @@ internal fun captureLoanPdfGlobalTextValue(text: String, labelPattern: String): 
     )
     val match = regex.find(normalized) ?: return null
     val label = Regex(labelPattern, RegexOption.IGNORE_CASE).find(match.value)?.value ?: return null
-    val value = match.value.substringAfter(label).trim().trimStart(':', '-', ' ')
-        .substringBefore(Regex("""(?i)\b(?:$nextLabel)\b""")).trim().trimEnd(',', ';', ':', '-')
+    val valueCandidate = match.value.substringAfter(label).trim().trimStart(':', '-', ' ')
+    val nextLabelMatch = Regex("""(?i)\b(?:$nextLabel)\b""").find(valueCandidate)
+    val value = valueCandidate.substring(0, nextLabelMatch?.range?.first ?: valueCandidate.length)
+        .trim().trimEnd(',', ';', ':', '-')
     if (value.length !in 2..80) return null
     if (Regex("""(?i)^(?:no\.?|number|amount|date|details|not available)$""").matches(value)) return null
     return value
