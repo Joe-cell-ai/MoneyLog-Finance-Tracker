@@ -170,6 +170,21 @@ private fun FinanceApp() {
             )
         }.onFailure { error -> driveStatus = "Could not connect folder: " + (error.message ?: "permission error") }
     }
+    // Open the actual Google Drive app first so users can sign in there. When they
+    // return to MoneyLog, continue with Android's folder picker to grant folder access.
+    val driveAppLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        driveFolderPicker.launch(null)
+    }
+    fun openGoogleDriveForConnection() {
+        val driveIntent = context.packageManager.getLaunchIntentForPackage("com.google.android.apps.docs")
+        if (driveIntent != null) {
+            driveStatus = "Google Drive opened. Sign in if prompted, then return here to choose a backup folder."
+            driveAppLauncher.launch(driveIntent)
+        } else {
+            driveStatus = "Google Drive app is not installed. Choose a cloud folder using the available document picker."
+            driveFolderPicker.launch(null)
+        }
+    }
     var transactions by remember {
         mutableStateOf(loadTransactions(context) ?: listOf(
             Transaction("Monthly salary", "Income", "Today", 65000, true),
@@ -437,7 +452,10 @@ private fun FinanceApp() {
                 when (tab) {
                     "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = "Activity" }, { isIncome -> showAddAsIncome = isIncome; showAdd = true }, { tab = it }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
-                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = it })
+                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = it }, { transaction ->
+                        tab = "Activity"
+                        transactionForActions = transaction
+                    })
                     "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" }, { loanForActions = it })
                     "Settings" -> SettingsScreen { tab = it }
                     "Calendar" -> CalendarScreen(loans, transactions)
@@ -448,7 +466,7 @@ private fun FinanceApp() {
                     "Tag Management" -> TagManagementScreen()
                     "Backup & Export" -> BackupSecurityScreen(
                         onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
-                        onConnectDrive = { driveFolderPicker.launch(null) },
+                        onConnectDrive = { openGoogleDriveForConnection() },
                         onBackupNow = {
                             if (drivePrefs.getString("drive_backup_tree_uri", null).isNullOrBlank()) driveStatus = "Connect a Google Drive folder first."
                             else {
@@ -909,7 +927,8 @@ private fun ReportsScreen(
     transactions: List<Transaction>,
     selectedMonth: YearMonth,
     onMonthChange: (YearMonth) -> Unit,
-    onOpen: (String) -> Unit
+    onOpen: (String) -> Unit,
+    onTransactionClick: (Transaction) -> Unit
 ) {
     var reportView by remember { mutableStateOf("By category") }
     var searchQuery by remember { mutableStateOf("") }
@@ -1266,7 +1285,7 @@ private fun ReportsScreen(
                                 Text("No transactions in this category for the selected month.", color = Muted, fontSize = 12.sp)
                             } else {
                                 categoryTransactions.take(8).forEach { transaction ->
-                                    TransactionRow(transaction, onLongPress = { onOpen("Transactions") })
+                                    TransactionRow(transaction, onLongPress = { onTransactionClick(transaction) })
                                 }
                                 if (categoryTransactions.size > 8) {
                                     Text("Showing 8 of ${categoryTransactions.size} transactions", color = Muted, fontSize = 11.sp)
@@ -2502,7 +2521,7 @@ private fun BackupSecurityScreen(
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text("Your data stays on your device", color = Teal, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text("MoneyLog does not currently upload backups to Google Drive or another cloud service. Exported files contain sensitive financial information—store them somewhere private.", color = Ink, fontSize = 12.sp)
+                        Text("Google Drive backups are saved only after you connect a folder and grant access. Exported files contain sensitive financial information—store them somewhere private.", color = Ink, fontSize = 12.sp)
                     }
                 }
             }
