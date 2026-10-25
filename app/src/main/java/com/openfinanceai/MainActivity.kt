@@ -3042,6 +3042,37 @@ internal fun cleanLoanPdfLineFromIndices(line: String): String {
     ).trim()
 }
 
+internal fun captureLoanPdfTabbedNumericValue(lines: List<String>, labelPattern: String): String? {
+    val labelRegex = Regex("(?i)^\\s*(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$")
+    val valueRegex = Regex("(?i)^\\s*(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*(?:%|months?|mos?\\.?|per\\s+month|/month)?\\s*$")
+    for (rawLine in lines) {
+        val cells = rawLine.split('\t').map { it.trim() }.filter { it.isNotEmpty() }
+        for (index in cells.indices) {
+            val labelCell = cleanLoanPdfLineFromIndices(cells[index])
+            if (!labelRegex.matches(labelCell)) continue
+            val valueCell = cells.drop(index + 1).firstOrNull { it.isNotBlank() } ?: continue
+            val match = valueRegex.matchEntire(valueCell) ?: continue
+            val value = match.groupValues[1].replace(",", "")
+            if (!loanPdfValueMatchesRowIndex(rawLine, value)) return value
+        }
+    }
+    return null
+}
+
+internal fun captureLoanPdfTabbedTextValue(lines: List<String>, labelPattern: String): String? {
+    val labelRegex = Regex("(?i)^\\s*(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$")
+    val headerRegex = Regex("(?i)^(?:loan|emi|interest|tenure|agreement|lender|date|amount|rate|applicant|customer|borrower|principal|repayment|installment|instalment)\\b")
+    for (rawLine in lines) {
+        val cells = rawLine.split('\t').map { it.trim() }.filter { it.isNotEmpty() }
+        for (index in cells.indices) {
+            if (!labelRegex.matches(cleanLoanPdfLineFromIndices(cells[index]))) continue
+            val value = cells.drop(index + 1).firstOrNull { it.isNotBlank() }?.trim()?.trim(':', '-', ' ')
+            if (value != null && value.length in 2..100 && !headerRegex.containsMatchIn(value)) return value
+        }
+    }
+    return null
+}
+
 internal fun parseLoanPdfScheduleRows(scheduleText: String): List<Pair<Int, Double>> {
     val compact = Regex("^\\s*(\\d{1,3})\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
     val month = "(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
@@ -3245,11 +3276,14 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         val aprEmi = Regex("(?i)Amount of each EPI.*?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+nos\\.\\s+of EPIs").find(aprNormalized)?.groupValues?.get(1)?.replace(",", "")
                         val aprStartDate = Regex("(?i)Commencement of repayments?, post sanction.*?\\b([0-9]{4}-[0-9]{2}-[0-9]{2})\\b").find(aprNormalized)?.groupValues?.get(1)
                         val principalLabel = "(?:(?:sanctioned|approved|total|original)\\s+)?(?:loan\\s+amount|amount\\s+of\\s+loan|principal\\s+amount|loan\\s+principal|amount\\s+financed|sanctioned\\s+amount|amount\\s+sanctioned|approved\\s+amount|credit\\s+facility\\s+amount)"
-                        val principalCandidate = (captureLabeled(principalLabel) ?: captureLabeledNearby(principalLabel))
-                            ?.substringBefore(".")?.toLongOrNull()
+                        val principalCandidate = (captureLoanPdfTabbedNumericValue(extractedLines, principalLabel)
+                            ?: captureLabeled(principalLabel)
+                            ?: captureLabeledNearby(principalLabel))
+                            ?.substringBefore(".")?.replace(",", "")?.toLongOrNull()
                         principalCandidate?.takeIf { it > 0L }?.let { fields.put("principal", it.toString()) }
 
                         val parsedEmi = (recurringScheduleEmi?.takeIf { (it.toDoubleOrNull() ?: 0.0) > 0.0 }
+                            ?: captureLoanPdfTabbedNumericValue(extractedLines, emiLabel)
                             ?: captureLabeled(emiLabel)
                             ?: captureLabeledNearby(emiLabel)
                             ?: aprEmi)
@@ -3264,7 +3298,8 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         }
                         verifiedEmi?.let { fields.put("emi", it.toString()) }
                         val rateLabel = "(?:annual\\s+)?(?:interest\\s+rate(?:\\s+per\\s+annum)?|fixed\\s+rate\\s+of\\s+interest|rate\\s+of\\s+interest|roi)"
-                        val parsedRate = (captureLabeled(rateLabel) ?: captureLabeledNearby(rateLabel))
+                        val parsedRate = (captureLoanPdfTabbedNumericValue(extractedLines, rateLabel)
+                            ?: captureLabeled(rateLabel) ?: captureLabeledNearby(rateLabel))
                             ?.replace("%", "")?.trim()?.toDoubleOrNull()
                         // Accept only a positive, plausible percentage tied to an explicit interest-rate label.
                         // No invented default is used when the source value cannot be verified.
