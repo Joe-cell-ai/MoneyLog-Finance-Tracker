@@ -3067,7 +3067,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                         val recognizedText = ocrText.toString()
                                         // Keep the PDF text layer and add OCR output: many lender PDFs mix selectable
                                         // headings with scanned tables, so replacing either source loses fields.
-                                        extracted = listOf(extracted, recognizedText).filter { it.isNotBlank() }.joinToString("\\n")
+                                        extracted = listOf(extracted, recognizedText).filter { it.isNotBlank() }.joinToString("\n")
                                     } finally { recognizer.close() }
                                 }
                             }
@@ -3166,7 +3166,26 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         val rateLabel = "(?:annual\\s+)?(?:interest\\s+rate(?:\\s+per\\s+annum)?|fixed\\s+rate\\s+of\\s+interest|rate\\s+of\\s+interest|roi)"
                         (captureLabeled(rateLabel) ?: captureLabeledNearby(rateLabel))?.let { fields.put("rate", it) }
                         val tenureLabel = "(?:(?:total|loan|repayment)\\s+)*(?:tenure|term|period|duration|tenor)(?:\\s+in\\s+(?:months?|years?))?"
-                        (captureLabeled(tenureLabel) ?: captureLabeledNearby(tenureLabel) ?: aprTenure ?: scheduleTenure)?.let { fields.put("totalPayments", it) }
+                        fun captureTenureMonths(): String? {
+                            val labelRegex = Regex(tenureLabel, RegexOption.IGNORE_CASE)
+                            val valueRegex = Regex("(?:^|\\\\s)([0-9]{1,3})\\\\s*(years?|yrs?)(?:\\\\s+([0-9]{1,2})\\\\s*(months?|mos?))?|(?:^|\\\\s)([0-9]{1,3})\\\\s*(months?|mos?)", RegexOption.IGNORE_CASE)
+                            for (index in extractedLines.indices) {
+                                val labelMatch = labelRegex.find(extractedLines[index]) ?: continue
+                                val after = extractedLines[index].substring(labelMatch.range.last + 1).trim().trimStart(':', '-', ' ')
+                                val inline = valueRegex.find(after)
+                                val adjacent = if (inline == null) extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } else null
+                                val match = inline ?: adjacent?.let { valueRegex.find(it) } ?: continue
+                                val years = match.groupValues.getOrNull(1)?.takeIf { it.isNotBlank() }?.toIntOrNull()
+                                if (years != null) {
+                                    val extraMonths = match.groupValues.getOrNull(3)?.toIntOrNull() ?: 0
+                                    return (years * 12 + extraMonths).takeIf { it > 0 }?.toString()
+                                }
+                                val months = match.groupValues.getOrNull(5)?.takeIf { it.isNotBlank() }?.toIntOrNull()
+                                if (months != null) return months.takeIf { it > 0 }?.toString()
+                            }
+                            return null
+                        }
+                        (captureTenureMonths() ?: captureLabeled(tenureLabel) ?: captureLabeledNearby(tenureLabel) ?: aprTenure ?: scheduleTenure)?.let { fields.put("totalPayments", it) }
                             ?: captureLabeled("(?:total\\s+number\\s+of\\s+)?(?:emi|installments?|instalments?)(?:\\s+(?:count|tenure|months?))?")?.let { fields.put("totalPayments", it) }
                         captureLabeled("(?:number\\s+of\\s+)?(?:emi|installments?|instalments?)\\s+(?:paid|completed)")?.let { fields.put("paymentsMade", it) }
                         captureLabeled("(?:(?:current|total)\\s+)?(?:outstanding\\s+(?:principal|balance|amount)?|principal\\s+outstanding)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
