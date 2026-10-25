@@ -100,7 +100,14 @@ private fun applyAppearance(theme: String, accent: String, layout: String, fontS
     Ink = if (AppDarkTheme) Color(0xFFF1F5F2) else Color(0xFF22243A)
     Muted = if (AppDarkTheme) Color(0xFFB0BDB5) else Color(0xFF74788D)
 }
-private val Money = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
+private var Money by mutableStateOf(NumberFormat.getCurrencyInstance(Locale("en", "IN")))
+private fun applyCurrency(currency: String) {
+    Money = when (currency) {
+        "USD ($)" -> NumberFormat.getCurrencyInstance(Locale.US)
+        "EUR (€)" -> NumberFormat.getCurrencyInstance(Locale.GERMANY)
+        else -> NumberFormat.getCurrencyInstance(Locale("en", "IN"))
+    }
+}
 private val CategoryPalette = listOf(Color(0xFF356AE6), Color(0xFF159765), Color(0xFF8953D8), Color(0xFFD97732), Color(0xFFDB4765), Color(0xFF148D91), Color(0xFFB18A16), Color(0xFF477DAD), Color(0xFFAF5AB5), Color(0xFF567A35), Color(0xFFCF5A36), Color(0xFF5470C6))
 private fun categoryColor(category: String): Color = when (category.trim().lowercase(Locale.ROOT)) {
     "salary", "payroll", "wages" -> Color(0xFF356AE6)
@@ -145,6 +152,7 @@ private fun FinanceApp() {
             appearancePreferences.getString("appearance_font_size", "Medium") ?: "Medium",
             systemDark
         )
+        applyCurrency(appearancePreferences.getString("appearance_currency", "INR (₹)") ?: "INR (₹)")
     }
     var tab by remember { mutableStateOf("Home") }
     var selectedOverviewMonth by remember { mutableStateOf(YearMonth.now()) }
@@ -2540,6 +2548,7 @@ private fun AppearanceScreen() {
     var fontSize by remember { mutableStateOf(preferences.getString("appearance_font_size", "Medium") ?: "Medium") }
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
     LaunchedEffect(theme, accent, layout, fontSize, systemDark) { applyAppearance(theme, accent, layout, fontSize, systemDark) }
+    LaunchedEffect(currency) { applyCurrency(currency) }
     val accents = listOf("Green" to Color(0xFF07966F), "Blue" to Color(0xFF3478F6), "Purple" to Color(0xFF8B4DE8), "Orange" to Color(0xFFF59E0B), "Pink" to Color(0xFFEC4899))
     fun save(key: String, value: String) { preferences.edit().putString(key, value).apply() }
     LazyColumn(
