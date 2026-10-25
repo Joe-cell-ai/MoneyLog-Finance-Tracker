@@ -31,6 +31,8 @@ jobs:
           gradle-version: "8.9"
       - name: Verify Gradle installation
         run: gradle --version
+      - name: Run loan PDF parser regression tests
+        run: gradle --no-daemon --stacktrace testDebugUnitTest
       - name: Prepare persistent signing key
         if: env.MONEYLOG_KEYSTORE_BASE64 != '' && env.MONEYLOG_KEYSTORE_PASSWORD != '' && env.MONEYLOG_KEY_ALIAS != '' && env.MONEYLOG_KEY_PASSWORD != ''
         shell: bash
