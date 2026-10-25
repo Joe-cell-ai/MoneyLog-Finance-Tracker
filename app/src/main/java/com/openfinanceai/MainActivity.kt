@@ -2721,7 +2721,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                 val extractedText = PDDocument.load(bytes.inputStream()).use { document ->
                     if (document.isEncrypted) error("Password-protected PDFs are not supported. Upload an unlocked PDF.")
                     if (document.numberOfPages !in 1..300) error("The PDF has an invalid or unsupported page count.")
-                    LayoutAwareLoanPdfTextStripper().getText(document)
+                    PDFTextStripper().apply { setSortByPosition(true) }.getText(document)
                 }
                 val normalized = extractedText.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ")
                 val looksLikeSchedule = Regex("(?i)\\b(emi|installment|instalment|repayment|due date|principal|outstanding)\\b").containsMatchIn(normalized)
