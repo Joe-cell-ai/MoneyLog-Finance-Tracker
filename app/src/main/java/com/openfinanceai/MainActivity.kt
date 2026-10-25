@@ -15,6 +15,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
@@ -57,35 +58,35 @@ import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
-private var Green by mutableStateOf(Color(0xFF07966F))
-private var Mint by mutableStateOf(Color(0xFFE6FBF3))
-private var IncomeGreen by mutableStateOf(Color(0xFF168568))
+private var Green by mutableStateOf(Color(0xFF0284C7))
+private var Mint by mutableStateOf(Color(0xFFE0F2FE))
+private var IncomeGreen by mutableStateOf(Color(0xFF0E7490))
 private var ExpenseRed by mutableStateOf(Color(0xFFD94F69))
-private var SavingsBlue by mutableStateOf(Color(0xFF3478D4))
-private var Ink by mutableStateOf(Color(0xFF22243A))
-private var Muted by mutableStateOf(Color(0xFF74788D))
-private var Page by mutableStateOf(Color(0xFFF7F7FB))
-private var IncomeTint by mutableStateOf(Color(0xFFE6FBF3))
+private var SavingsBlue by mutableStateOf(Color(0xFF0284C7))
+private var Ink by mutableStateOf(Color(0xFF0F2942))
+private var Muted by mutableStateOf(Color(0xFF64748B))
+private var Page by mutableStateOf(Color(0xFFF4FAFE))
+private var IncomeTint by mutableStateOf(Color(0xFFCCFBF1))
 private var ExpenseTint by mutableStateOf(Color(0xFFFFEEF1))
-private var SkyTint by mutableStateOf(Color(0xFFEAF3FF))
+private var SkyTint by mutableStateOf(Color(0xFFE0F2FE))
 private var PeachTint by mutableStateOf(Color(0xFFFFF1E6))
 private var PinkTint by mutableStateOf(Color(0xFFFFEFF6))
 private var LavenderTint by mutableStateOf(Color(0xFFF0EDFF))
-private var Teal by mutableStateOf(Color(0xFF2D9A91))
+private var Teal by mutableStateOf(Color(0xFF06B6D4))
 private var Orange by mutableStateOf(Color(0xFFE69A45))
 private var Purple by mutableStateOf(Color(0xFF8A63D2))
-private var Blue by mutableStateOf(Color(0xFF3478D4))
+private var Blue by mutableStateOf(Color(0xFF0284C7))
 private var AppDarkTheme by mutableStateOf(false)
 private var AppCompactLayout by mutableStateOf(false)
 private var AppFontScale by mutableStateOf(1f)
 
 private fun applyAppearance(theme: String, accent: String, layout: String, fontSize: String, systemDark: Boolean = false) {
     val accentColor = when (accent) {
-        "Blue" -> Color(0xFF3478F6)
+        "Blue" -> Color(0xFF0284C7)
         "Purple" -> Color(0xFF8B4DE8)
         "Orange" -> Color(0xFFF59E0B)
         "Pink" -> Color(0xFFEC4899)
-        else -> Color(0xFF07966F)
+        else -> Color(0xFF0284C7)
     }
     AppDarkTheme = theme == "Dark" || (theme == "System" && systemDark)
     AppCompactLayout = layout == "Compact"
@@ -138,7 +139,7 @@ private fun FinanceApp() {
     LaunchedEffect(Unit) {
         applyAppearance(
             appearancePreferences.getString("appearance_theme", "Light") ?: "Light",
-            appearancePreferences.getString("appearance_accent", "Green") ?: "Green",
+            appearancePreferences.getString("appearance_accent", "Blue") ?: "Blue",
             appearancePreferences.getString("appearance_layout", "Comfortable") ?: "Comfortable",
             appearancePreferences.getString("appearance_font_size", "Medium") ?: "Medium",
             systemDark
@@ -204,6 +205,23 @@ private fun FinanceApp() {
             Loan("KreditBee", 24000, 4800, "8 Nov"),
             Loan("Pocketly", 12800, 3200, "10 Nov")
         ).also { saveLoans(context, it) })
+    }
+
+    BackHandler(
+        enabled = tab != "Home" || showAdd || showAddAsIncome || transactionForActions != null ||
+            transactionToEdit != null || transactionTips != null || loanForActions != null || loanToEdit != null
+    ) {
+        when {
+            loanToEdit != null -> loanToEdit = null
+            loanForActions != null -> loanForActions = null
+            transactionToEdit != null -> transactionToEdit = null
+            transactionTips != null -> transactionTips = null
+            transactionForActions != null -> transactionForActions = null
+            showAddAsIncome -> showAddAsIncome = false
+            showAdd -> showAdd = false
+            tab == "Loan details" -> { tab = "Loans"; selectedLoan = null }
+            tab != "Home" -> tab = "Home"
+        }
     }
 
     LaunchedEffect(loans) {
