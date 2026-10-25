@@ -149,6 +149,20 @@ private fun FinanceApp() {
     var loanForActions by remember { mutableStateOf<Loan?>(null) }
     var loanToEdit by remember { mutableStateOf<Loan?>(null) }
     val context = LocalContext.current
+    val drivePrefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
+    var driveStatus by remember { mutableStateOf(drivePrefs.getString("drive_backup_status", "Google Drive backup is not connected") ?: "Google Drive backup is not connected") }
+    val driveFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) runCatching {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            context.contentResolver.takePersistableUriPermission(uri, flags)
+            drivePrefs.edit().putString("drive_backup_tree_uri", uri.toString()).putString("drive_backup_status", "Google Drive folder connected; daily backup scheduled").apply()
+            driveStatus = "Google Drive folder connected; daily backup scheduled"
+            androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                "moneylog_drive_backup_daily", androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+                androidx.work.PeriodicWorkRequestBuilder<GoogleDriveBackupWorker>(24, java.util.concurrent.TimeUnit.HOURS).build()
+            )
+        }.onFailure { error -> driveStatus = "Could not connect folder: " + (error.message ?: "permission error") }
+    }
     var transactions by remember {
         mutableStateOf(loadTransactions(context) ?: listOf(
             Transaction("Monthly salary", "Income", "Today", 65000, true),
@@ -398,6 +412,15 @@ private fun FinanceApp() {
                     "Tag Management" -> TagManagementScreen()
                     "Backup & Export" -> BackupSecurityScreen(
                         onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
+                        onConnectDrive = { driveFolderPicker.launch(null) },
+                        onBackupNow = {
+                            if (drivePrefs.getString("drive_backup_tree_uri", null).isNullOrBlank()) driveStatus = "Connect a Google Drive folder first."
+                            else {
+                                androidx.work.WorkManager.getInstance(context).enqueue(androidx.work.OneTimeWorkRequestBuilder<GoogleDriveBackupWorker>().build())
+                                driveStatus = "Backup queued. Check status again shortly."
+                            }
+                        },
+                        driveStatus = driveStatus,
                         onRestoreBackup = { backupRestoreLauncher.launch(arrayOf("application/json", "text/*")) },
                         onExportCsv = { csvExportLauncher.launch("open-finance-transactions.csv") },
                         message = importMessage
@@ -2344,6 +2367,9 @@ private fun CreditHealthScreen() {
 @Composable
 private fun BackupSecurityScreen(
     onExportBackup: () -> Unit,
+    onConnectDrive: () -> Unit,
+    onBackupNow: () -> Unit,
+    driveStatus: String,
     onRestoreBackup: () -> Unit,
     onExportCsv: () -> Unit,
     message: String
@@ -2356,6 +2382,23 @@ private fun BackupSecurityScreen(
         item {
             Text("Backup & Export", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
             Text("Keep a safe copy of your financial records", color = Muted, fontSize = 13.sp)
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CloudSync, null, tint = IncomeGreen, modifier = Modifier.size(26.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Google Drive automatic backup", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(driveStatus, color = Muted, fontSize = 12.sp)
+                        }
+                    }
+                    Text("Choose a private Google Drive folder. MoneyLog will create dated backups there daily. You can also run a backup manually.", color = Muted, fontSize = 12.sp)
+                    OutlinedButton(onClick = onConnectDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Connect Google Drive folder") }
+                    Button(onClick = onBackupNow, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Icon(Icons.Default.CloudUpload, null); Spacer(Modifier.width(8.dp)); Text("Back up now") }
+                }
+            }
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
