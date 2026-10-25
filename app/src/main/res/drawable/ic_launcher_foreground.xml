@@ -3,7 +3,8 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- White rounded-square rim stays inside Android's adaptive-icon safe area. -->
+    <!-- Keep the complete tile comfortably inside the launcher mask. -->
+    <group android:scaleX="0.78" android:scaleY="0.78" android:pivotX="54" android:pivotY="54">
     <path android:fillColor="#FFFFFFFF"
         android:pathData="M34,16 L74,16 C84,16 92,24 92,34 L92,74 C92,84 84,92 74,92 L34,92 C24,92 16,84 16,74 L16,34 C16,24 24,16 34,16 Z"/>
     <!-- Blue app tile; the launcher supplies the outer circular mask. -->
@@ -27,4 +28,5 @@
         android:pathData="M66,64 L82,64 L82,75 L66,75 C62,75 59,72 59,69.5 C59,66 62,64 66,64 Z"/>
     <path android:fillColor="#FF75D9FF"
         android:pathData="M68,67 A2.5,2.5 0,1 0,68 72 A2.5,2.5 0,1 0,68 67 Z"/>
+    </group>
 </vector>
