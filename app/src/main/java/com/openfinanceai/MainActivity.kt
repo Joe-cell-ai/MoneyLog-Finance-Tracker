@@ -3131,7 +3131,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         val fields = JSONObject()
                         // Use the document's own section headings rather than assuming that values
                         // always appear on page 1. PDFTextStripper separates pages with form feeds.
-                        val pdfPages = extracted.split('\\u000C')
+                        val pdfPages = extracted.split('\u000C')
                         val aprPage = pdfPages.firstOrNull { it.contains("Computation of APR", ignoreCase = true) }.orEmpty()
                         val schedulePage = pdfPages.firstOrNull { it.contains("Illustrative Repayment Schedule", ignoreCase = true) }.orEmpty()
                         val emiLabel = "(?:amount\\s+of\\s+emi\\s+payable|(?:monthly\\s+)?(?:emi\\s*(?:amount|payable)?|equated\\s+monthly\\s+installments?|equated\\s+monthly\\s+instalments?|monthly\\s+installments?|monthly\\s+instalments?))"
