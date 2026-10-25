@@ -3074,8 +3074,11 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     val amount = row.second
                     val actualDate = parseScheduleDate(dateLabel)
                     val savedStatus = schedulePrefs.getString("emi_status_${loan.lender}_${originalDateLabel}", null)
+                    // A recorded payment count covers the earliest installments in schedule order.
+                    // Explicit per-installment Paid records remain authoritative.
+                    val installmentRecordedPaid = savedStatus == "Paid" || index < loan.paymentsMade
                     val importedStatus = when {
-                        savedStatus == "Paid" -> "Paid"
+                        installmentRecordedPaid -> "Paid"
                         actualDate != null && actualDate.isBefore(java.time.LocalDate.now()) -> "Overdue"
                         else -> "Upcoming"
                     }
