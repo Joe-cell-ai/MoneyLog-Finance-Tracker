@@ -2720,7 +2720,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                 val extractedText = PDDocument.load(bytes.inputStream()).use { document ->
                     if (document.isEncrypted) error("Password-protected PDFs are not supported. Upload an unlocked PDF.")
                     if (document.numberOfPages !in 1..300) error("The PDF has an invalid or unsupported page count.")
-                    PDFTextStripper().getText(document)
+                    PDFTextStripper().apply { setSortByPosition(true) }.getText(document)
                 }
                 val normalized = extractedText.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ")
                 val looksLikeSchedule = Regex("(?i)\\b(emi|installment|instalment|repayment|due date|principal|outstanding)\\b").containsMatchIn(normalized)
@@ -3097,8 +3097,27 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             }
                             return null
                         }
+                        // PDFBox can emit table cells in a different order from their visual layout.
+                        // Search within a label's own line first, then check adjacent standalone values.
+                        fun captureLabeledNearby(labelPattern: String): String? {
+                            val number = Regex("(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)", RegexOption.IGNORE_CASE)
+                            val standalone = Regex("^\\s*(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*(?:%|months?|mos?\\.?)?\\s*$", RegexOption.IGNORE_CASE)
+                            for (index in extractedLines.indices) {
+                                val line = extractedLines[index]
+                                val label = Regex(labelPattern, RegexOption.IGNORE_CASE).find(line) ?: continue
+                                val after = line.substring(label.range.last + 1)
+                                    .replace(Regex("^\\s*\\([^)]*\\)\\s*"), "")
+                                    .trim().trimStart(':', '-', ' ')
+                                number.find(after)?.let { return it.groupValues[1].replace(",", "").trim() }
+                                val previous = extractedLines.take(index).lastOrNull { it.isNotBlank() }
+                                if (previous != null) standalone.find(previous)?.let { return it.groupValues[1].replace(",", "").trim() }
+                                val next = extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() }
+                                if (next != null) standalone.find(next)?.let { return it.groupValues[1].replace(",", "").trim() }
+                            }
+                            return null
+                        }
                         fun captureLabeledText(labelPattern: String): String? {
-                            val inline = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]\\s*(.{2,80}?)\\s*$", RegexOption.IGNORE_CASE)
+                            val inline = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s+(.{2,80}?)\\s*$", RegexOption.IGNORE_CASE)
                             val labelOnly = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$", RegexOption.IGNORE_CASE)
                             for (index in extractedLines.indices) {
                                 inline.find(extractedLines[index])?.let { return it.groupValues[1].trim() }
@@ -3110,16 +3129,26 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             return null
                         }
                         val fields = JSONObject()
-                        captureLabeled("(?:amount\\s+of\\s+emi\\s+payable|(?:monthly\\s+)?(?:emi\\s*(?:amount|payable)?|equated\\s+monthly\\s+installments?|equated\\s+monthly\\s+instalments?|monthly\\s+installments?|monthly\\s+instalments?))")?.let { fields.put("emi", it.substringBefore(".")) }
+                        val emiLabel = "(?:amount\\s+of\\s+emi\\s+payable|(?:monthly\\s+)?(?:emi\\s*(?:amount|payable)?|equated\\s+monthly\\s+installments?|equated\\s+monthly\\s+instalments?|monthly\\s+installments?|monthly\\s+instalments?))"
+                        val scheduleInstallments = extractedLines.mapNotNull { line ->
+                            Regex("^\\s*\\d{1,3}\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
+                                .find(line)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
+                        }
+                        val recurringScheduleEmi = scheduleInstallments.groupingBy { it }.eachCount()
+                            .maxByOrNull { it.value }?.takeIf { it.value >= 2 }?.key?.toString()
+                        (captureLabeled(emiLabel) ?: captureLabeledNearby(emiLabel) ?: recurringScheduleEmi)
+                            ?.let { fields.put("emi", it.substringBefore(".")) }
                         captureLabeled("(?:annual\\s+)?(?:interest\\s+rate(?:\\s+per\\s+annum)?|fixed\\s+rate\\s+of\\s+interest|rate\\s+of\\s+interest|roi)")?.let { fields.put("rate", it) }
-                        captureLabeled("(?:(?:total|loan)\\s+)*(?:tenure|term)(?:\\s+in\\s+months?)?")?.let { fields.put("totalPayments", it) }
+                        val tenureLabel = "(?:(?:total|loan)\\s+)*(?:tenure|term)(?:\\s+in\\s+months?)?"
+                        (captureLabeled(tenureLabel) ?: captureLabeledNearby(tenureLabel))?.let { fields.put("totalPayments", it) }
                             ?: captureLabeled("(?:total\\s+number\\s+of\\s+)?(?:emi|installments?|instalments?)(?:\\s+(?:count|tenure|months?))?")?.let { fields.put("totalPayments", it) }
                         captureLabeled("(?:number\\s+of\\s+)?(?:emi|installments?|instalments?)\\s+(?:paid|completed)")?.let { fields.put("paymentsMade", it) }
                         captureLabeled("(?:(?:current|total)\\s+)?(?:outstanding\\s+(?:principal|balance|amount)?|principal\\s+outstanding)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
-                        captureLabeled("(?:(?:sanctioned|approved|total)\\s+)?(?:loan\\s+amount|amount\\s+of\\s+loan|principal\\s+amount|loan\\s+principal|amount\\s+financed)")?.let { fields.put("principal", it.substringBefore(".")) }
+                        val principalLabel = "(?:(?:sanctioned|approved|total)\\s+)?(?:loan\\s+amount|amount\\s+of\\s+loan|principal\\s+amount|loan\\s+principal|amount\\s+financed)"
+                        (captureLabeled(principalLabel) ?: captureLabeledNearby(principalLabel))?.let { fields.put("principal", it.substringBefore(".")) }
                         captureAnywhere("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
                         (captureAnywhere("(?:repayment|first\\s*(?:emi|installment|instalment)|emi)\\s*(?:start|commencement|starting)?\\s*date\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z]{3,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})")
-                            ?: captureAnywhere("commencement\\s+of\\s+repayment[^\\n]{0,120}?([0-9]{4}-[0-9]{2}-[0-9]{2})"))?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
+                            ?: captureAnywhere("commencement\\s+of\\s+repayments?[^0-9]{0,180}([0-9]{4}-[0-9]{2}-[0-9]{2})"))?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
                         captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?borrower|borrower(?:\\s+name)?|customer(?:\\s+name)?|applicant(?:\\s+name)?)")?.let { fields.put("borrowerName", it) }
                         captureAnywhere("(?:agreement|contract)\\s*(?:number|no\\.?|#)\\s*[:\\-]?\\s*([A-Z0-9/-]{4,40})")?.let { fields.put("agreementNumber", it) }
                         Regex("(?im)^\\s*(?:lender|bank|financial institution)\\s*[:\\-]\\s*(.{2,60})$").find(extracted)
