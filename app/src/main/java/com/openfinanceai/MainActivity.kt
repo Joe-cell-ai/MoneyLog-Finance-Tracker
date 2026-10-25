@@ -15,6 +15,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
@@ -57,35 +58,35 @@ import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
-private var Green by mutableStateOf(Color(0xFF07966F))
-private var Mint by mutableStateOf(Color(0xFFE6FBF3))
-private var IncomeGreen by mutableStateOf(Color(0xFF168568))
+private var Green by mutableStateOf(Color(0xFF0284C7))
+private var Mint by mutableStateOf(Color(0xFFE0F2FE))
+private var IncomeGreen by mutableStateOf(Color(0xFF0E7490))
 private var ExpenseRed by mutableStateOf(Color(0xFFD94F69))
-private var SavingsBlue by mutableStateOf(Color(0xFF3478D4))
-private var Ink by mutableStateOf(Color(0xFF22243A))
-private var Muted by mutableStateOf(Color(0xFF74788D))
-private var Page by mutableStateOf(Color(0xFFF7F7FB))
-private var IncomeTint by mutableStateOf(Color(0xFFE6FBF3))
+private var SavingsBlue by mutableStateOf(Color(0xFF0284C7))
+private var Ink by mutableStateOf(Color(0xFF0F2942))
+private var Muted by mutableStateOf(Color(0xFF64748B))
+private var Page by mutableStateOf(Color(0xFFF4FAFE))
+private var IncomeTint by mutableStateOf(Color(0xFFCCFBF1))
 private var ExpenseTint by mutableStateOf(Color(0xFFFFEEF1))
-private var SkyTint by mutableStateOf(Color(0xFFEAF3FF))
+private var SkyTint by mutableStateOf(Color(0xFFE0F2FE))
 private var PeachTint by mutableStateOf(Color(0xFFFFF1E6))
 private var PinkTint by mutableStateOf(Color(0xFFFFEFF6))
 private var LavenderTint by mutableStateOf(Color(0xFFF0EDFF))
-private var Teal by mutableStateOf(Color(0xFF2D9A91))
+private var Teal by mutableStateOf(Color(0xFF06B6D4))
 private var Orange by mutableStateOf(Color(0xFFE69A45))
 private var Purple by mutableStateOf(Color(0xFF8A63D2))
-private var Blue by mutableStateOf(Color(0xFF3478D4))
+private var Blue by mutableStateOf(Color(0xFF0284C7))
 private var AppDarkTheme by mutableStateOf(false)
 private var AppCompactLayout by mutableStateOf(false)
 private var AppFontScale by mutableStateOf(1f)
 
 private fun applyAppearance(theme: String, accent: String, layout: String, fontSize: String, systemDark: Boolean = false) {
     val accentColor = when (accent) {
-        "Blue" -> Color(0xFF3478F6)
+        "Blue" -> Color(0xFF0284C7)
         "Purple" -> Color(0xFF8B4DE8)
         "Orange" -> Color(0xFFF59E0B)
         "Pink" -> Color(0xFFEC4899)
-        else -> Color(0xFF07966F)
+        else -> Color(0xFF0284C7)
     }
     AppDarkTheme = theme == "Dark" || (theme == "System" && systemDark)
     AppCompactLayout = layout == "Compact"
@@ -138,7 +139,7 @@ private fun FinanceApp() {
     LaunchedEffect(Unit) {
         applyAppearance(
             appearancePreferences.getString("appearance_theme", "Light") ?: "Light",
-            appearancePreferences.getString("appearance_accent", "Green") ?: "Green",
+            appearancePreferences.getString("appearance_accent", "Blue") ?: "Blue",
             appearancePreferences.getString("appearance_layout", "Comfortable") ?: "Comfortable",
             appearancePreferences.getString("appearance_font_size", "Medium") ?: "Medium",
             systemDark
@@ -204,6 +205,23 @@ private fun FinanceApp() {
             Loan("KreditBee", 24000, 4800, "8 Nov"),
             Loan("Pocketly", 12800, 3200, "10 Nov")
         ).also { saveLoans(context, it) })
+    }
+
+    BackHandler(
+        enabled = tab != "Home" || showAdd || showAddAsIncome || transactionForActions != null ||
+            transactionToEdit != null || transactionTips != null || loanForActions != null || loanToEdit != null
+    ) {
+        when {
+            loanToEdit != null -> loanToEdit = null
+            loanForActions != null -> loanForActions = null
+            transactionToEdit != null -> transactionToEdit = null
+            transactionTips != null -> transactionTips = null
+            transactionForActions != null -> transactionForActions = null
+            showAddAsIncome -> showAddAsIncome = false
+            showAdd -> showAdd = false
+            tab == "Loan details" -> { tab = "Loans"; selectedLoan = null }
+            tab != "Home" -> tab = "Home"
+        }
     }
 
     LaunchedEffect(loans) {
@@ -2600,6 +2618,27 @@ private fun AppearanceScreen() {
         }
     }
 }
+private fun parseScheduleDate(raw: String): java.time.LocalDate? {
+    val value = raw.trim()
+    val patterns = listOf(
+        "d MMM yyyy", "dd MMM yyyy", "d-MMM-yyyy", "dd-MMM-yyyy",
+        "d/MM/yyyy", "dd/MM/yyyy", "d-MM-yyyy", "dd-MM-yyyy",
+        "yyyy-MM-dd", "d MMMM yyyy", "dd MMMM yyyy", "MMM d, yyyy"
+    )
+    runCatching { return java.time.LocalDate.parse(value) }
+    patterns.forEach { pattern ->
+        runCatching {
+            return java.time.LocalDate.parse(value, java.time.format.DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH))
+        }
+    }
+    listOf("d MMM", "dd MMM", "d MMMM", "dd MMMM").forEach { pattern ->
+        runCatching {
+            return java.time.LocalDate.parse(value + " " + java.time.LocalDate.now().year, java.time.format.DateTimeFormatter.ofPattern(pattern + " yyyy", Locale.ENGLISH))
+        }
+    }
+    return null
+}
+
 private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.LocalDate.now()): java.time.LocalDate? {
     val raw = due.trim()
     if (raw.isBlank() || raw.equals("Set due date", ignoreCase = true) || raw.equals("Not set", ignoreCase = true)) return null
@@ -2645,7 +2684,7 @@ private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.
 
 @Composable
 private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
-    val firstDueDate = runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due)
+    val firstDueDate = parseScheduleDate(loan.due) ?: runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due)
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
     val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
     val scheduleMonths = if (loan.totalPayments in 1L..600L) (loan.totalPayments - loan.paymentsMade).coerceIn(0L, 600L).toInt() else 60
@@ -2909,6 +2948,11 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                     val row = importedSchedule[index]
                     val dateLabel = row.first
                     val amount = row.second
+                    val actualDate = parseScheduleDate(dateLabel)
+                    val importedStatus = schedulePrefs.getString("emi_status_${loan.lender}_${dateLabel}", null)
+                        ?: if (actualDate != null && actualDate.isBefore(java.time.LocalDate.now())) "Overdue" else "Upcoming"
+                    val statusColor = when (importedStatus) { "Paid" -> Color(0xFF0E7490); "Overdue" -> Color(0xFFEF4444); else -> Color(0xFFF59E0B) }
+                    val statusTint = when (importedStatus) { "Paid" -> Color(0xFFCCFBF1); "Overdue" -> Color(0xFFFFE4E6); else -> Color(0xFFFFF1D6) }
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(dateLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
@@ -2919,8 +2963,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                             Text("Actual PDF amount", color = Muted, fontSize = 9.sp)
                         }
                         Box(Modifier.weight(.85f), contentAlignment = Alignment.CenterEnd) {
-                            Box(Modifier.clip(RoundedCornerShape(50)).background(SkyTint).padding(horizontal = 8.dp, vertical = 6.dp)) {
-                                Text("PDF", color = Blue, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Box(Modifier.clip(RoundedCornerShape(50)).background(statusTint).padding(horizontal = 8.dp, vertical = 6.dp)) {
+                                Text(importedStatus, color = statusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                             }
                         }
                     }
@@ -2930,6 +2974,11 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                 val installmentLabel = installmentDate?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
                     ?: if (loan.due.equals("Set due date", ignoreCase = true) || loan.due.isBlank()) "Set due date" else loan.due
                 val paid = index < loan.paymentsMade
+                val statusDate = installmentDate
+                val overdue = !paid && statusDate != null && statusDate.isBefore(java.time.LocalDate.now())
+                val installmentStatus = if (paid) "Paid" else if (overdue) "Overdue" else "Upcoming"
+                val installmentStatusColor = if (paid) Color(0xFF0E7490) else if (overdue) Color(0xFFEF4444) else upcomingAmber
+                val installmentStatusTint = if (paid) Color(0xFFCCFBF1) else if (overdue) Color(0xFFFFE4E6) else upcomingTint
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress() }, onLongClick = { onEmiLongPress() }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(installmentLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
@@ -2940,8 +2989,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                         Text("Int. ${Money.format(interest)}", color = Muted, fontSize = 9.sp)
                     }
                     Box(Modifier.weight(.85f), contentAlignment = Alignment.CenterEnd) {
-                        Box(Modifier.clip(RoundedCornerShape(50)).background(if (paid) paidTint else upcomingTint).padding(horizontal = 8.dp, vertical = 6.dp)) {
-                            Text(if (paid) "Paid" else "Upcoming", color = if (paid) paidGreen else upcomingAmber, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        Box(Modifier.clip(RoundedCornerShape(50)).background(installmentStatusTint).padding(horizontal = 8.dp, vertical = 6.dp)) {
+                            Text(installmentStatus, color = installmentStatusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         }
                     }
                 }
