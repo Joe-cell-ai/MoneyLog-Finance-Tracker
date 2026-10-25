@@ -159,6 +159,7 @@ private fun FinanceApp() {
     var showAdd by remember { mutableStateOf(false) }
     var showAddAsIncome by remember { mutableStateOf(false) }
     var categoryRefreshToken by remember { mutableIntStateOf(0) }
+    var settingsRevision by remember { mutableIntStateOf(0) }
     var transactionForActions by remember { mutableStateOf<Transaction?>(null) }
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
     var transactionTips by remember { mutableStateOf<Transaction?>(null) }
@@ -248,11 +249,16 @@ private fun FinanceApp() {
         }
     }
 
-    LaunchedEffect(loans) {
+    LaunchedEffect(loans, settingsRevision) {
+        val remindersEnabled = drivePrefs.getBoolean("settings_emi_reminders", true)
         loans.forEach { loan ->
+            val reminderId = 3000 + (loan.lender.lowercase(Locale.ROOT).hashCode() and 0x3fff)
+            if (!remindersEnabled) {
+                EmiReminderReceiver.cancelReminder(context, reminderId)
+                return@forEach
+            }
             if (loan.due.equals("Set due date", ignoreCase = true) || loan.due.isBlank()) return@forEach
             val dueDay = Regex("^\\s*(\\d{1,2})").find(loan.due)?.groupValues?.getOrNull(1)?.toIntOrNull()?.coerceIn(1, 28) ?: return@forEach
-            val reminderId = 3000 + (loan.lender.lowercase(Locale.ROOT).hashCode() and 0x3fff)
             EmiReminderReceiver.scheduleMonthly(context, loan.lender, loan.emi, dueDay, reminderId)
         }
     }
@@ -496,7 +502,10 @@ private fun FinanceApp() {
                     })
                     "Appearance" -> AppearanceScreen()
                     "Privacy & Security" -> PrivacySecurityScreen { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) }
-                    "Notifications" -> NotificationsSettingsScreen { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) }
+                    "Notifications" -> NotificationsSettingsScreen(
+                        onOpenPaymentSettings = { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) },
+                        onPreferenceChanged = { settingsRevision++ }
+                    )
                     "About" -> AboutSettingsScreen()
                     "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: EmptyLoansScreen { tab = "Add loan" }
                     "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi, totalPayments, borrowerName, agreementNumber, ignoredLoanNumber, startDate ->
@@ -2247,7 +2256,7 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
 }
 
 @Composable
-private fun NotificationsSettingsScreen(onOpenPaymentSettings: () -> Unit) {
+private fun NotificationsSettingsScreen(onOpenPaymentSettings: () -> Unit, onPreferenceChanged: () -> Unit) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
         var emiReminder by remember { mutableStateOf(preferences.getBoolean("settings_emi_reminders", true)) }
@@ -2275,7 +2284,7 @@ private fun NotificationsSettingsScreen(onOpenPaymentSettings: () -> Unit) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(19.dp)) {
                 Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Reminders & summaries", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    SettingToggleRow("EMI reminders", "Preference saved on this device", emiReminder) { emiReminder = it; persist("settings_emi_reminders", it) }
+                    SettingToggleRow("EMI reminders", "Enable or disable scheduled EMI reminders", emiReminder) { emiReminder = it; persist("settings_emi_reminders", it); onPreferenceChanged() }
                     HorizontalDivider(color = Color(0xFFEDEFF4))
                     SettingToggleRow("Budget alerts", "Preference saved on this device", budgetAlerts) { budgetAlerts = it; persist("settings_budget_alerts", it) }
                     HorizontalDivider(color = Color(0xFFEDEFF4))
