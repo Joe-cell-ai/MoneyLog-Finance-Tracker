@@ -454,7 +454,7 @@ private fun FinanceApp() {
                     "Notifications" -> NotificationsSettingsScreen { tab = "Notifications" }
                     "About" -> AboutSettingsScreen()
                     "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: EmptyLoansScreen { tab = "Add loan" }
-                    "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi, totalPayments ->
+                    "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi, totalPayments, borrowerName, loanNumber, startDate ->
                         val newLoan = Loan(lender, balance, emi, startDate.ifBlank { "Set due date" }, rate, originalPrincipal, paymentsMade, totalPayments, borrowerName, loanNumber, startDate)
                         loans = listOf(newLoan) + loans
                         saveLoans(context, loans)
@@ -2645,7 +2645,7 @@ private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.
 
 @Composable
 private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
-    val firstDueDate = nextLoanDueDate(loan.due)
+    val firstDueDate = runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due)
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
     val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
     val scheduleMonths = if (loan.totalPayments in 1L..600L) (loan.totalPayments - loan.paymentsMade).coerceIn(0L, 600L).toInt() else 60
@@ -3417,7 +3417,7 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
                 val parsedEmi = emi.toLongOrNull()
                 val parsedRate = rate.toDoubleOrNull()
                 if (lender.isBlank() || parsedBalance == null || parsedBalance < 0L || parsedPrincipal == null || parsedPrincipal <= 0L || parsedBalance > parsedPrincipal || parsedPayments == null || parsedPayments < 0L || parsedEmi == null || parsedEmi <= 0L || parsedRate == null || parsedRate < 0.0) error = "Check lender, principal, outstanding balance, payment count, EMI and rate."
-                else onSave(loan.copy(lender = lender.trim(), balance = parsedBalance, originalPrincipal = parsedPrincipal, paymentsMade = parsedPayments, emi = parsedEmi, annualRate = parsedRate, due = due.ifBlank { "Not set" }))
+                else onSave(loan.copy(lender = lender.trim(), balance = parsedBalance, originalPrincipal = parsedPrincipal, paymentsMade = parsedPayments, emi = parsedEmi, annualRate = parsedRate, due = due.ifBlank { "Not set" }, startDate = due.takeIf { it.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) } ?: loan.startDate))
             }) { Text("Save changes") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
