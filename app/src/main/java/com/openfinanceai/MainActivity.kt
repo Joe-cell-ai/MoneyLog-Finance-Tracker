@@ -3151,7 +3151,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             .maxByOrNull { it.value }?.takeIf { it.value >= 2 }?.key?.toString()
                         val scheduleTenure = scheduleRows.maxOfOrNull { it.first }?.toString()
                         // The APR computation table repeats the sanctioned term, EPI and repayment date.
-                        val aprNormalized = aprPage.replace('\\u00A0', ' ').replace(Regex("\\s+"), " ")
+                        val aprNormalized = aprPage.replace('\u00A0', ' ').replace(Regex("\\s+"), " ")
                         val aprTenure = Regex("(?i)Loan Term \\(in years/ months/ days\\).*?Part 1\\)\\s*([0-9]{1,3})").find(aprNormalized)?.groupValues?.get(1)
                         val aprEmi = Regex("(?i)Amount of each EPI.*?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+nos\\.\\s+of EPIs").find(aprNormalized)?.groupValues?.get(1)?.replace(",", "")
                         val aprStartDate = Regex("(?i)Commencement of repayments?, post sanction.*?\\b([0-9]{4}-[0-9]{2}-[0-9]{2})\\b").find(aprNormalized)?.groupValues?.get(1)
