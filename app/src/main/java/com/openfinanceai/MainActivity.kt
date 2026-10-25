@@ -3028,7 +3028,10 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long)
                         capture("(?:current\\s*)?(?:outstanding\\s*(?:principal|balance|amount)?|principal\\s*outstanding)\\s*[:\\-]?\\s*(?:(?:₹|rs\\.?|inr)\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
                         capture("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
                         Regex("(?im)^\\s*(?:lender|bank|financial institution)\\s*[:\\-]\\s*(.{2,60})$").find(extracted)
-                            ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }?.let { fields.put("lender", it) }
+                            ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+                            ?.let { fields.put("lender", it) }
+                            ?: Regex("(?m)^\\s*([A-Z][A-Z &.-]{3,50}\\b(?:BANK|FINANCE|FINANCIAL))\\s*$").find(extracted)
+                                ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }?.let { fields.put("lender", it) }
                         fields
                     }
                 }
