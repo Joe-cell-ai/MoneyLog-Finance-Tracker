@@ -3138,7 +3138,8 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             .maxByOrNull { it.value }?.takeIf { it.value >= 2 }?.key?.toString()
                         (captureLabeled(emiLabel) ?: captureLabeledNearby(emiLabel) ?: recurringScheduleEmi)
                             ?.let { fields.put("emi", it.substringBefore(".")) }
-                        captureLabeled("(?:annual\\s+)?(?:interest\\s+rate(?:\\s+per\\s+annum)?|fixed\\s+rate\\s+of\\s+interest|rate\\s+of\\s+interest|roi)")?.let { fields.put("rate", it) }
+                        val rateLabel = "(?:annual\\s+)?(?:interest\\s+rate(?:\\s+per\\s+annum)?|fixed\\s+rate\\s+of\\s+interest|rate\\s+of\\s+interest|roi)"
+                        (captureLabeled(rateLabel) ?: captureLabeledNearby(rateLabel))?.let { fields.put("rate", it) }
                         val tenureLabel = "(?:(?:total|loan)\\s+)*(?:tenure|term)(?:\\s+in\\s+months?)?"
                         (captureLabeled(tenureLabel) ?: captureLabeledNearby(tenureLabel))?.let { fields.put("totalPayments", it) }
                             ?: captureLabeled("(?:total\\s+number\\s+of\\s+)?(?:emi|installments?|instalments?)(?:\\s+(?:count|tenure|months?))?")?.let { fields.put("totalPayments", it) }
@@ -3148,7 +3149,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         (captureLabeled(principalLabel) ?: captureLabeledNearby(principalLabel))?.let { fields.put("principal", it.substringBefore(".")) }
                         captureAnywhere("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
                         (captureAnywhere("(?:repayment|first\\s*(?:emi|installment|instalment)|emi)\\s*(?:start|commencement|starting)?\\s*date\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z]{3,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})")
-                            ?: captureAnywhere("commencement\\s+of\\s+repayments?[^0-9]{0,180}([0-9]{4}-[0-9]{2}-[0-9]{2})"))?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
+                            ?: captureAnywhere("commencement\\s+of\\s+repayments?[^\\n]{0,250}?([0-9]{4}-[0-9]{2}-[0-9]{2})"))?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
                         captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?borrower|borrower(?:\\s+name)?|customer(?:\\s+name)?|applicant(?:\\s+name)?)")?.let { fields.put("borrowerName", it) }
                         captureAnywhere("(?:agreement|contract)\\s*(?:number|no\\.?|#)\\s*[:\\-]?\\s*([A-Z0-9/-]{4,40})")?.let { fields.put("agreementNumber", it) }
                         Regex("(?im)^\\s*(?:lender|bank|financial institution)\\s*[:\\-]\\s*(.{2,60})$").find(extracted)
