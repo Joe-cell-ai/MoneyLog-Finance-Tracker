@@ -3058,7 +3058,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                                 val bitmap = android.graphics.Bitmap.createBitmap(page.width * scale, page.height * scale, android.graphics.Bitmap.Config.ARGB_8888)
                                                 page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                                                 val recognized = com.google.android.gms.tasks.Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)))
-                                                ocrText.append(recognized.text).append('\\n')
+                                                ocrText.append(recognized.text).append('\n')
                                                 bitmap.recycle()
                                             }
                                         }
