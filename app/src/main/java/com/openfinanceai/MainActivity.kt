@@ -3080,8 +3080,8 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         fun captureLabeled(labelPattern: String): String? {
                             val number = "([0-9][0-9,]*(?:\\.[0-9]{1,2})?)"
                             val suffix = "(?:%|months?|mos?\\.?|per\\s+month|/month)?"
-                            val inline = Regex("^\\s*(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*(?:₹|rs\\.?|inr)?\\s*$number\\s*$suffix(?:\\s+per\\s+annum)?\\s*$", RegexOption.IGNORE_CASE)
-                            val labelOnly = Regex("^\\s*(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$", RegexOption.IGNORE_CASE)
+                            val inline = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*(?:₹|rs\\.?|inr)?\\s*$number\\s*$suffix(?:\\s+(?:p\\.?a\\.?|per\\s+annum))?\\s*$", RegexOption.IGNORE_CASE)
+                            val labelOnly = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$", RegexOption.IGNORE_CASE)
                             val valueOnly = Regex("^\\s*(?:₹|rs\\.?|inr)?\\s*$number\\s*$suffix\\s*$", RegexOption.IGNORE_CASE)
                             for (index in extractedLines.indices) {
                                 inline.find(extractedLines[index])?.let { return it.groupValues[1].replace(",", "").trim() }
@@ -3092,17 +3092,30 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             }
                             return null
                         }
+                        fun captureLabeledText(labelPattern: String): String? {
+                            val inline = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]\\s*(.{2,80}?)\\s*$", RegexOption.IGNORE_CASE)
+                            val labelOnly = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$", RegexOption.IGNORE_CASE)
+                            for (index in extractedLines.indices) {
+                                inline.find(extractedLines[index])?.let { return it.groupValues[1].trim() }
+                                if (labelOnly.matches(extractedLines[index])) {
+                                    val nextLine = extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } ?: continue
+                                    if (!Regex("(?i)^(?:[0-9]{1,2}\\s+)?(?:loan|emi|interest|tenure|agreement|lender|date|amount|rate|applicant|customer|borrower)\\b").containsMatchIn(nextLine)) return nextLine.takeIf { it.length in 2..80 }
+                                }
+                            }
+                            return null
+                        }
                         val fields = JSONObject()
-                        captureLabeled("(?:monthly\\s+)?(?:emi\\s*(?:amount|payable)?|equated\\s+monthly\\s+installments?|equated\\s+monthly\\s+instalments?|monthly\\s+installments?|monthly\\s+instalments?)")?.let { fields.put("emi", it.substringBefore(".")) }
-                        captureLabeled("(?:annual\\s+)?(?:interest\\s+rate|rate\\s+of\\s+interest|roi)")?.let { fields.put("rate", it) }
+                        captureLabeled("(?:amount\\s+of\\s+emi\\s+payable|(?:monthly\\s+)?(?:emi\\s*(?:amount|payable)?|equated\\s+monthly\\s+installments?|equated\\s+monthly\\s+instalments?|monthly\\s+installments?|monthly\\s+instalments?))")?.let { fields.put("emi", it.substringBefore(".")) }
+                        captureLabeled("(?:annual\\s+)?(?:interest\\s+rate(?:\\s+per\\s+annum)?|fixed\\s+rate\\s+of\\s+interest|rate\\s+of\\s+interest|roi)")?.let { fields.put("rate", it) }
                         captureLabeled("(?:(?:total|loan)\\s+)*(?:tenure|term)(?:\\s+in\\s+months?)?")?.let { fields.put("totalPayments", it) }
                             ?: captureLabeled("(?:total\\s+number\\s+of\\s+)?(?:emi|installments?|instalments?)(?:\\s+(?:count|tenure|months?))?")?.let { fields.put("totalPayments", it) }
                         captureLabeled("(?:number\\s+of\\s+)?(?:emi|installments?|instalments?)\\s+(?:paid|completed)")?.let { fields.put("paymentsMade", it) }
                         captureLabeled("(?:(?:current|total)\\s+)?(?:outstanding\\s+(?:principal|balance|amount)?|principal\\s+outstanding)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
                         captureLabeled("(?:(?:sanctioned|approved|total)\\s+)?(?:loan\\s+amount|amount\\s+of\\s+loan|principal\\s+amount|loan\\s+principal|amount\\s+financed)")?.let { fields.put("principal", it.substringBefore(".")) }
                         captureAnywhere("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
-                        captureAnywhere("(?:repayment|first\\s*(?:emi|installment|instalment)|emi)\\s*(?:start|commencement|starting)?\\s*date\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z]{3,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})")?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
-                        captureAnywhere("(?:borrower|customer|applicant|name of borrower)\\s*(?:name)?\\s*[:\\-]\\s*([A-Z][A-Za-z.' -]{1,60}?)(?=\\s+(?:loan\\s+amount|loan\\s+(?:account\\s+)?(?:number|no\\b)|agreement\\s+(?:number|no\\b)|contract\\s+(?:number|no\\b)|emi\\b|interest\\s+rate|tenure\\b|outstanding\\b|address\\b|date\\b|mobile\\b|phone\\b|pan\\b|customer\\s+id\\b)|$)")?.let { fields.put("borrowerName", it.trim()) }
+                        (captureAnywhere("(?:repayment|first\\s*(?:emi|installment|instalment)|emi)\\s*(?:start|commencement|starting)?\\s*date\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z]{3,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})")
+                            ?: captureAnywhere("commencement\\s+of\\s+repayment[^\\n]{0,120}?([0-9]{4}-[0-9]{2}-[0-9]{2})"))?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
+                        captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?borrower|borrower(?:\\s+name)?|customer(?:\\s+name)?|applicant(?:\\s+name)?)")?.let { fields.put("borrowerName", it) }
                         captureAnywhere("(?:agreement|contract)\\s*(?:number|no\\.?|#)\\s*[:\\-]?\\s*([A-Z0-9/-]{4,40})")?.let { fields.put("agreementNumber", it) }
                         Regex("(?im)^\\s*(?:lender|bank|financial institution)\\s*[:\\-]\\s*(.{2,60})$").find(extracted)
                             ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
