@@ -127,4 +127,59 @@ class LoanPdfParsingHelpersTest {
         """.trimIndent()
         assertEquals(listOf(9500.0, 9600.0, 9700.0), parseLoanPdfScheduleRows(fixture).map { it.second })
     }
+
+    @Test
+    fun handlesTabsAndIrregularSpacingInExtractedScheduleText() {
+        val fixture = listOf(
+            "1\\t04-FEB-26\\t569,000.00\\t12,657.00\\t7,536.00\\t5,121.00\\t561,464.00",
+            "2     04-MAR-26    561,464.00     12,657.00    7,042.00    5,615.00    554,422.00"
+        ).joinToString("\\n")
+        val rows = parseLoanPdfScheduleRows(fixture)
+        assertEquals(listOf(1, 2), rows.map { it.first })
+        assertTrue(rows.all { it.second == 12657.0 })
+    }
+
+    @Test
+    fun handlesZeroInterestScheduleAndSingleDigitInstallments() {
+        val fixture = """
+            1 2026-01-01 10000.00 1000.00 1000.00 0.00 9000.00
+            2 2026-02-01 9000.00 1000.00 1000.00 0.00 8000.00
+            3 2026-03-01 8000.00 1000.00 1000.00 0.00 7000.00
+        """.trimIndent()
+        val rows = parseLoanPdfScheduleRows(fixture)
+        assertEquals(3, rows.size)
+        assertTrue(rows.all { it.second == 1000.0 })
+    }
+
+    @Test
+    fun ignoresScheduleRowsWithInsufficientFinancialColumns() {
+        val fixture = """
+            1 04-FEB-26 569000.00 12657.00
+            2 04-MAR-26 561464.00 12657.00 7042.00
+            3 04-APR-26 554422.00 12657.00 7113.00 5544.00
+        """.trimIndent()
+        assertTrue(parseLoanPdfScheduleRows(fixture).isEmpty())
+    }
+
+    @Test
+    fun readsLargeTenureSerialNumbersWithoutConfusingEmi() {
+        val fixture = """
+            59 04-DEC-30 25000.00 12657.00 12300.00 357.00 12700.00
+            60 04-JAN-31 12700.00 12657.00 12500.00 157.00 200.00
+        """.trimIndent()
+        val rows = parseLoanPdfScheduleRows(fixture)
+        assertEquals(listOf(59, 60), rows.map { it.first })
+        assertEquals(listOf(12657.0, 12657.0), rows.map { it.second })
+    }
+
+    @Test
+    fun rejectsUnsupportedDateShapesWithoutRejectingSupportedRows() {
+        val fixture = """
+            1 2026/01/01 10000.00 1000.00 900.00 100.00 9100.00
+            2 01-XYZ-2026 9100.00 1000.00 900.00 100.00 8200.00
+            3 2026-03-01 8200.00 1000.00 900.00 100.00 7300.00
+        """.trimIndent()
+        assertEquals(listOf(3), parseLoanPdfScheduleRows(fixture).map { it.first })
+    }
+
 }
