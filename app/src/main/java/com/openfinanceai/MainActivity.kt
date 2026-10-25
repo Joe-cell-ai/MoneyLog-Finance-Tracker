@@ -562,6 +562,55 @@ private fun FinanceApp() {
                     transactionToEdit = null
                 }
             }
+            emiQuickAction?.let { action ->
+                AlertDialog(
+                    onDismissRequest = { emiQuickAction = null },
+                    title = { Text("EMI quick actions") },
+                    text = { Text("${action.originalDate}\nAmount: ${Money.format(action.amount)}\nStatus: ${action.status}") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
+                                .putString("emi_status_${action.lender}_${action.originalDate}", "Paid").apply()
+                            emiQuickAction = null
+                        }) { Text("Mark as paid") }
+                    },
+                    dismissButton = {
+                        Row {
+                            TextButton(onClick = {
+                                emiRescheduleDate = action.originalDate
+                                showEmiReschedule = action
+                                emiQuickAction = null
+                            }) { Text("Reschedule") }
+                            TextButton(onClick = { emiQuickAction = null }) { Text("Cancel") }
+                        }
+                    }
+                )
+            }
+            showEmiReschedule?.let { action ->
+                AlertDialog(
+                    onDismissRequest = { showEmiReschedule = null },
+                    title = { Text("Reschedule EMI") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Enter a new date, for example 04-Nov-2026.", color = Muted, fontSize = 12.sp)
+                            OutlinedTextField(value = emiRescheduleDate, onValueChange = { emiRescheduleDate = it }, label = { Text("New due date") }, singleLine = true)
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val parsed = parseScheduleDate(emiRescheduleDate)
+                            if (parsed != null) {
+                                context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
+                                    .putString("emi_rescheduled_${action.lender}_${action.originalDate}", parsed.format(java.time.format.DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH)))
+                                    .putString("emi_status_${action.lender}_${action.originalDate}", if (parsed.isBefore(java.time.LocalDate.now())) "Overdue" else "Upcoming")
+                                    .apply()
+                                showEmiReschedule = null
+                            }
+                        }) { Text("Save date") }
+                    },
+                    dismissButton = { TextButton(onClick = { showEmiReschedule = null }) { Text("Cancel") } }
+                )
+            }
             loanForActions?.let { loan ->
                 AlertDialog(
                     onDismissRequest = { loanForActions = null },
