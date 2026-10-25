@@ -35,6 +35,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -2991,43 +2993,65 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long)
     var saved by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var pdfBusy by remember { mutableStateOf(false) }
+    val pdfImportScope = rememberCoroutineScope()
     val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             pdfBusy = true
             error = ""
             saved = false
-            runCatching {
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: throw IllegalArgumentException("Could not read the selected PDF.")
-                require(bytes.size >= 8 && bytes.copyOfRange(0, 5).toString(Charsets.US_ASCII).startsWith("%PDF-")) {
-                    "This file is not a readable PDF."
+            pdfImportScope.launch {
+                val result = runCatching {
+                    withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            ?: throw IllegalArgumentException("Could not read the selected PDF. Please choose it again.")
+                        require(bytes.size >= 8 && bytes.copyOfRange(0, 5).toString(Charsets.US_ASCII).startsWith("%PDF-")) {
+                            "This file is not a readable PDF."
+                        }
+                        PDFBoxResourceLoader.init(context.applicationContext)
+                        val extracted = PDDocument.load(bytes).use { document ->
+                            require(!document.isEncrypted) { "Password-protected PDFs are not supported. Choose an unlocked PDF." }
+                            require(document.numberOfPages in 1..300) { "The PDF has an unsupported page count." }
+                            PDFTextStripper().getText(document)
+                        }
+                        require(Regex("(?i)\\b(loan|emi|installment|instalment|repayment|outstanding|principal)\\b").containsMatchIn(extracted)) {
+                            "This PDF doesn't appear to contain a loan statement or repayment schedule."
+                        }
+                        val normalizedExtracted = extracted.replace('\\u00A0', ' ').replace(Regex("[ \\t]+"), " ").replace(Regex("\\s+"), " ")
+                        fun capture(pattern: String): String? = Regex(pattern, RegexOption.IGNORE_CASE).find(normalizedExtracted)?.groupValues?.getOrNull(1)
+                            ?.replace(",", "")?.trim()
+                        val fields = JSONObject()
+                        capture("(?:monthly\\s*)?emi(?:\\s*amount)?\\s*[:\\-]?\\s*(?:₹|rs\\.?\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { fields.put("emi", it.substringBefore(".")) }
+                        capture("(?:annual\\s*)?(?:interest\\s*rate|rate\\s*of\\s*interest)\\s*[:\\-]?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*%?")?.let { fields.put("rate", it) }
+                        capture("(?:total\\s*)?(?:loan\\s*)?(?:tenure|term)(?:\\s*(?:in\\s*)?\\(?months?\\)?)?\\s*[:\\-]?\\s*([0-9]{1,3})(?:\\s*(?:months?|mos?\\.?|installments?|instalments?))?")?.let { fields.put("totalPayments", it) }
+                            ?: capture("(?:total\\s*)?(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:count|tenure|months?)?\\s*[:\\-]?\\s*([0-9]{1,3})")?.let { fields.put("totalPayments", it) }
+                        capture("(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:paid|completed)\\s*[:\\-]?\\s*([0-9]+)")?.let { fields.put("paymentsMade", it) }
+                        capture("(?:current\\s*)?(?:outstanding\\s*(?:principal|balance|amount)?|principal\\s*outstanding)\\s*[:\\-]?\\s*(?:₹|rs\\.?\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
+                        capture("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
+                        Regex("(?im)^\\s*(?:lender|bank|financial institution)\\s*[:\\-]\\s*(.{2,60})$").find(extracted)
+                            ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }?.let { fields.put("lender", it) }
+                        fields
+                    }
                 }
-                PDFBoxResourceLoader.init(context.applicationContext)
-                val extracted = PDDocument.load(bytes).use { document ->
-                    require(!document.isEncrypted) { "Password-protected PDFs are not supported. Choose an unlocked PDF." }
-                    require(document.numberOfPages in 1..300) { "The PDF has an unsupported page count." }
-                    PDFTextStripper().getText(document)
+                result.onSuccess { fields ->
+                    if (fields.has("emi")) emi = fields.getString("emi")
+                    if (fields.has("rate")) rate = fields.getString("rate")
+                    if (fields.has("totalPayments")) totalPayments = fields.getString("totalPayments")
+                    if (fields.has("paymentsMade")) paymentsMade = fields.getString("paymentsMade")
+                    if (fields.has("statementOutstanding")) statementOutstanding = fields.getString("statementOutstanding")
+                    if (fields.has("statementDate")) statementDate = fields.getString("statementDate")
+                    if (fields.has("lender")) lender = fields.getString("lender")
+                    if (listOf("emi", "rate", "totalPayments").none { fields.has(it) }) {
+                        error = "PDF opened, but no EMI amount, interest rate, or tenure could be identified. Enter those values manually or upload a text-based lender statement."
+                    } else {
+                        error = "PDF text extracted. Review every field and fill any missing values before saving; the PDF source is not authenticated."
+                    }
+                }.onFailure { failure ->
+                    error = failure.message ?: "Unable to read loan details from this PDF."
                 }
-                require(Regex("(?i)\\b(loan|emi|installment|instalment|repayment|outstanding|principal)\\b").containsMatchIn(extracted)) {
-                    "This PDF doesn't appear to contain a loan statement or repayment schedule."
-                }
-                val normalizedExtracted = extracted.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ").replace(Regex("\\s+"), " ")
-                fun capture(pattern: String): String? = Regex(pattern, RegexOption.IGNORE_CASE).find(normalizedExtracted)?.groupValues?.getOrNull(1)
-                    ?.replace(",", "")?.trim()
-                capture("(?:monthly\\s*)?emi(?:\\s*amount)?\\s*[:\\-]?\\s*(?:₹|rs\\.?\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { emi = it.substringBefore(".") }
-                capture("(?:annual\\s*)?(?:interest\\s*rate|rate\\s*of\\s*interest)\\s*[:\\-]?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*%?")?.let { rate = it }
-                // Lender PDFs commonly label tenure as "Tenure (Months): 60", "Tenure: 60 months",
-                // "Loan term - 60", or "Total number of EMIs: 60". Accept both label orders.
-                capture("(?:total\\s*)?(?:loan\\s*)?(?:tenure|term)(?:\\s*(?:in\\s*)?\\(?months?\\)?)?\\s*[:\\-]?\\s*([0-9]{1,3})(?:\\s*(?:months?|mos?\\.?|installments?|instalments?))?")?.let { totalPayments = it }
-                    ?: capture("(?:total\\s*)?(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:count|tenure|months?)?\\s*[:\\-]?\\s*([0-9]{1,3})")?.let { totalPayments = it }
-                capture("(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:paid|completed)\\s*[:\\-]?\\s*([0-9]+)")?.let { paymentsMade = it }
-                capture("(?:current\\s*)?(?:outstanding\\s*(?:principal|balance|amount)?|principal\\s*outstanding)\\s*[:\\-]?\\s*(?:₹|rs\\.?\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { statementOutstanding = it.substringBefore(".") }
-                capture("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { statementDate = it }
-                Regex("(?im)^\\s*(?:lender|bank|financial institution)\\s*[:\\-]\\s*(.{2,60})$").find(extracted)
-                    ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }?.let { lender = it }
-                "PDF text extracted into the fields below. Review and correct every value before saving; the PDF's source is not authenticated."
-            }.onFailure { error = it.message ?: "Unable to read loan details from this PDF." }
-            pdfBusy = false
+                pdfBusy = false
+            }
+        } else {
+            error = "No PDF selected."
         }
     }
     val monthly = emi.toDoubleOrNull() ?: 0.0
