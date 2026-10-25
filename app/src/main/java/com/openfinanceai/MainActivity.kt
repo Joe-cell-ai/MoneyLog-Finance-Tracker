@@ -82,6 +82,7 @@ private var AppFontScale by mutableStateOf(1f)
 
 private fun applyAppearance(theme: String, accent: String, layout: String, fontSize: String, systemDark: Boolean = false) {
     val accentColor = when (accent) {
+        "Green" -> Color(0xFF07966F)
         "Blue" -> Color(0xFF0284C7)
         "Purple" -> Color(0xFF8B4DE8)
         "Orange" -> Color(0xFFF59E0B)
@@ -2232,7 +2233,7 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
             }
         }
         item { InfoCard("App lock", "PIN and biometric app-lock protection are not implemented in this build. Do not treat the app as locked; protect your device with Android screen lock.", Icons.Default.Fingerprint) }
-        item { InfoCard("Backups contain sensitive information", "Create backups only when needed and store exported JSON/CSV files in a trusted private location. MoneyLog does not currently sync backups to a cloud account.", Icons.Default.PrivacyTip) }
+        item { InfoCard("Backups contain sensitive information", "Local JSON/CSV exports stay on your device until you share them. If you connect a Google Drive folder in Backup & Export, MoneyLog can write dated backups there. Store exported files in a trusted private location.", Icons.Default.PrivacyTip) }
         item { InfoCard("Clear app data", "Clearing Android app storage or uninstalling may remove locally saved records. Export a backup first if you need to keep them.", Icons.Default.DeleteOutline) }
     }
 }
