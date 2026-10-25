@@ -3055,6 +3055,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long)
     }
 }
 
+@Composable
 private fun TransactionDetailsDialog(
     transaction: Transaction,
     allTransactions: List<Transaction>,
