@@ -3020,12 +3020,12 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long)
                         fun capture(pattern: String): String? = Regex(pattern, RegexOption.IGNORE_CASE).find(normalizedExtracted)?.groupValues?.getOrNull(1)
                             ?.replace(",", "")?.trim()
                         val fields = JSONObject()
-                        capture("(?:monthly\\s*)?emi(?:\\s*amount)?\\s*[:\\-]?\\s*(?:₹|rs\\.?\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { fields.put("emi", it.substringBefore(".")) }
+                        capture("(?:monthly\\s*)?emi(?:\\s*amount)?\\s*[:\\-]?\\s*(?:(?:₹|rs\\.?|inr)\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { fields.put("emi", it.substringBefore(".")) }
                         capture("(?:annual\\s*)?(?:interest\\s*rate|rate\\s*of\\s*interest)\\s*[:\\-]?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*%?")?.let { fields.put("rate", it) }
                         capture("(?:total\\s*)?(?:loan\\s*)?(?:tenure|term)(?:\\s*(?:in\\s*)?\\(?months?\\)?)?\\s*[:\\-]?\\s*([0-9]{1,3})(?:\\s*(?:months?|mos?\\.?|installments?|instalments?))?")?.let { fields.put("totalPayments", it) }
                             ?: capture("(?:total\\s*)?(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:count|tenure|months?)?\\s*[:\\-]?\\s*([0-9]{1,3})")?.let { fields.put("totalPayments", it) }
                         capture("(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:paid|completed)\\s*[:\\-]?\\s*([0-9]+)")?.let { fields.put("paymentsMade", it) }
-                        capture("(?:current\\s*)?(?:outstanding\\s*(?:principal|balance|amount)?|principal\\s*outstanding)\\s*[:\\-]?\\s*(?:₹|rs\\.?\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
+                        capture("(?:current\\s*)?(?:outstanding\\s*(?:principal|balance|amount)?|principal\\s*outstanding)\\s*[:\\-]?\\s*(?:(?:₹|rs\\.?|inr)\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
                         capture("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
                         Regex("(?im)^\\s*(?:lender|bank|financial institution)\\s*[:\\-]\\s*(.{2,60})$").find(extracted)
                             ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }?.let { fields.put("lender", it) }
@@ -3084,7 +3084,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long)
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                     Text("Import or enter loan details", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text("Option 1 · Import a lender statement or EMI schedule PDF", color = Muted, fontSize = 12.sp)
-                    OutlinedButton(onClick = { pdfPicker.launch(arrayOf("application/pdf")) }, enabled = !pdfBusy, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = { pdfPicker.launch(arrayOf("application/pdf", "*/*")) }, enabled = !pdfBusy, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.PictureAsPdf, null)
                         Spacer(Modifier.width(8.dp))
                         Text(if (pdfBusy) "Reading PDF…" else "Import Loan PDF")
