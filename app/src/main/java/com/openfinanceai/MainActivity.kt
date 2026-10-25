@@ -20,6 +20,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
+import com.tom_roush.pdfbox.text.TextPosition
 import androidx.compose.ui.platform.LocalContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -99,6 +100,10 @@ private fun applyAppearance(theme: String, accent: String, layout: String, fontS
     Muted = if (AppDarkTheme) Color(0xFFB0BDB5) else Color(0xFF74788D)
 }
 private val Money = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
+private fun reportChartMoney(amount: Number): String = NumberFormat.getCurrencyInstance(Locale("en", "IN")).apply {
+    minimumFractionDigits = 0
+    maximumFractionDigits = 0
+}.format(amount)
 private val CategoryPalette = listOf(Color(0xFF356AE6), Color(0xFF159765), Color(0xFF8953D8), Color(0xFFD97732), Color(0xFFDB4765), Color(0xFF148D91), Color(0xFFB18A16), Color(0xFF477DAD), Color(0xFFAF5AB5), Color(0xFF567A35), Color(0xFFCF5A36), Color(0xFF5470C6))
 private fun categoryColor(category: String): Color = when (category.trim().lowercase(Locale.ROOT)) {
     "salary", "payroll", "wages" -> Color(0xFF356AE6)
@@ -982,11 +987,11 @@ private fun ReportsScreen(
         }
         if (reportView == "Overview" || reportView == "Total") {
             item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricCard("Income", Money.format(income), Modifier.weight(1f), IncomeTint, IncomeGreen)
-                MetricCard("Expenses", Money.format(expenses), Modifier.weight(1f), ExpenseTint, ExpenseRed)
+                MetricCard("Income", reportChartMoney(income), Modifier.weight(1f), IncomeTint, IncomeGreen)
+                MetricCard("Expenses", reportChartMoney(expenses), Modifier.weight(1f), ExpenseTint, ExpenseRed)
             } }
             item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricCard("Net savings", Money.format(income - expenses), Modifier.weight(1f), LavenderTint, Purple)
+                MetricCard("Net savings", reportChartMoney(income - expenses), Modifier.weight(1f), LavenderTint, Purple)
                 MetricCard("Transactions", transactions.size.toString(), Modifier.weight(1f), SkyTint, Blue)
             } }
         }
@@ -1006,7 +1011,7 @@ private fun ReportsScreen(
                                 Text(top.first, color = Ink, fontWeight = FontWeight.Bold)
                                 Text(if (totalSpend > 0L) "${top.second * 100 / totalSpend}% of expenses" else "0%", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                             }
-                            Text(Money.format(top.second), color = Ink, fontWeight = FontWeight.Bold)
+                            Text(reportChartMoney(top.second), color = Ink, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1014,11 +1019,11 @@ private fun ReportsScreen(
             item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Income vs expenses", fontWeight = FontWeight.Bold, color = Ink)
-                    Text("Income · " + Money.format(income), color = IncomeGreen)
+                    Text("Income · " + reportChartMoney(income), color = IncomeGreen)
                     LinearProgressIndicator(progress = { if (income + expenses > 0L) income.toFloat() / (income + expenses) else 0f }, modifier = Modifier.fillMaxWidth(), color = IncomeGreen)
-                    Text("Expenses · " + Money.format(expenses), color = ExpenseRed)
+                    Text("Expenses · " + reportChartMoney(expenses), color = ExpenseRed)
                     LinearProgressIndicator(progress = { if (income + expenses > 0L) expenses.toFloat() / (income + expenses) else 0f }, modifier = Modifier.fillMaxWidth(), color = ExpenseRed)
-                    Text("Net cash flow · " + Money.format(income - expenses), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
+                    Text("Net cash flow · " + reportChartMoney(income - expenses), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
                 }
             } }
         }
@@ -1038,8 +1043,8 @@ private fun ReportsScreen(
                                     Text("${daily.size} transaction(s)", color = Muted, fontSize = 11.sp)
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text("+ ${Money.format(daily.filter { it.income }.sumOf { it.amount })}", color = IncomeGreen, fontSize = 11.sp)
-                                    Text("− ${Money.format(daily.filterNot { it.income }.sumOf { it.amount })}", color = ExpenseRed, fontSize = 11.sp)
+                                    Text("+ ${reportChartMoney(daily.filter { it.income }.sumOf { it.amount })}", color = IncomeGreen, fontSize = 11.sp)
+                                    Text("− ${reportChartMoney(daily.filterNot { it.income }.sumOf { it.amount })}", color = ExpenseRed, fontSize = 11.sp)
                                 }
                             }
                         }
@@ -1051,9 +1056,9 @@ private fun ReportsScreen(
         if (reportView == "By category") {
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ReportMetricCard("Income", Money.format(income), Icons.Default.AccountBalanceWallet, Modifier.weight(1f), Color(0xFFE3F9ED), Color(0xFF00A86B))
-                    ReportMetricCard("Expense", Money.format(expenses), Icons.Default.CreditCard, Modifier.weight(1f), Color(0xFFFFEBEB), Color(0xFFFD3C65))
-                    ReportMetricCard("Savings", Money.format(income - expenses), Icons.Default.Savings, Modifier.weight(1f), Color(0xFFE6F0FF), Color(0xFF0066FF))
+                    ReportMetricCard("Income", reportChartMoney(income), Icons.Default.AccountBalanceWallet, Modifier.weight(1f), Color(0xFFE3F9ED), Color(0xFF00A86B))
+                    ReportMetricCard("Expense", reportChartMoney(expenses), Icons.Default.CreditCard, Modifier.weight(1f), Color(0xFFFFEBEB), Color(0xFFFD3C65))
+                    ReportMetricCard("Savings", reportChartMoney(income - expenses), Icons.Default.Savings, Modifier.weight(1f), Color(0xFFE6F0FF), Color(0xFF0066FF))
                 }
             }
             item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
@@ -1073,7 +1078,7 @@ private fun ReportsScreen(
                             }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("Total Expense", color = Color(0xFF8094B0), fontSize = 11.sp)
-                                Text(Money.format(totalSpend), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                                Text(reportChartMoney(totalSpend), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             }
                         }
                         Column(Modifier.weight(1.14f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1148,7 +1153,7 @@ private fun ReportsScreen(
                                 Text(category, color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, softWrap = false)
                                 Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}% of expenses" else "0% of expenses", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                             }
-                            Text(Money.format(amount).substringBeforeLast(".").takeIf { Money.format(amount).contains(".") } ?: Money.format(amount), color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, softWrap = false)
+                            Text(reportChartMoney(amount).substringBeforeLast(".").takeIf { reportChartMoney(amount).contains(".") } ?: reportChartMoney(amount), color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, softWrap = false)
                             Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                             Icon(Icons.Default.ChevronRight, contentDescription = "Open category", tint = Muted, modifier = Modifier.size(16.dp))
                         }
@@ -1167,7 +1172,7 @@ private fun ReportsScreen(
                             Icon(Icons.Default.Label, null, tint = categoryColor(tag))
                             Spacer(Modifier.width(8.dp))
                             Text("#$tag", Modifier.weight(1f), color = Ink)
-                            Text(Money.format(amount), color = Ink, fontWeight = FontWeight.Bold)
+                            Text(reportChartMoney(amount), color = Ink, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1180,7 +1185,7 @@ private fun ReportsScreen(
                     listOf(Triple("Total income", income, IncomeGreen), Triple("Total expenses", expenses, ExpenseRed), Triple("Net savings", income - expenses, Purple)).forEach { row ->
                         Row(Modifier.fillMaxWidth().background(categoryTint(row.first), RoundedCornerShape(12.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(row.first, Modifier.weight(1f), color = Ink)
-                            Text(Money.format(row.second), color = row.third, fontWeight = FontWeight.Bold)
+                            Text(reportChartMoney(row.second), color = row.third, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1210,7 +1215,7 @@ private fun ReportsScreen(
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(category, color = Ink, fontWeight = FontWeight.Bold, fontSize = 19.sp)
-                            Text("${Money.format(categoryTotal)}", color = Ink, fontWeight = FontWeight.Bold, fontSize = 23.sp)
+                            Text("${reportChartMoney(categoryTotal)}", color = Ink, fontWeight = FontWeight.Bold, fontSize = 23.sp)
                             Text("${categoryShare}% of total expenses", color = Muted, fontSize = 12.sp)
                         }
                     }
@@ -1224,7 +1229,7 @@ private fun ReportsScreen(
                         Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F6FC)), shape = RoundedCornerShape(12.dp)) {
                             Column(Modifier.fillMaxWidth().padding(10.dp)) {
                                 Text("Avg. per transaction", color = Muted, fontSize = 11.sp)
-                                Text(Money.format(averageSpend), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                                Text(reportChartMoney(averageSpend), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             }
                         }
                     }
@@ -1264,7 +1269,7 @@ private fun ReportsScreen(
                                         Text("Spending insights", color = Ink, fontWeight = FontWeight.Bold)
                                     }
                                     Text("You spent ${categoryShare}% of your recorded expenses in $category.", color = Ink, fontSize = 12.sp)
-                                    Text("${categoryTransactions.size} transactions · average ${Money.format(averageSpend)} each", color = Muted, fontSize = 12.sp)
+                                    Text("${categoryTransactions.size} transactions · average ${reportChartMoney(averageSpend)} each", color = Muted, fontSize = 12.sp)
                                 }
                             }
                             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(14.dp)) {
@@ -1277,7 +1282,7 @@ private fun ReportsScreen(
                                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                                     Text(place.first, Modifier.weight(1f), color = Ink, fontSize = 12.sp, maxLines = 1)
-                                                    Text(Money.format(place.second), color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                                    Text(reportChartMoney(place.second), color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                                                 }
                                                 Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFFEAF0F6))) {
                                                     Box(Modifier.fillMaxWidth(if (categoryTotal > 0L) place.second.toFloat() / categoryTotal else 0f).fillMaxHeight().clip(RoundedCornerShape(6.dp)).background(categoryColor(category)))
@@ -1299,7 +1304,7 @@ private fun ReportsScreen(
                                         color = Ink, fontSize = 12.sp
                                     )
                                     Text(
-                                        if (averageSpend > 0L) "Your average transaction is ${Money.format(averageSpend)}. Compare similar purchases and look for lower-cost alternatives."
+                                        if (averageSpend > 0L) "Your average transaction is ${reportChartMoney(averageSpend)}. Compare similar purchases and look for lower-cost alternatives."
                                         else "Once transactions are recorded, MoneyLog can suggest practical ways to save.",
                                         color = Ink, fontSize = 12.sp
                                     )
@@ -1479,12 +1484,10 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
                             Text(Money.format(loan.emi), color = navy, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                             Text("/month", color = slate, fontSize = 11.sp)
                         }
-                        val statusColor = if (isUpcoming) orange else green
-                        val statusTint = if (isUpcoming) orangeTint else greenTint
-                        Box(Modifier.clip(RoundedCornerShape(50)).background(statusTint).padding(horizontal = 10.dp, vertical = 7.dp)) {
+                        Box(Modifier.clip(RoundedCornerShape(50)).background(orangeTint).padding(horizontal = 10.dp, vertical = 7.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Icon(if (isUpcoming) Icons.Default.Schedule else Icons.Default.CheckCircle, null, tint = statusColor, modifier = Modifier.size(14.dp))
-                                Text(if (isUpcoming) "Upcoming" else "On Track", color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Icon(Icons.Default.Schedule, null, tint = orange, modifier = Modifier.size(14.dp))
+                                Text("Upcoming", color = orange, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -2920,7 +2923,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                         }
                         Box(Modifier.weight(.85f), contentAlignment = Alignment.CenterEnd) {
                             Box(Modifier.clip(RoundedCornerShape(50)).background(SkyTint).padding(horizontal = 8.dp, vertical = 6.dp)) {
-                                Text("PDF", color = Blue, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                Text("Upcoming", color = upcomingAmber, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                             }
                         }
                     }
@@ -3006,16 +3009,149 @@ private fun LoanDateField(label: String, date: String, onDateChange: (String) ->
     }
 }
 
+private class LayoutAwareLoanPdfTextStripper : PDFTextStripper() {
+    init {
+        setSortByPosition(true)
+    }
+
+    // PDFTextStripper normally returns a flat line. Preserve large horizontal gaps as
+    // cell separators so downstream matching can distinguish adjacent table columns.
+    override fun writeString(text: String, textPositions: MutableList<TextPosition>) {
+        val ordered = textPositions.sortedBy { it.xDirAdj }
+        val rebuilt = StringBuilder()
+        var previous: TextPosition? = null
+        for (position in ordered) {
+            val prior = previous
+            if (prior != null) {
+                val gap = position.xDirAdj - (prior.xDirAdj + prior.widthDirAdj)
+                when {
+                    gap >= 14f -> rebuilt.append('\t')
+                    gap >= 2.5f -> rebuilt.append(' ')
+                }
+            }
+            rebuilt.append(position.unicode)
+            previous = position
+        }
+        super.writeString(rebuilt.toString())
+    }
+}
+
+internal fun cleanLoanPdfLineFromIndices(line: String): String {
+    val fieldLabels = """(?:loan\s+amount|amount\s+of\s+loan|principal\s+amount|loan\s+principal|amount\s+financed|sanctioned\s+amount|amount\s+sanctioned|approved\s+amount|credit\s+facility\s+amount|annual\s+interest\s+rate|interest\s+rate|rate\s+of\s+interest|fixed\s+rate|roi|emi|equated\s+monthly|monthly\s+installments?|monthly\s+instalments?|installment\s+amount|instalment\s+amount|repayment|total\s+tenure|loan\s+tenure|tenure|loan\s+term|loan\s+period|loan\s+duration|tenor|agreement\s+number|contract\s+number|borrower|applicant|customer|lender|bank|financial\s+institution)"""
+    return line.replaceFirst(
+        Regex("^\\s*\\d{1,3}(?:\\.[a-z0-9])?\\s+(?=$fieldLabels)", RegexOption.IGNORE_CASE),
+        ""
+    ).trim()
+}
+
+internal fun captureLoanPdfTabbedNumericValue(lines: List<String>, labelPattern: String): String? {
+    val labelRegex = Regex("(?i)^\\s*(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$")
+    val valueRegex = Regex("(?i)^\\s*(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*(?:%|months?|mos?\\.?|per\\s+month|/month)?\\s*$")
+    for (rawLine in lines) {
+        val cells = rawLine.split('\t').map { it.trim() }.filter { it.isNotEmpty() }
+        for (index in cells.indices) {
+            val labelCell = cleanLoanPdfLineFromIndices(cells[index])
+            if (!labelRegex.matches(labelCell)) continue
+            val valueCell = cells.drop(index + 1).firstOrNull { it.isNotBlank() } ?: continue
+            val match = valueRegex.matchEntire(valueCell) ?: continue
+            val value = match.groupValues[1].replace(",", "")
+            if (!loanPdfValueMatchesRowIndex(rawLine, value)) return value
+        }
+    }
+    return null
+}
+
+internal fun captureLoanPdfTabbedTextValue(lines: List<String>, labelPattern: String): String? {
+    val labelRegex = Regex("(?i)^\\s*(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$")
+    val headerRegex = Regex("(?i)^(?:loan|emi|interest|tenure|agreement|lender|date|amount|rate|applicant|customer|borrower|principal|repayment|installment|instalment)\\b")
+    for (rawLine in lines) {
+        val cells = rawLine.split('\t').map { it.trim() }.filter { it.isNotEmpty() }
+        for (index in cells.indices) {
+            if (!labelRegex.matches(cleanLoanPdfLineFromIndices(cells[index]))) continue
+            val value = cells.drop(index + 1).firstOrNull { it.isNotBlank() }?.trim()?.trim(':', '-', ' ')
+            if (value != null && value.length in 2..100 && !headerRegex.containsMatchIn(value)) return value
+        }
+    }
+    return null
+}
+
+/**
+ * Bounded global scans support labels and values separated by PDF line breaks.
+ * These helpers stop at another recognized field label to avoid crossing fields.
+ */
+internal fun captureLoanPdfGlobalNumericValue(text: String, labelPattern: String): String? {
+    val normalized = text.replace('\u00A0', ' ').replace(Regex("\\s+"), " ").trim()
+    val nextLabel = """(?:loan\s+amount|principal|sanctioned|approved|interest\s+rate|rate\s+of\s+interest|\broi\b|\bemi\b|installments?|instalments?|tenure|tenor|loan\s+term|outstanding|balance|agreement|contract|borrower|applicant|customer|lender|bank|repayment|commencement|start\s+date)"""
+    val number = """(?:₹|rs\.?|inr)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s*(?:%|months?|mos?\.?|per\s+month|/month)?"""
+    val regex = Regex(
+        """(?:^|\b)(?:$labelPattern)\b(?:\s*\([^)]*\))?\s*[:\-]?\s*(?:(?!$nextLabel).){0,40}?$number""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+    )
+    val match = regex.find(normalized) ?: return null
+    val raw = match.groupValues.getOrNull(1)?.replace(",", "")?.trim() ?: return null
+    return raw.takeIf { it.toDoubleOrNull() != null }
+}
+
+internal fun captureLoanPdfGlobalTextValue(text: String, labelPattern: String): String? {
+    val normalized = text.replace('\u00A0', ' ').replace(Regex("\\s+"), " ").trim()
+    val labelMatch = Regex("""(?:^|\b)(?:$labelPattern)\b(?:\s*\([^)]*\))?\s*[:\-]?""", RegexOption.IGNORE_CASE)
+        .find(normalized) ?: return null
+    val valueCandidate = normalized.substring(labelMatch.range.last + 1).trim().trimStart(':', '-', ' ')
+    val nextLabel = """(?:loan\s+amount|principal|interest\s+rate|rate\s+of\s+interest|\broi\b|\bemi\b|installments?|instalments?|tenure|tenor|outstanding|balance|agreement|contract|borrower|applicant|customer|lender|bank|repayment|start\s+date)"""
+    val nextLabelMatch = Regex("""(?i)\b(?:$nextLabel)\b""").find(valueCandidate)
+    val value = valueCandidate.substring(0, nextLabelMatch?.range?.first ?: valueCandidate.length)
+        .trim().trimEnd(',', ';', ':', '-')
+    if (value.length !in 2..80) return null
+    if (Regex("""(?i)^(?:no\.?|number|amount|date|details|not available)$""").matches(value)) return null
+    return value
+}
+
+internal fun parseLoanPdfScheduleRows(scheduleText: String): List<Pair<Int, Double>> {
+    val compact = Regex("^\\s*(\\d{1,3})\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
+    val month = "(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
+    val dated = Regex("^\\s*(\\d{1,3})\\s+(?:\\d{1,2}[-/]" + month + "[-/]\\d{2,4}|\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4}|\\d{4}-\\d{2}-\\d{2})\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$", RegexOption.IGNORE_CASE)
+    return scheduleText.lines().mapNotNull { line ->
+        val datedMatch = dated.find(line)
+        if (datedMatch != null) {
+            val installmentNo = datedMatch.groupValues[1].toIntOrNull()
+            val emi = datedMatch.groupValues[3].replace(",", "").toDoubleOrNull()
+            if (installmentNo != null && emi != null) installmentNo to emi else null
+        } else {
+            val compactMatch = compact.find(line) ?: return@mapNotNull null
+            val installmentNo = compactMatch.groupValues[1].toIntOrNull()
+            val emi = compactMatch.groupValues[3].replace(",", "").toDoubleOrNull()
+            if (installmentNo != null && emi != null) installmentNo to emi else null
+        }
+    }
+}
+
+// A schedule only establishes total tenure when it contains every numbered instalment from 1
+// through its final row. A partial statement must not be mistaken for the whole loan term.
+internal fun completeLoanPdfScheduleTenure(rows: List<Pair<Int, Double>>): Int? {
+    if (rows.isEmpty()) return null
+    val numbers = rows.map { it.first }.distinct().sorted()
+    val last = numbers.last()
+    if (numbers.size != rows.size || numbers.first() != 1 || numbers.size != last || numbers != (1..last).toList()) return null
+    return last
+}
+
+internal fun loanPdfValueMatchesRowIndex(rawLine: String, value: String): Boolean {
+    val prefix = Regex("^\\s*(\\d{1,3})(?:\\.[a-z0-9])?\\s+(?=[A-Za-z])").find(rawLine) ?: return false
+    val rowIndex = prefix.groupValues[1].toLongOrNull() ?: return false
+    val numericValue = value.replace(",", "").toDoubleOrNull() ?: return false
+    return numericValue == rowIndex.toDouble()
+}
+
 @Composable
 private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long, String, String, String, String) -> Unit) {
     val context = LocalContext.current
     var lender by remember { mutableStateOf("") }
     var borrowerName by remember { mutableStateOf("") }
     var agreementNumber by remember { mutableStateOf("") }
-    var startDate by remember { mutableStateOf(java.time.LocalDate.now().plusMonths(1).withDayOfMonth(10).toString()) }
-    var paymentsMade by remember { mutableStateOf("0") }
+    var startDate by remember { mutableStateOf("") }
+    var paymentsMade by remember { mutableStateOf("") }
     var totalPayments by remember { mutableStateOf("") }
-    var rate by remember { mutableStateOf("12") }
+    var rate by remember { mutableStateOf("") }
     var emi by remember { mutableStateOf("") }
     var statementOutstanding by remember { mutableStateOf("") }
     var statementDate by remember { mutableStateOf("") }
@@ -3041,9 +3177,12 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         var extracted = PDDocument.load(bytes).use { document ->
                             require(!document.isEncrypted) { "Password-protected PDFs are not supported. Choose an unlocked PDF." }
                             require(document.numberOfPages in 1..300) { "The PDF has an unsupported page count." }
-                            PDFTextStripper().apply { setSortByPosition(true) }.getText(document)
+                            LayoutAwareLoanPdfTextStripper().getText(document)
                         }
-                        if (extracted.trim().length < 40) {
+                        val extractedLabelCount = Regex("(?i)\\b(?:loan\\s+amount|principal\\s+amount|amount\\s+of\\s+loan|emi|equated\\s+monthly|interest\\s+rate|tenure|loan\\s+term|borrower|applicant|repayment|sanctioned\\s+amount|agreement\\s+number)\\b").findAll(extracted).count()
+                        // Scanned PDFs can contain a logo or a small selectable-text layer, so length alone
+                        // is not a reliable way to decide whether OCR is needed.
+                        if (extracted.trim().length < 40 || extractedLabelCount < 2) {
                             val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
                                 ?: throw IllegalArgumentException("Could not render this PDF for OCR.")
                             descriptor.use { pfd ->
@@ -3061,7 +3200,10 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                                 bitmap.recycle()
                                             }
                                         }
-                                        extracted = ocrText.toString()
+                                        val recognizedText = ocrText.toString()
+                                        // Keep the PDF text layer and add OCR output: many lender PDFs mix selectable
+                                        // headings with scanned tables, so replacing either source loses fields.
+                                        extracted = listOf(extracted, recognizedText).filter { it.isNotBlank() }.joinToString("\n")
                                     } finally { recognizer.close() }
                                 }
                             }
@@ -3071,52 +3213,65 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         }
                         // Preserve line boundaries: flattening the PDF before matching made the first
                         // unrelated number after "EMI" / "tenure" look like the field value.
-                        val normalizedExtracted = extracted.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ")
+                        val normalizedExtracted = extracted.replace('\u00A0', ' ').replace(Regex(" +"), " ")
                         val normalizedSearchText = normalizedExtracted.replace(Regex("\\s+"), " ")
                         val extractedLines = normalizedExtracted.lines().map { it.trim() }
                         fun captureAnywhere(pattern: String): String? =
                             Regex(pattern, RegexOption.IGNORE_CASE).find(normalizedSearchText)?.groupValues?.getOrNull(1)
                                 ?.replace(",", "")?.trim()
                         fun captureLabeled(labelPattern: String): String? {
+                            captureLoanPdfGlobalNumericValue(normalizedSearchText, labelPattern)?.let { return it }
                             val number = "([0-9][0-9,]*(?:\\.[0-9]{1,2})?)"
                             val suffix = "(?:%|months?|mos?\\.?|per\\s+month|/month)?"
-                            val inline = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*(?:₹|rs\\.?|inr)?\\s*$number\\s*$suffix(?:\\s+(?:p\\.?a\\.?|per\\s+annum))?\\s*$", RegexOption.IGNORE_CASE)
-                            val labelOnly = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$", RegexOption.IGNORE_CASE)
+                            val inline = Regex("^\\s*(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*(?:₹|rs\\.?|inr)?\\s*$number\\s*$suffix(?:\\s+(?:p\\.?a\\.?|per\\s+annum))?\\s*$", RegexOption.IGNORE_CASE)
+                            val labelOnly = Regex("^\\s*(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$", RegexOption.IGNORE_CASE)
                             val valueOnly = Regex("^\\s*(?:₹|rs\\.?|inr)?\\s*$number\\s*$suffix\\s*$", RegexOption.IGNORE_CASE)
                             for (index in extractedLines.indices) {
-                                inline.find(extractedLines[index])?.let { return it.groupValues[1].replace(",", "").trim() }
-                                if (labelOnly.matches(extractedLines[index])) {
-                                    // Some lender PDFs place a table value immediately before its label.
-                                    val previousLine = extractedLines.take(index).lastOrNull { it.isNotBlank() }
-                                    if (previousLine != null) {
-                                        valueOnly.find(previousLine)?.let { return it.groupValues[1].replace(",", "").trim() }
+                                val rawLine = extractedLines[index]
+                                val cleanedLine = cleanLoanPdfLineFromIndices(rawLine)
+                                inline.find(cleanedLine)?.let { match ->
+                                    val value = match.groupValues[1].replace(",", "").trim()
+                                    if (!loanPdfValueMatchesRowIndex(rawLine, value)) return value
+                                }
+                                if (labelOnly.matches(cleanedLine)) {
+                                    // Only inspect the following cell/line. Looking backward can capture an
+                                    // unrelated row's serial number or the previous field's financial value.
+                                    val nextRawLine = extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } ?: continue
+                                    val nextLine = cleanLoanPdfLineFromIndices(nextRawLine)
+                                    valueOnly.find(nextLine)?.let { match ->
+                                        val value = match.groupValues[1].replace(",", "").trim()
+                                        if (!loanPdfValueMatchesRowIndex(rawLine, value)) return value
                                     }
-                                    val nextLine = extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } ?: continue
-                                    valueOnly.find(nextLine)?.let { return it.groupValues[1].replace(",", "").trim() }
                                 }
                             }
                             return null
                         }
-                        // PDFBox can emit table cells in a different order from their visual layout.
-                        // Search within a label's own line first, then check adjacent standalone values.
+                        // Nearby matching is intentionally conservative: it never takes a value from the
+                        // previous line, and it rejects a number that duplicates the row's leading index.
                         fun captureLabeledNearby(labelPattern: String): String? {
-                            val number = Regex("(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)", RegexOption.IGNORE_CASE)
-                            val standalone = Regex("^\\s*(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*(?:%|months?|mos?\\.?)?\\s*$", RegexOption.IGNORE_CASE)
+                            val number = Regex("^\\s*(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*(?:%|months?|mos?\\.?)?\\s*$", RegexOption.IGNORE_CASE)
                             for (index in extractedLines.indices) {
-                                val line = extractedLines[index]
+                                val rawLine = extractedLines[index]
+                                val line = cleanLoanPdfLineFromIndices(rawLine)
                                 val label = Regex(labelPattern, RegexOption.IGNORE_CASE).find(line) ?: continue
                                 val after = line.substring(label.range.last + 1)
                                     .replace(Regex("^\\s*\\([^)]*\\)\\s*"), "")
                                     .trim().trimStart(':', '-', ' ')
-                                number.find(after)?.let { return it.groupValues[1].replace(",", "").trim() }
-                                val previous = extractedLines.take(index).lastOrNull { it.isNotBlank() }
-                                if (previous != null) standalone.find(previous)?.let { return it.groupValues[1].replace(",", "").trim() }
-                                val next = extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() }
-                                if (next != null) standalone.find(next)?.let { return it.groupValues[1].replace(",", "").trim() }
+                                number.find(after)?.let { match ->
+                                    val value = match.groupValues[1].replace(",", "").trim()
+                                    if (!loanPdfValueMatchesRowIndex(rawLine, value)) return value
+                                }
+                                val nextRawLine = extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } ?: continue
+                                val nextLine = cleanLoanPdfLineFromIndices(nextRawLine)
+                                number.find(nextLine)?.let { match ->
+                                    val value = match.groupValues[1].replace(",", "").trim()
+                                    if (!loanPdfValueMatchesRowIndex(rawLine, value)) return value
+                                }
                             }
                             return null
                         }
                         fun captureLabeledText(labelPattern: String): String? {
+                            captureLoanPdfGlobalTextValue(normalizedSearchText, labelPattern)?.let { return it }
                             val inline = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s+(.{2,80}?)\\s*$", RegexOption.IGNORE_CASE)
                             val labelOnly = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$", RegexOption.IGNORE_CASE)
                             for (index in extractedLines.indices) {
@@ -3132,51 +3287,100 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         // Use the document's own section headings rather than assuming that values
                         // always appear on page 1. PDFTextStripper separates pages with form feeds.
                         val pdfPages = extracted.split('\u000C')
-                        val aprPage = pdfPages.firstOrNull { it.contains("Computation of APR", ignoreCase = true) }.orEmpty()
-                        val schedulePage = pdfPages.firstOrNull { it.contains("Illustrative Repayment Schedule", ignoreCase = true) }.orEmpty()
-                        val emiLabel = "(?:amount\\s+of\\s+emi\\s+payable|(?:monthly\\s+)?(?:emi\\s*(?:amount|payable)?|equated\\s+monthly\\s+installments?|equated\\s+monthly\\s+instalments?|monthly\\s+installments?|monthly\\s+instalments?))"
-                        val scheduleRowPattern = Regex("^\\s*(\\d{1,3})\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
-                        val scheduleRows = schedulePage.lines().mapNotNull { line ->
-                            scheduleRowPattern.find(line)?.let { match ->
-                                match.groupValues[1].toIntOrNull()?.let { installmentNo ->
-                                    installmentNo to (match.groupValues[5].replace(",", "").toDoubleOrNull())
-                                }
-                            }
+                        // Start at the relevant section and include continuation pages rather than only the
+                        // first page that repeats the section heading.
+                        val aprStartPage = pdfPages.indexOfFirst { it.contains("Computation of APR", ignoreCase = true) }
+                        val aprPage = if (aprStartPage >= 0) pdfPages.drop(aprStartPage).joinToString("\n") else ""
+                        val scheduleStartPage = pdfPages.indexOfFirst { page ->
+                            page.contains("Illustrative Repayment Schedule", ignoreCase = true) ||
+                                page.contains("Repayment Schedule", ignoreCase = true) ||
+                                page.contains("Repayment Schedule Statement", ignoreCase = true)
                         }
-                        val scheduleInstallments = (if (scheduleRows.isNotEmpty()) scheduleRows.mapNotNull { it.second } else extractedLines.mapNotNull { line ->
-                            Regex("^\\s*\\d{1,3}\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
-                                .find(line)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
-                        })
+                        val schedulePage = if (scheduleStartPage >= 0) pdfPages.drop(scheduleStartPage).joinToString("\n") else ""
+                        val emiLabel = "(?:amount\\s+of\\s+emi\\s+payable|(?:monthly\\s+)?(?:emi\\s*(?:amount|payable)?|equated\\s+monthly\\s+installments?|equated\\s+monthly\\s+instalments?|monthly\\s+installments?(?:\\s+amount)?|monthly\\s+instalments?(?:\\s+amount)?|installment\\s+amount|instalment\\s+amount|monthly\\s+repayment|repayment\\s+installment|repayment\\s+instalment))"
+                        // Parse schedule rows through a unit-testable helper shared by synthetic lender fixtures.
+                        val scheduleSource = if (schedulePage.isNotBlank()) schedulePage else extracted
+                        val scheduleRows = parseLoanPdfScheduleRows(scheduleSource)
+                        val scheduleInstallments = scheduleRows.map { it.second }
                         val recurringScheduleEmi = scheduleInstallments.groupingBy { it }.eachCount()
                             .maxByOrNull { it.value }?.takeIf { it.value >= 2 }?.key?.toString()
-                        val scheduleTenure = scheduleRows.maxOfOrNull { it.first }?.toString()
+                        val scheduleTenure = completeLoanPdfScheduleTenure(scheduleRows)?.toString()
                         // The APR computation table repeats the sanctioned term, EPI and repayment date.
                         val aprNormalized = aprPage.replace('\u00A0', ' ').replace(Regex("\\s+"), " ")
                         val aprTenure = Regex("(?i)Loan Term \\(in years/ months/ days\\).*?Part 1\\)\\s*([0-9]{1,3})").find(aprNormalized)?.groupValues?.get(1)
                         val aprEmi = Regex("(?i)Amount of each EPI.*?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+nos\\.\\s+of EPIs").find(aprNormalized)?.groupValues?.get(1)?.replace(",", "")
                         val aprStartDate = Regex("(?i)Commencement of repayments?, post sanction.*?\\b([0-9]{4}-[0-9]{2}-[0-9]{2})\\b").find(aprNormalized)?.groupValues?.get(1)
-                        (captureLabeled(emiLabel) ?: captureLabeledNearby(emiLabel) ?: aprEmi ?: recurringScheduleEmi)
-                            ?.let { fields.put("emi", it.substringBefore(".")) }
+                        val principalLabel = "(?:(?:sanctioned|approved|total|original)\\s+)?(?:loan\\s+amount|amount\\s+of\\s+loan|principal\\s+amount|loan\\s+principal|amount\\s+financed|sanctioned\\s+amount|amount\\s+sanctioned|approved\\s+amount|credit\\s+facility\\s+amount)"
+                        val principalCandidate = (captureLoanPdfTabbedNumericValue(extractedLines, principalLabel)
+                            ?: captureLabeled(principalLabel)
+                            ?: captureLabeledNearby(principalLabel))
+                            ?.substringBefore(".")?.replace(",", "")?.toLongOrNull()
+                        principalCandidate?.takeIf { it > 0L }?.let { fields.put("principal", it.toString()) }
+
+                        val parsedEmi = (recurringScheduleEmi?.takeIf { (it.toDoubleOrNull() ?: 0.0) > 0.0 }
+                            ?: captureLoanPdfTabbedNumericValue(extractedLines, emiLabel)
+                            ?: captureLabeled(emiLabel)
+                            ?: captureLabeledNearby(emiLabel)
+                            ?: aprEmi)
+                            ?.substringBefore(".")?.replace(",", "")?.toLongOrNull()
+                        // A tiny EMI against a substantial principal is treated as a suspicious extraction,
+                        // not silently accepted. Prefer a repeated repayment-schedule amount when available.
+                        val verifiedEmi = when {
+                            parsedEmi == null || parsedEmi <= 0L -> null
+                            principalCandidate != null && principalCandidate >= 1000L && parsedEmi < 100L ->
+                                recurringScheduleEmi?.toDoubleOrNull()?.takeIf { it >= 100.0 }?.toLong()
+                            else -> parsedEmi
+                        }
+                        verifiedEmi?.let { fields.put("emi", it.toString()) }
                         val rateLabel = "(?:annual\\s+)?(?:interest\\s+rate(?:\\s+per\\s+annum)?|fixed\\s+rate\\s+of\\s+interest|rate\\s+of\\s+interest|roi)"
-                        (captureLabeled(rateLabel) ?: captureLabeledNearby(rateLabel))?.let { fields.put("rate", it) }
-                        val tenureLabel = "(?:(?:total|loan)\\s+)*(?:tenure|term)(?:\\s+in\\s+months?)?"
-                        (captureLabeled(tenureLabel) ?: captureLabeledNearby(tenureLabel) ?: aprTenure ?: scheduleTenure)?.let { fields.put("totalPayments", it) }
-                            ?: captureLabeled("(?:total\\s+number\\s+of\\s+)?(?:emi|installments?|instalments?)(?:\\s+(?:count|tenure|months?))?")?.let { fields.put("totalPayments", it) }
+                        val parsedRate = (captureLoanPdfTabbedNumericValue(extractedLines, rateLabel)
+                            ?: captureLabeled(rateLabel) ?: captureLabeledNearby(rateLabel))
+                            ?.replace("%", "")?.trim()?.toDoubleOrNull()
+                        // Accept only a positive, plausible percentage tied to an explicit interest-rate label.
+                        // No invented default is used when the source value cannot be verified.
+                        if (parsedRate != null && parsedRate > 0.0 && parsedRate <= 100.0) {
+                            fields.put("rate", parsedRate.toString())
+                        }
+                        val tenureLabel = "(?:(?:total|loan|repayment)\\s+)*(?:tenure|term|period|duration|tenor)(?:\\s+in\\s+(?:months?|years?))?"
+                        fun captureTenureMonths(): String? {
+                            val labelRegex = Regex(tenureLabel, RegexOption.IGNORE_CASE)
+                            val valueRegex = Regex("(?:^|\\s)([0-9]{1,3})\\s*(years?|yrs?)(?:\\s+([0-9]{1,2})\\s*(months?|mos?))?|(?:^|\\s)([0-9]{1,3})\\s*(months?|mos?)", RegexOption.IGNORE_CASE)
+                            for (index in extractedLines.indices) {
+                                val labelMatch = labelRegex.find(extractedLines[index]) ?: continue
+                                val after = extractedLines[index].substring(labelMatch.range.last + 1).trim().trimStart(':', '-', ' ')
+                                val inline = valueRegex.find(after)
+                                val adjacent = if (inline == null) extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } else null
+                                val match = inline ?: adjacent?.let { valueRegex.find(it) } ?: continue
+                                val years = match.groupValues.getOrNull(1)?.takeIf { it.isNotBlank() }?.toIntOrNull()
+                                if (years != null) {
+                                    val extraMonths = match.groupValues.getOrNull(3)?.toIntOrNull() ?: 0
+                                    return (years * 12 + extraMonths).takeIf { it > 0 }?.toString()
+                                }
+                                val months = match.groupValues.getOrNull(5)?.takeIf { it.isNotBlank() }?.toIntOrNull()
+                                if (months != null) return months.takeIf { it > 0 }?.toString()
+                            }
+                            return null
+                        }
+                        // Tenure must carry explicit year/month units or come from a parsed repayment schedule.
+                        // Do not accept arbitrary numbers such as "30 days" from unrelated policy text.
+                        (captureTenureMonths() ?: scheduleTenure)?.toIntOrNull()
+                            ?.takeIf { it > 0 }
+                            ?.let { fields.put("totalPayments", it.toString()) }
                         captureLabeled("(?:number\\s+of\\s+)?(?:emi|installments?|instalments?)\\s+(?:paid|completed)")?.let { fields.put("paymentsMade", it) }
                         captureLabeled("(?:(?:current|total)\\s+)?(?:outstanding\\s+(?:principal|balance|amount)?|principal\\s+outstanding)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
-                        val principalLabel = "(?:(?:sanctioned|approved|total)\\s+)?(?:loan\\s+amount|amount\\s+of\\s+loan|principal\\s+amount|loan\\s+principal|amount\\s+financed)"
-                        (captureLabeled(principalLabel) ?: captureLabeledNearby(principalLabel))?.let { fields.put("principal", it.substringBefore(".")) }
                         captureAnywhere("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
                         (captureAnywhere("(?:repayment|first\\s*(?:emi|installment|instalment)|emi)\\s*(?:start|commencement|starting)?\\s*date\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z]{3,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})")
                             ?: aprStartDate
                             ?: captureAnywhere("commencement\\s+of\\s+repayments?[^\\n]{0,250}?([0-9]{4}-[0-9]{2}-[0-9]{2})"))?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
-                        captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?borrower|borrower(?:\\s+name)?|customer(?:\\s+name)?|applicant(?:\\s+name)?)")?.let { fields.put("borrowerName", it) }
+                        captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?borrower|borrower(?:'s)?(?:\\s+(?:full\\s+)?name)?|customer(?:\\s+(?:full\\s+)?name)?|applicant(?:\\s+(?:full\\s+)?name)?|name\\s+of\\s+(?:the\\s+)?applicant)")?.let { fields.put("borrowerName", it) }
+                        // Only populate this field when the document explicitly labels an agreement/contract
+                        // number. Loan ID, LAN, account number and customer ID are intentionally not aliases.
                         captureAnywhere("(?:agreement|contract)\\s*(?:number|no\\.?|#)\\s*[:\\-]?\\s*([A-Z0-9/-]{4,40})")?.let { fields.put("agreementNumber", it) }
-                        Regex("(?im)^\\s*(?:lender|bank|financial institution)\\s*[:\\-]\\s*(.{2,60})$").find(extracted)
-                            ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
-                            ?.let { fields.put("lender", it) }
-                            ?: Regex("(?m)^\\s*([A-Z][A-Z &.-]{3,50}\\b(?:BANK|FINANCE|FINANCIAL))\\s*$").find(extracted)
-                                ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }?.let { fields.put("lender", it) }
+                        (captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?(?:lender|regulated\\s+entity|bank|financial\\s+institution)|(?:lender|bank|nbfc|financial\\s+institution)\\s+name|lender|bank|financial\\s+institution|nbfc)")
+                            ?: Regex("(?im)^\\s*(?:lender|bank|financial institution|name of (?:the )?regulated entity)\\s*[:\\-]\\s*(.{2,80})$").find(extracted)
+                                ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+                            ?: Regex("(?m)^\\s*([A-Z][A-Z &.-]{3,50}\\b(?:BANK|FINANCE|FINANCIAL|LIMITED|LTD\\.?))\\s*$").find(extracted)
+                                ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() })?.let { fields.put("lender", it) }
                         fields
                     }
                 }
@@ -3209,10 +3413,17 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     val monthly = emi.toDoubleOrNull() ?: 0.0
     val annualRate = rate.toDoubleOrNull() ?: -1.0
     val total = totalPayments.toIntOrNull() ?: 0
-    val paid = paymentsMade.toIntOrNull() ?: 0
+    val paid = paymentsMade.toIntOrNull() ?: -1
     val validInputs = monthly > 0.0 && annualRate >= 0.0 && total > 0 && paid in 0..total
-    val originalEstimate = if (validInputs) loanPresentValue(monthly, annualRate, total) else 0.0
-    val originalPrincipal = importedPrincipal.toDoubleOrNull()?.takeIf { it > 0.0 } ?: originalEstimate
+    // Never invent the original principal from EMI/rate/tenure: fees, APR, step-up EMIs,
+    // and lender-specific schedules can make an amortization estimate materially wrong.
+    val tenureRate = annualRate / 1200.0
+    val calculatedPrincipal = when {
+        monthly <= 0.0 || annualRate < 0.0 || total <= 0 -> 0.0
+        tenureRate == 0.0 -> monthly * total
+        else -> monthly * (1.0 - Math.pow(1.0 + tenureRate, -total.toDouble())) / tenureRate
+    }
+    val originalPrincipal = importedPrincipal.toDoubleOrNull()?.takeIf { it > 0.0 } ?: calculatedPrincipal
     val remainingMonths = (total - paid).coerceAtLeast(0)
     val calculatedOutstanding = if (validInputs) loanOutstandingEstimate(monthly, annualRate, remainingMonths) else 0.0
     val actualStatementBalance = statementOutstanding.toDoubleOrNull()
@@ -3247,19 +3458,26 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     OutlinedTextField(borrowerName, { borrowerName = it; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Borrower name (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(agreementNumber, { agreementNumber = it; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Agreement / Loan No. (primary identifier)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     LoanDateField("Repayment start date", startDate, { startDate = it; saved = false })
-                    OutlinedTextField(emi, { emi = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                    OutlinedTextField(totalPayments, { totalPayments = it.filter(Char::isDigit); importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Total tenure (months)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                    OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(importedPrincipal, { importedPrincipal = it.filter { c -> c.isDigit() }; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Original loan principal (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(emi, { emi = it.filter { c -> c.isDigit() || c == '.' }; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(totalPayments, { totalPayments = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Total tenure (months)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid (enter 0 if none)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(statementOutstanding, { statementOutstanding = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Statement outstanding principal (optional, ₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     if (statementDate.isNotBlank()) Text("Statement date: $statementDate", color = Muted, fontSize = 11.sp)
                     if (validInputs) {
                         Card(colors = CardDefaults.cardColors(containerColor = Mint), shape = RoundedCornerShape(16.dp)) {
                             Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Text("Estimated loan summary", color = Green, fontWeight = FontWeight.Bold)
-                                Text("Original principal: ${Money.format(kotlin.math.round(originalPrincipal).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
+                                Text("Principal is estimated from a fixed-EMI reducing-balance formula when no principal is entered; verify it against the loan document.", color = Muted, fontSize = 10.sp)
+                                if (originalPrincipal > 0.0) {
+                                    Text("Original principal: ${Money.format(kotlin.math.round(originalPrincipal).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
+                                } else {
+                                    Text("Original principal: calculated estimate from EMI, rate and tenure", color = Muted, fontSize = 12.sp)
+                                }
                                 Text("Outstanding principal: ${Money.format(kotlin.math.round(currentOutstanding).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
                                 Text("EMIs remaining: $remainingMonths", color = Ink)
+                                Text("Total repayment amount: ${Money.format(kotlin.math.round(monthly * total).toLong())}", color = Ink)
                                 Text("Total remaining EMI payments: ${Money.format(kotlin.math.round(remainingPayments).toLong())}", color = Ink)
                                 Text("Estimated remaining interest: ${Money.format(kotlin.math.round(remainingInterest).toLong())}", color = Ink)
                                 Text(if (actualStatementBalance != null) "Outstanding balance uses the imported statement value; verify its date." else "Outstanding balance is an estimate for a fixed-rate reducing-balance loan.", color = Muted, fontSize = 10.sp)
@@ -3277,7 +3495,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         val count = paid.toLong()
                         val monthlyEmi = kotlin.math.round(monthly).toLong()
                         if (lenderName.isBlank() || !validInputs || original <= 0L || balance < 0L || statementOutstanding.isNotBlank() && actualStatementBalance == null) {
-                            error = "Check lender, EMI, interest rate, tenure and EMIs paid. Confirm the statement balance if provided."
+                            error = "Enter lender, original principal, EMI, annual interest rate, tenure and valid EMIs paid. Confirm the statement balance if provided."
                             saved = false
                         } else {
                             onSave(lenderName, original, balance, count, annualRate, monthlyEmi, total.toLong(), borrowerName.trim(), agreementNumber.trim(), "", startDate)
