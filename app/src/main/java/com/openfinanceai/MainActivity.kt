@@ -2793,7 +2793,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                             Text("Compare a bank-statement installment", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                             Text("Or upload your lender's EMI schedule PDF. MoneyLog checks readable text and installment-row patterns only; it cannot authenticate the PDF or confirm that a bank/lender issued it. Verify the document through your lender before relying on it.", color = Muted, fontSize = 11.sp)
                             OutlinedButton(
-                                onClick = { pdfPicker.launch(arrayOf("application/pdf")) },
+                                onClick = { pdfPicker.launch(arrayOf("application/pdf", "*/*")) },
                                 enabled = !pdfBusy,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -2955,11 +2955,15 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long)
                 require(Regex("(?i)\\b(loan|emi|installment|instalment|repayment|outstanding|principal)\\b").containsMatchIn(extracted)) {
                     "This PDF doesn't appear to contain a loan statement or repayment schedule."
                 }
-                fun capture(pattern: String): String? = Regex(pattern, RegexOption.IGNORE_CASE).find(extracted)?.groupValues?.getOrNull(1)
+                val normalizedExtracted = extracted.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ").replace(Regex("\\s+"), " ")
+                fun capture(pattern: String): String? = Regex(pattern, RegexOption.IGNORE_CASE).find(normalizedExtracted)?.groupValues?.getOrNull(1)
                     ?.replace(",", "")?.trim()
                 capture("(?:monthly\\s*)?emi(?:\\s*amount)?\\s*[:\\-]?\\s*(?:₹|rs\\.?\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { emi = it.substringBefore(".") }
                 capture("(?:annual\\s*)?(?:interest\\s*rate|rate\\s*of\\s*interest)\\s*[:\\-]?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*%?")?.let { rate = it }
-                capture("(?:total\\s*)?(?:loan\\s*)?(?:tenure|term)\\s*[:\\-]?\\s*([0-9]+)\\s*(?:months?|mos?\\.?|installments?|instalments?)")?.let { totalPayments = it }
+                // Lender PDFs commonly label tenure as "Tenure (Months): 60", "Tenure: 60 months",
+                // "Loan term - 60", or "Total number of EMIs: 60". Accept both label orders.
+                capture("(?:total\\s*)?(?:loan\\s*)?(?:tenure|term)(?:\\s*(?:in\\s*)?\\(?months?\\)?)?\\s*[:\\-]?\\s*([0-9]{1,3})(?:\\s*(?:months?|mos?\\.?|installments?|instalments?))?")?.let { totalPayments = it }
+                    ?: capture("(?:total\\s*)?(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:count|tenure|months?)?\\s*[:\\-]?\\s*([0-9]{1,3})")?.let { totalPayments = it }
                 capture("(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:paid|completed)\\s*[:\\-]?\\s*([0-9]+)")?.let { paymentsMade = it }
                 capture("(?:current\\s*)?(?:outstanding\\s*(?:principal|balance|amount)?|principal\\s*outstanding)\\s*[:\\-]?\\s*(?:₹|rs\\.?\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { statementOutstanding = it.substringBefore(".") }
                 capture("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { statementDate = it }
@@ -3029,6 +3033,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long)
                         Text("Enter a positive EMI, a non-negative annual rate, total tenure in months, and EMIs paid between zero and total tenure.", color = Muted, fontSize = 11.sp)
                     }
                     if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    if (pdfBusy) Text("Opening PDF and extracting loan details…", color = Green, fontSize = 12.sp)
                     Button(onClick = {
                         val lenderName = lender.trim()
                         val original = kotlin.math.round(originalEstimate).toLong()
