@@ -3129,19 +3129,38 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             return null
                         }
                         val fields = JSONObject()
+                        // Use the document's own section headings rather than assuming that values
+                        // always appear on page 1. PDFTextStripper separates pages with form feeds.
+                        val pdfPages = extracted.split('\\u000C')
+                        val aprPage = pdfPages.firstOrNull { it.contains("Computation of APR", ignoreCase = true) }.orEmpty()
+                        val schedulePage = pdfPages.firstOrNull { it.contains("Illustrative Repayment Schedule", ignoreCase = true) }.orEmpty()
                         val emiLabel = "(?:amount\\s+of\\s+emi\\s+payable|(?:monthly\\s+)?(?:emi\\s*(?:amount|payable)?|equated\\s+monthly\\s+installments?|equated\\s+monthly\\s+instalments?|monthly\\s+installments?|monthly\\s+instalments?))"
-                        val scheduleInstallments = extractedLines.mapNotNull { line ->
+                        val scheduleRowPattern = Regex("^\\s*(\\d{1,3})\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
+                        val scheduleRows = schedulePage.lines().mapNotNull { line ->
+                            scheduleRowPattern.find(line)?.let { match ->
+                                match.groupValues[1].toIntOrNull()?.let { installmentNo ->
+                                    installmentNo to (match.groupValues[5].replace(",", "").toDoubleOrNull())
+                                }
+                            }
+                        }
+                        val scheduleInstallments = (if (scheduleRows.isNotEmpty()) scheduleRows.mapNotNull { it.second } else extractedLines.mapNotNull { line ->
                             Regex("^\\s*\\d{1,3}\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
                                 .find(line)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
-                        }
+                        })
                         val recurringScheduleEmi = scheduleInstallments.groupingBy { it }.eachCount()
                             .maxByOrNull { it.value }?.takeIf { it.value >= 2 }?.key?.toString()
-                        (captureLabeled(emiLabel) ?: captureLabeledNearby(emiLabel) ?: recurringScheduleEmi)
+                        val scheduleTenure = scheduleRows.maxOfOrNull { it.first }?.toString()
+                        // The APR computation table repeats the sanctioned term, EPI and repayment date.
+                        val aprNormalized = aprPage.replace('\\u00A0', ' ').replace(Regex("\\s+"), " ")
+                        val aprTenure = Regex("(?i)Loan Term \\(in years/ months/ days\\).*?\\b([0-9]{1,3})\\s*$").find(aprNormalized)?.groupValues?.get(1)
+                        val aprEmi = Regex("(?i)Amount of each EPI \\(in Rupees\\).*?\\b([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+and nos\\. of EPIs").find(aprNormalized)?.groupValues?.get(1)?.replace(",", "")
+                        val aprStartDate = Regex("(?i)Commencement of repayments?, post sanction.*?\\b([0-9]{4}-[0-9]{2}-[0-9]{2})\\b").find(aprNormalized)?.groupValues?.get(1)
+                        (captureLabeled(emiLabel) ?: captureLabeledNearby(emiLabel) ?: aprEmi ?: recurringScheduleEmi)
                             ?.let { fields.put("emi", it.substringBefore(".")) }
                         val rateLabel = "(?:annual\\s+)?(?:interest\\s+rate(?:\\s+per\\s+annum)?|fixed\\s+rate\\s+of\\s+interest|rate\\s+of\\s+interest|roi)"
                         (captureLabeled(rateLabel) ?: captureLabeledNearby(rateLabel))?.let { fields.put("rate", it) }
                         val tenureLabel = "(?:(?:total|loan)\\s+)*(?:tenure|term)(?:\\s+in\\s+months?)?"
-                        (captureLabeled(tenureLabel) ?: captureLabeledNearby(tenureLabel))?.let { fields.put("totalPayments", it) }
+                        (captureLabeled(tenureLabel) ?: captureLabeledNearby(tenureLabel) ?: aprTenure ?: scheduleTenure)?.let { fields.put("totalPayments", it) }
                             ?: captureLabeled("(?:total\\s+number\\s+of\\s+)?(?:emi|installments?|instalments?)(?:\\s+(?:count|tenure|months?))?")?.let { fields.put("totalPayments", it) }
                         captureLabeled("(?:number\\s+of\\s+)?(?:emi|installments?|instalments?)\\s+(?:paid|completed)")?.let { fields.put("paymentsMade", it) }
                         captureLabeled("(?:(?:current|total)\\s+)?(?:outstanding\\s+(?:principal|balance|amount)?|principal\\s+outstanding)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
@@ -3149,6 +3168,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         (captureLabeled(principalLabel) ?: captureLabeledNearby(principalLabel))?.let { fields.put("principal", it.substringBefore(".")) }
                         captureAnywhere("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
                         (captureAnywhere("(?:repayment|first\\s*(?:emi|installment|instalment)|emi)\\s*(?:start|commencement|starting)?\\s*date\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z]{3,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})")
+                            ?: aprStartDate
                             ?: captureAnywhere("commencement\\s+of\\s+repayments?[^\\n]{0,250}?([0-9]{4}-[0-9]{2}-[0-9]{2})"))?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
                         captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?borrower|borrower(?:\\s+name)?|customer(?:\\s+name)?|applicant(?:\\s+name)?)")?.let { fields.put("borrowerName", it) }
                         captureAnywhere("(?:agreement|contract)\\s*(?:number|no\\.?|#)\\s*[:\\-]?\\s*([A-Z0-9/-]{4,40})")?.let { fields.put("agreementNumber", it) }
