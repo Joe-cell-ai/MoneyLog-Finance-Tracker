@@ -100,6 +100,10 @@ private fun applyAppearance(theme: String, accent: String, layout: String, fontS
     Muted = if (AppDarkTheme) Color(0xFFB0BDB5) else Color(0xFF74788D)
 }
 private val Money = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
+private fun reportChartMoney(amount: Number): String = NumberFormat.getCurrencyInstance(Locale("en", "IN")).apply {
+    minimumFractionDigits = 0
+    maximumFractionDigits = 0
+}.format(amount)
 private val CategoryPalette = listOf(Color(0xFF356AE6), Color(0xFF159765), Color(0xFF8953D8), Color(0xFFD97732), Color(0xFFDB4765), Color(0xFF148D91), Color(0xFFB18A16), Color(0xFF477DAD), Color(0xFFAF5AB5), Color(0xFF567A35), Color(0xFFCF5A36), Color(0xFF5470C6))
 private fun categoryColor(category: String): Color = when (category.trim().lowercase(Locale.ROOT)) {
     "salary", "payroll", "wages" -> Color(0xFF356AE6)
@@ -983,11 +987,11 @@ private fun ReportsScreen(
         }
         if (reportView == "Overview" || reportView == "Total") {
             item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricCard("Income", Money.format(income), Modifier.weight(1f), IncomeTint, IncomeGreen)
-                MetricCard("Expenses", Money.format(expenses), Modifier.weight(1f), ExpenseTint, ExpenseRed)
+                MetricCard("Income", reportChartMoney(income), Modifier.weight(1f), IncomeTint, IncomeGreen)
+                MetricCard("Expenses", reportChartMoney(expenses), Modifier.weight(1f), ExpenseTint, ExpenseRed)
             } }
             item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricCard("Net savings", Money.format(income - expenses), Modifier.weight(1f), LavenderTint, Purple)
+                MetricCard("Net savings", reportChartMoney(income - expenses), Modifier.weight(1f), LavenderTint, Purple)
                 MetricCard("Transactions", transactions.size.toString(), Modifier.weight(1f), SkyTint, Blue)
             } }
         }
@@ -1007,7 +1011,7 @@ private fun ReportsScreen(
                                 Text(top.first, color = Ink, fontWeight = FontWeight.Bold)
                                 Text(if (totalSpend > 0L) "${top.second * 100 / totalSpend}% of expenses" else "0%", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                             }
-                            Text(Money.format(top.second), color = Ink, fontWeight = FontWeight.Bold)
+                            Text(reportChartMoney(top.second), color = Ink, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1015,11 +1019,11 @@ private fun ReportsScreen(
             item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Income vs expenses", fontWeight = FontWeight.Bold, color = Ink)
-                    Text("Income · " + Money.format(income), color = IncomeGreen)
+                    Text("Income · " + reportChartMoney(income), color = IncomeGreen)
                     LinearProgressIndicator(progress = { if (income + expenses > 0L) income.toFloat() / (income + expenses) else 0f }, modifier = Modifier.fillMaxWidth(), color = IncomeGreen)
-                    Text("Expenses · " + Money.format(expenses), color = ExpenseRed)
+                    Text("Expenses · " + reportChartMoney(expenses), color = ExpenseRed)
                     LinearProgressIndicator(progress = { if (income + expenses > 0L) expenses.toFloat() / (income + expenses) else 0f }, modifier = Modifier.fillMaxWidth(), color = ExpenseRed)
-                    Text("Net cash flow · " + Money.format(income - expenses), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
+                    Text("Net cash flow · " + reportChartMoney(income - expenses), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
                 }
             } }
         }
@@ -1039,8 +1043,8 @@ private fun ReportsScreen(
                                     Text("${daily.size} transaction(s)", color = Muted, fontSize = 11.sp)
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text("+ ${Money.format(daily.filter { it.income }.sumOf { it.amount })}", color = IncomeGreen, fontSize = 11.sp)
-                                    Text("− ${Money.format(daily.filterNot { it.income }.sumOf { it.amount })}", color = ExpenseRed, fontSize = 11.sp)
+                                    Text("+ ${reportChartMoney(daily.filter { it.income }.sumOf { it.amount })}", color = IncomeGreen, fontSize = 11.sp)
+                                    Text("− ${reportChartMoney(daily.filterNot { it.income }.sumOf { it.amount })}", color = ExpenseRed, fontSize = 11.sp)
                                 }
                             }
                         }
@@ -1052,9 +1056,9 @@ private fun ReportsScreen(
         if (reportView == "By category") {
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ReportMetricCard("Income", Money.format(income), Icons.Default.AccountBalanceWallet, Modifier.weight(1f), Color(0xFFE3F9ED), Color(0xFF00A86B))
-                    ReportMetricCard("Expense", Money.format(expenses), Icons.Default.CreditCard, Modifier.weight(1f), Color(0xFFFFEBEB), Color(0xFFFD3C65))
-                    ReportMetricCard("Savings", Money.format(income - expenses), Icons.Default.Savings, Modifier.weight(1f), Color(0xFFE6F0FF), Color(0xFF0066FF))
+                    ReportMetricCard("Income", reportChartMoney(income), Icons.Default.AccountBalanceWallet, Modifier.weight(1f), Color(0xFFE3F9ED), Color(0xFF00A86B))
+                    ReportMetricCard("Expense", reportChartMoney(expenses), Icons.Default.CreditCard, Modifier.weight(1f), Color(0xFFFFEBEB), Color(0xFFFD3C65))
+                    ReportMetricCard("Savings", reportChartMoney(income - expenses), Icons.Default.Savings, Modifier.weight(1f), Color(0xFFE6F0FF), Color(0xFF0066FF))
                 }
             }
             item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
@@ -1074,7 +1078,7 @@ private fun ReportsScreen(
                             }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("Total Expense", color = Color(0xFF8094B0), fontSize = 11.sp)
-                                Text(Money.format(totalSpend), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                                Text(reportChartMoney(totalSpend), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             }
                         }
                         Column(Modifier.weight(1.14f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1149,7 +1153,7 @@ private fun ReportsScreen(
                                 Text(category, color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, softWrap = false)
                                 Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}% of expenses" else "0% of expenses", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                             }
-                            Text(Money.format(amount).substringBeforeLast(".").takeIf { Money.format(amount).contains(".") } ?: Money.format(amount), color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, softWrap = false)
+                            Text(reportChartMoney(amount).substringBeforeLast(".").takeIf { reportChartMoney(amount).contains(".") } ?: reportChartMoney(amount), color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, softWrap = false)
                             Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                             Icon(Icons.Default.ChevronRight, contentDescription = "Open category", tint = Muted, modifier = Modifier.size(16.dp))
                         }
@@ -1168,7 +1172,7 @@ private fun ReportsScreen(
                             Icon(Icons.Default.Label, null, tint = categoryColor(tag))
                             Spacer(Modifier.width(8.dp))
                             Text("#$tag", Modifier.weight(1f), color = Ink)
-                            Text(Money.format(amount), color = Ink, fontWeight = FontWeight.Bold)
+                            Text(reportChartMoney(amount), color = Ink, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1181,7 +1185,7 @@ private fun ReportsScreen(
                     listOf(Triple("Total income", income, IncomeGreen), Triple("Total expenses", expenses, ExpenseRed), Triple("Net savings", income - expenses, Purple)).forEach { row ->
                         Row(Modifier.fillMaxWidth().background(categoryTint(row.first), RoundedCornerShape(12.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(row.first, Modifier.weight(1f), color = Ink)
-                            Text(Money.format(row.second), color = row.third, fontWeight = FontWeight.Bold)
+                            Text(reportChartMoney(row.second), color = row.third, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1211,7 +1215,7 @@ private fun ReportsScreen(
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(category, color = Ink, fontWeight = FontWeight.Bold, fontSize = 19.sp)
-                            Text("${Money.format(categoryTotal)}", color = Ink, fontWeight = FontWeight.Bold, fontSize = 23.sp)
+                            Text("${reportChartMoney(categoryTotal)}", color = Ink, fontWeight = FontWeight.Bold, fontSize = 23.sp)
                             Text("${categoryShare}% of total expenses", color = Muted, fontSize = 12.sp)
                         }
                     }
@@ -1225,7 +1229,7 @@ private fun ReportsScreen(
                         Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F6FC)), shape = RoundedCornerShape(12.dp)) {
                             Column(Modifier.fillMaxWidth().padding(10.dp)) {
                                 Text("Avg. per transaction", color = Muted, fontSize = 11.sp)
-                                Text(Money.format(averageSpend), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                                Text(reportChartMoney(averageSpend), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             }
                         }
                     }
@@ -1265,7 +1269,7 @@ private fun ReportsScreen(
                                         Text("Spending insights", color = Ink, fontWeight = FontWeight.Bold)
                                     }
                                     Text("You spent ${categoryShare}% of your recorded expenses in $category.", color = Ink, fontSize = 12.sp)
-                                    Text("${categoryTransactions.size} transactions · average ${Money.format(averageSpend)} each", color = Muted, fontSize = 12.sp)
+                                    Text("${categoryTransactions.size} transactions · average ${reportChartMoney(averageSpend)} each", color = Muted, fontSize = 12.sp)
                                 }
                             }
                             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(14.dp)) {
@@ -1278,7 +1282,7 @@ private fun ReportsScreen(
                                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                                     Text(place.first, Modifier.weight(1f), color = Ink, fontSize = 12.sp, maxLines = 1)
-                                                    Text(Money.format(place.second), color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                                    Text(reportChartMoney(place.second), color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                                                 }
                                                 Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFFEAF0F6))) {
                                                     Box(Modifier.fillMaxWidth(if (categoryTotal > 0L) place.second.toFloat() / categoryTotal else 0f).fillMaxHeight().clip(RoundedCornerShape(6.dp)).background(categoryColor(category)))
@@ -1300,7 +1304,7 @@ private fun ReportsScreen(
                                         color = Ink, fontSize = 12.sp
                                     )
                                     Text(
-                                        if (averageSpend > 0L) "Your average transaction is ${Money.format(averageSpend)}. Compare similar purchases and look for lower-cost alternatives."
+                                        if (averageSpend > 0L) "Your average transaction is ${reportChartMoney(averageSpend)}. Compare similar purchases and look for lower-cost alternatives."
                                         else "Once transactions are recorded, MoneyLog can suggest practical ways to save.",
                                         color = Ink, fontSize = 12.sp
                                     )
@@ -1485,7 +1489,7 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
                         Box(Modifier.clip(RoundedCornerShape(50)).background(statusTint).padding(horizontal = 10.dp, vertical = 7.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Icon(if (isUpcoming) Icons.Default.Schedule else Icons.Default.CheckCircle, null, tint = statusColor, modifier = Modifier.size(14.dp))
-                                Text(if (isUpcoming) "Upcoming" else "On Track", color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("Upcoming", color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -2921,7 +2925,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                         }
                         Box(Modifier.weight(.85f), contentAlignment = Alignment.CenterEnd) {
                             Box(Modifier.clip(RoundedCornerShape(50)).background(SkyTint).padding(horizontal = 8.dp, vertical = 6.dp)) {
-                                Text("PDF", color = Blue, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                Text("Upcoming", color = upcomingAmber, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                             }
                         }
                     }
@@ -3092,14 +3096,10 @@ internal fun captureLoanPdfGlobalNumericValue(text: String, labelPattern: String
 
 internal fun captureLoanPdfGlobalTextValue(text: String, labelPattern: String): String? {
     val normalized = text.replace('\u00A0', ' ').replace(Regex("\\s+"), " ").trim()
+    val labelMatch = Regex("""(?:^|\b)(?:$labelPattern)\b(?:\s*\([^)]*\))?\s*[:\-]?""", RegexOption.IGNORE_CASE)
+        .find(normalized) ?: return null
+    val valueCandidate = normalized.substring(labelMatch.range.last + 1).trim().trimStart(':', '-', ' ')
     val nextLabel = """(?:loan\s+amount|principal|interest\s+rate|rate\s+of\s+interest|\broi\b|\bemi\b|installments?|instalments?|tenure|tenor|outstanding|balance|agreement|contract|borrower|applicant|customer|lender|bank|repayment|start\s+date)"""
-    val regex = Regex(
-        """(?:^|\b)(?:$labelPattern)\b\s*[:\-]?\s*(?:(?!$nextLabel).){1,70}?""",
-        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
-    )
-    val match = regex.find(normalized) ?: return null
-    val label = Regex(labelPattern, RegexOption.IGNORE_CASE).find(match.value)?.value ?: return null
-    val valueCandidate = match.value.substringAfter(label).trim().trimStart(':', '-', ' ')
     val nextLabelMatch = Regex("""(?i)\b(?:$nextLabel)\b""").find(valueCandidate)
     val value = valueCandidate.substring(0, nextLabelMatch?.range?.first ?: valueCandidate.length)
         .trim().trimEnd(',', ';', ':', '-')
@@ -3419,7 +3419,13 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     val validInputs = monthly > 0.0 && annualRate >= 0.0 && total > 0 && paid in 0..total
     // Never invent the original principal from EMI/rate/tenure: fees, APR, step-up EMIs,
     // and lender-specific schedules can make an amortization estimate materially wrong.
-    val originalPrincipal = importedPrincipal.toDoubleOrNull()?.takeIf { it > 0.0 } ?: 0.0
+    val tenureRate = annualRate / 1200.0
+    val calculatedPrincipal = when {
+        monthly <= 0.0 || annualRate < 0.0 || total <= 0 -> 0.0
+        tenureRate == 0.0 -> monthly * total
+        else -> monthly * (1.0 - Math.pow(1.0 + tenureRate, -total.toDouble())) / tenureRate
+    }
+    val originalPrincipal = importedPrincipal.toDoubleOrNull()?.takeIf { it > 0.0 } ?: calculatedPrincipal
     val remainingMonths = (total - paid).coerceAtLeast(0)
     val calculatedOutstanding = if (validInputs) loanOutstandingEstimate(monthly, annualRate, remainingMonths) else 0.0
     val actualStatementBalance = statementOutstanding.toDoubleOrNull()
@@ -3465,13 +3471,15 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         Card(colors = CardDefaults.cardColors(containerColor = Mint), shape = RoundedCornerShape(16.dp)) {
                             Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Text("Estimated loan summary", color = Green, fontWeight = FontWeight.Bold)
+                                Text("Principal is estimated from a fixed-EMI reducing-balance formula when no principal is entered; verify it against the loan document.", color = Muted, fontSize = 10.sp)
                                 if (originalPrincipal > 0.0) {
                                     Text("Original principal: ${Money.format(kotlin.math.round(originalPrincipal).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
                                 } else {
-                                    Text("Original principal: enter the value from your loan document", color = Muted, fontSize = 12.sp)
+                                    Text("Original principal: calculated estimate from EMI, rate and tenure", color = Muted, fontSize = 12.sp)
                                 }
                                 Text("Outstanding principal: ${Money.format(kotlin.math.round(currentOutstanding).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
                                 Text("EMIs remaining: $remainingMonths", color = Ink)
+                                Text("Total repayment amount: ${Money.format(kotlin.math.round(monthly * total).toLong())}", color = Ink)
                                 Text("Total remaining EMI payments: ${Money.format(kotlin.math.round(remainingPayments).toLong())}", color = Ink)
                                 Text("Estimated remaining interest: ${Money.format(kotlin.math.round(remainingInterest).toLong())}", color = Ink)
                                 Text(if (actualStatementBalance != null) "Outstanding balance uses the imported statement value; verify its date." else "Outstanding balance is an estimate for a fixed-rate reducing-balance loan.", color = Muted, fontSize = 10.sp)
