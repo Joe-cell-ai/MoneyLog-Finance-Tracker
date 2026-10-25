@@ -455,7 +455,7 @@ private fun FinanceApp() {
                     "About" -> AboutSettingsScreen()
                     "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: EmptyLoansScreen { tab = "Add loan" }
                     "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi, totalPayments, borrowerName, agreementNumber, ignoredLoanNumber, startDate ->
-                        val newLoan = Loan(lender, balance, emi, startDate.ifBlank { "Set due date" }, rate, originalPrincipal, paymentsMade, totalPayments, borrowerName, agreementNumber, loanNumber, startDate)
+                        val newLoan = Loan(lender, balance, emi, startDate.ifBlank { "Set due date" }, rate, originalPrincipal, paymentsMade, totalPayments, borrowerName, agreementNumber, "", startDate)
                         loans = listOf(newLoan) + loans
                         saveLoans(context, loans)
                         tab = "Loans"
