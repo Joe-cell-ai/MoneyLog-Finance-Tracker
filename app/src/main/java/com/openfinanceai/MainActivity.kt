@@ -1484,12 +1484,10 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
                             Text(Money.format(loan.emi), color = navy, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                             Text("/month", color = slate, fontSize = 11.sp)
                         }
-                        val statusColor = if (isUpcoming) orange else green
-                        val statusTint = if (isUpcoming) orangeTint else greenTint
-                        Box(Modifier.clip(RoundedCornerShape(50)).background(statusTint).padding(horizontal = 10.dp, vertical = 7.dp)) {
+                        Box(Modifier.clip(RoundedCornerShape(50)).background(orangeTint).padding(horizontal = 10.dp, vertical = 7.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Icon(if (isUpcoming) Icons.Default.Schedule else Icons.Default.CheckCircle, null, tint = statusColor, modifier = Modifier.size(14.dp))
-                                Text("Upcoming", color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Icon(Icons.Default.Schedule, null, tint = orange, modifier = Modifier.size(14.dp))
+                                Text("Upcoming", color = orange, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
