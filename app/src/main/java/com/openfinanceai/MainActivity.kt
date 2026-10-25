@@ -3007,7 +3007,7 @@ private fun LoanDateField(label: String, date: String, onDateChange: (String) ->
 }
 
 internal fun cleanLoanPdfLineFromIndices(line: String): String {
-    val fieldLabels = "(?:loan\s+amount|amount\s+of\s+loan|principal\s+amount|loan\s+principal|amount\s+financed|sanctioned\s+amount|amount\s+sanctioned|approved\s+amount|credit\s+facility\s+amount|annual\s+interest\s+rate|interest\s+rate|rate\s+of\s+interest|fixed\s+rate|roi|emi|equated\s+monthly|monthly\s+installments?|monthly\s+instalments?|installment\s+amount|instalment\s+amount|repayment|total\s+tenure|loan\s+tenure|tenure|loan\s+term|loan\s+period|loan\s+duration|tenor|agreement\s+number|contract\s+number|borrower|applicant|customer|lender|bank|financial\s+institution)"
+    val fieldLabels = """(?:loan\s+amount|amount\s+of\s+loan|principal\s+amount|loan\s+principal|amount\s+financed|sanctioned\s+amount|amount\s+sanctioned|approved\s+amount|credit\s+facility\s+amount|annual\s+interest\s+rate|interest\s+rate|rate\s+of\s+interest|fixed\s+rate|roi|emi|equated\s+monthly|monthly\s+installments?|monthly\s+instalments?|installment\s+amount|instalment\s+amount|repayment|total\s+tenure|loan\s+tenure|tenure|loan\s+term|loan\s+period|loan\s+duration|tenor|agreement\s+number|contract\s+number|borrower|applicant|customer|lender|bank|financial\s+institution)"""
     return line.replaceFirst(
         Regex("^\\s*\\d{1,3}(?:\\.[a-z0-9])?\\s+(?=$fieldLabels)", RegexOption.IGNORE_CASE),
         ""
