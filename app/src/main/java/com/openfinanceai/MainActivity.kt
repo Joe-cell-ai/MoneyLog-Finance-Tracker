@@ -2605,7 +2605,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
     val upcomingAmber = Color(0xFFF59E0B)
     val upcomingTint = Color(0xFFFFF7ED)
     val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
-    val monthsRemaining = if (loan.emi > 0L) kotlin.math.ceil(loan.balance.toDouble() / loan.emi.toDouble()).toInt().coerceAtLeast(0) else 0
+    val monthsRemaining = if (loan.totalPayments > 0L) (loan.totalPayments - loan.paymentsMade).coerceAtLeast(0L).toInt() else if (loan.emi > 0L) kotlin.math.ceil(loan.balance.toDouble() / loan.emi.toDouble()).toInt().coerceAtLeast(0) else 0
     var totalInterestEstimate = 0L
     var totalRepaymentEstimate = 0L
     var estimateValid = loan.balance > 0L && loan.emi > 0L && !paymentTooLow
@@ -2912,7 +2912,6 @@ private fun EmptyLoansScreen(onAddLoan: () -> Unit) {
     }
 }
 
-@Composable
 private fun loanPresentValue(emi: Double, annualRate: Double, months: Int): Double {
     if (emi <= 0.0 || months <= 0 || annualRate < 0.0) return 0.0
     val monthlyRate = annualRate / 1200.0
