@@ -3084,8 +3084,8 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     var lender by remember { mutableStateOf("") }
     var borrowerName by remember { mutableStateOf("") }
     var agreementNumber by remember { mutableStateOf("") }
-    var startDate by remember { mutableStateOf(java.time.LocalDate.now().plusMonths(1).withDayOfMonth(10).toString()) }
-    var paymentsMade by remember { mutableStateOf("0") }
+    var startDate by remember { mutableStateOf("") }
+    var paymentsMade by remember { mutableStateOf("") }
     var totalPayments by remember { mutableStateOf("") }
     var rate by remember { mutableStateOf("") }
     var emi by remember { mutableStateOf("") }
@@ -3343,7 +3343,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     val monthly = emi.toDoubleOrNull() ?: 0.0
     val annualRate = rate.toDoubleOrNull() ?: -1.0
     val total = totalPayments.toIntOrNull() ?: 0
-    val paid = paymentsMade.toIntOrNull() ?: 0
+    val paid = paymentsMade.toIntOrNull() ?: -1
     val validInputs = monthly > 0.0 && annualRate >= 0.0 && total > 0 && paid in 0..total
     // Never invent the original principal from EMI/rate/tenure: fees, APR, step-up EMIs,
     // and lender-specific schedules can make an amortization estimate materially wrong.
@@ -3386,7 +3386,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     OutlinedTextField(emi, { emi = it.filter { c -> c.isDigit() || c == '.' }; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(totalPayments, { totalPayments = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Total tenure (months)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                    OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid (enter 0 if none)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(statementOutstanding, { statementOutstanding = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Statement outstanding principal (optional, ₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     if (statementDate.isNotBlank()) Text("Statement date: $statementDate", color = Muted, fontSize = 11.sp)
                     if (validInputs) {
