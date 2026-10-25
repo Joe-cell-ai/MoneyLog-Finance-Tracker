@@ -2587,7 +2587,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
     val firstDueDate = nextLoanDueDate(loan.due)
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
     val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
-    val schedule = (0 until 6).map { index ->
+    val scheduleMonths = if (loan.totalPayments in 1L..600L) (loan.totalPayments - loan.paymentsMade).coerceIn(0L, 600L).toInt() else 60
+    val schedule = (0 until scheduleMonths).map { index ->
         val interest = scheduleBalance * monthlyRate
         val principalPart = (loan.emi.toDouble() - interest).coerceAtLeast(0.0).coerceAtMost(scheduleBalance)
         val closingBalance = (scheduleBalance - principalPart).coerceAtLeast(0.0)
