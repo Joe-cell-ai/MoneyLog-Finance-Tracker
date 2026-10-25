@@ -28,13 +28,13 @@ class EmiReminderReceiver : BroadcastReceiver() {
         when (action) {
             ACTION_PAID -> {
                 prefs.edit().putBoolean(paidKey(id), true).apply()
-                cancelReminder(context, followupRequestCode(id))
+                cancelReminder(context, id)
                 (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(id)
                 showNotification(context, id, lender, amount, "Payment marked as paid", "Your EMI payment of ₹$amount for $lender is marked as paid.", showActions = false)
             }
             ACTION_YET_TO_PAY -> {
                 prefs.edit().putBoolean(paidKey(id), false).apply()
-                scheduleAt(context, ACTION_CONFIRM, lender, amount, id, day, nextTime(21, 0))
+                scheduleAt(context, ACTION_CONFIRM, lender, amount, id, day, endOfDayConfirmation())
             }
             ACTION_OVERDUE -> {
                 prefs.edit().putBoolean(paidKey(id), false).apply()
@@ -177,11 +177,18 @@ class EmiReminderReceiver : BroadcastReceiver() {
                 set(Calendar.MINUTE, minute)
                 set(Calendar.SECOND, 0)
                 set(Calendar.MILLISECOND, 0)
-                if (timeInMillis <= System.currentTimeMillis()) {
-                    if (tomorrowIfPassed) add(Calendar.DAY_OF_YEAR, 1)
-                    else add(Calendar.DAY_OF_YEAR, 1)
-                }
+                if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
             }
+
+        private fun endOfDayConfirmation(): Calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 23)
+            set(Calendar.MINUTE, 55)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            // If the user taps Yet to Pay after the end-of-day reminder window,
+            // repeat shortly rather than silently skipping to the following day.
+            if (timeInMillis <= System.currentTimeMillis()) add(Calendar.MINUTE, 5)
+        }
 
         fun cancelMonthly(context: Context, lender: String) {
             cancelReminder(context, 3000 + (lender.lowercase(java.util.Locale.ROOT).hashCode() and 0x3fff))
