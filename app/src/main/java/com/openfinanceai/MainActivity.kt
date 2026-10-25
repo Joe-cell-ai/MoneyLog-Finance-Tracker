@@ -2744,7 +2744,7 @@ private fun AppearanceScreen() {
 private fun parseScheduleDate(raw: String): java.time.LocalDate? {
     val value = raw.trim()
     val patterns = listOf(
-        "d MMM yyyy", "dd MMM yyyy", "d-MMM-yyyy", "dd-MMM-yyyy",
+        "d MMM yyyy", "dd MMM yyyy", "d-MMM-yyyy", "dd-MMM-yyyy", "d-MMM-yy", "dd-MMM-yy",
         "d/MM/yyyy", "dd/MM/yyyy", "d-MM-yyyy", "dd-MM-yyyy",
         "yyyy-MM-dd", "d MMMM yyyy", "dd MMMM yyyy", "MMM d, yyyy"
     )
