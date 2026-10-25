@@ -122,6 +122,7 @@ private data class Loan(val lender: String, val balance: Long, val emi: Long, va
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = android.graphics.Color.BLACK
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9001)
         }
@@ -415,7 +416,7 @@ private fun FinanceApp() {
                 }
             }
         ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding).padding(top = 20.dp)) {
+            Box(Modifier.fillMaxSize().padding(padding).padding(top = 20.dp).offset { androidx.compose.ui.unit.IntOffset(0, -50) }) {
                 when (tab) {
                     "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = "Activity" }, { isIncome -> showAddAsIncome = isIncome; showAdd = true }, { tab = it }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
