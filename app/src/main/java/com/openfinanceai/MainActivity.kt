@@ -1331,11 +1331,40 @@ private fun ReportsScreen(
         )
     }
     if (showNotifications) {
+        val notificationAccent = Color(0xFF5948F5)
         AlertDialog(
             onDismissRequest = { showNotifications = false },
-            title = { Text("Notifications") },
-            text = { Text("You're all caught up. New reminders and alerts will appear here when available.") },
-            confirmButton = { TextButton(onClick = { showNotifications = false }) { Text("OK") } }
+            shape = RoundedCornerShape(30.dp),
+            containerColor = Color(0xFFFCFBFF),
+            title = {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.size(100.dp).clip(CircleShape).background(Color(0xFFECEAFF)), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(76.dp).clip(CircleShape).background(Color(0xFFDCD8FF)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Notifications, contentDescription = null, tint = notificationAccent, modifier = Modifier.size(42.dp))
+                        }
+                    }
+                    Text("Notifications", color = Color(0xFF151B3D), fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                }
+            },
+            text = {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    Text("You're all caught up. New reminders and alerts will appear here when available.", color = Color(0xFF66718F), fontSize = 14.sp, lineHeight = 21.sp, textAlign = TextAlign.Center)
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF0FF)), shape = RoundedCornerShape(20.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Box(Modifier.size(46.dp).clip(CircleShape).background(notificationAccent), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+                            }
+                            Text("All clear!", color = Color(0xFF20264A), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text("No new notifications at the moment.", color = Color(0xFF66718F), fontSize = 12.sp, textAlign = TextAlign.Center)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showNotifications = false }, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = notificationAccent, contentColor = Color.White)) {
+                    Text("OK", fontWeight = FontWeight.SemiBold)
+                }
+            }
         )
     }
 }
@@ -3472,6 +3501,7 @@ private fun TransactionDetailRow(icon: ImageVector, label: String, value: String
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Unit, onSave: (Transaction) -> Unit) {
+    val accent = Color(0xFF5948F5)
     var title by remember(transaction) { mutableStateOf(transaction.title) }
     var amount by remember(transaction) { mutableStateOf(transaction.amount.toString()) }
     var category by remember(transaction) { mutableStateOf(transaction.category) }
@@ -3482,46 +3512,70 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
     var error by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit transaction") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(selected = !isIncome, onClick = { isIncome = false }, label = { Text("Expense") })
-                    FilterChip(selected = isIncome, onClick = { isIncome = true }, label = { Text("Income") })
+        shape = RoundedCornerShape(30.dp),
+        containerColor = Color(0xFFFCFBFF),
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Box(Modifier.width(54.dp).height(5.dp).clip(CircleShape).background(Color(0xFFD8D7E8)))
                 }
-                OutlinedTextField(title, { title = it }, label = { Text("Description") }, singleLine = true)
-                OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text("Amount (₹)") }, singleLine = true)
-                OutlinedTextField(category, { category = it }, label = { Text("Category") }, singleLine = true)
-                OutlinedTextField(tag, { tag = it.removePrefix("#") }, label = { Text("Tag (optional)") }, singleLine = true)
-                OutlinedTextField(
-                    value = date, onValueChange = {}, readOnly = true,
-                    label = { Text("Transaction date") },
-                    trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date") } },
-                    modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }, singleLine = true, shape = RoundedCornerShape(14.dp)
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.size(54.dp).clip(RoundedCornerShape(18.dp)).background(accent), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = Color.White, modifier = Modifier.size(25.dp))
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("Edit Transaction", color = Color(0xFF151B3D), fontWeight = FontWeight.Bold, fontSize = 21.sp)
+                        Text("Update the details of your transaction", color = Color(0xFF66718F), fontSize = 12.sp)
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFFF0EFF8))) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF47516E))
+                    }
+                }
+            }
+        },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 540.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(11.dp)
+            ) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Color(0xFFF0EFF8)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.weight(1f).clip(RoundedCornerShape(24.dp)).background(if (!isIncome) accent else Color.Transparent).clickable { isIncome = false }.padding(vertical = 11.dp), contentAlignment = Alignment.Center) {
+                        Text("Expense", color = if (!isIncome) Color.White else Color(0xFF59627F), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                    Box(Modifier.weight(1f).clip(RoundedCornerShape(24.dp)).background(if (isIncome) accent else Color.Transparent).clickable { isIncome = true }.padding(vertical = 11.dp), contentAlignment = Alignment.Center) {
+                        Text("Income", color = if (isIncome) Color.White else Color(0xFF59627F), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                }
+                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Description") }, leadingIcon = { Icon(Icons.Default.ReceiptLong, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
+                OutlinedTextField(value = amount, onValueChange = { amount = it.filter(Char::isDigit) }, label = { Text("Amount (₹)") }, leadingIcon = { Icon(Icons.Default.CurrencyRupee, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
+                OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, leadingIcon = { Icon(Icons.Default.LocalOffer, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
+                OutlinedTextField(value = tag, onValueChange = { tag = it.removePrefix("#") }, label = { Text("Tag (optional)") }, leadingIcon = { Icon(Icons.Default.Tag, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
+                OutlinedTextField(value = date, onValueChange = {}, readOnly = true, label = { Text("Transaction date") }, leadingIcon = { Icon(Icons.Default.CalendarMonth, null, tint = accent) }, trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date", tint = accent) } }, modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }, singleLine = true, shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent))
                 if (showDatePicker) {
                     val initialMillis = runCatching { transactionDateOrNull(transaction)?.atStartOfDay(java.time.ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: System.currentTimeMillis() }.getOrDefault(System.currentTimeMillis())
                     val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-                    DatePickerDialog(
-                        onDismissRequest = { showDatePicker = false },
-                        confirmButton = { TextButton(onClick = {
+                    DatePickerDialog(onDismissRequest = { showDatePicker = false }, confirmButton = {
+                        TextButton(onClick = {
                             pickerState.selectedDateMillis?.let { millis -> date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString() }
                             showDatePicker = false
-                        }) { Text("Select") } },
-                        dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
-                    ) { DatePicker(state = pickerState) }
+                        }) { Text("Select", color = accent) }
+                    }, dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel", color = accent) } }) { DatePicker(state = pickerState) }
                 }
-                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
         },
         confirmButton = {
-            TextButton(onClick = {
+            Button(onClick = {
                 val parsed = amount.toLongOrNull()
                 if (title.isBlank() || parsed == null || parsed <= 0L) error = "Enter a description and valid amount."
                 else onSave(transaction.copy(title = title.trim(), amount = parsed, category = if (isIncome) "Income" else category.ifBlank { "Other" }, date = date.ifBlank { "Date not set" }, income = isIncome, tag = tag.trim()))
-            }) { Text("Save changes") }
+            }, shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White), modifier = Modifier.height(50.dp)) {
+                Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(7.dp)); Text("Save changes", fontWeight = FontWeight.SemiBold)
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(16.dp), modifier = Modifier.height(50.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF252C50))) { Text("Cancel", fontWeight = FontWeight.SemiBold) }
+        }
     )
 }
 
