@@ -1052,7 +1052,7 @@ private fun ReportsScreen(
                     if (categories.isEmpty()) Text("No expenses recorded this month.", color = Muted)
                     else {
                         val top = categories.first()
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { selectedCategory = top.first }.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(42.dp).background(categoryTint(top.first), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
                                 Icon(Icons.Default.TrendingUp, null, tint = categoryColor(top.first))
                             }
@@ -1134,7 +1134,7 @@ private fun ReportsScreen(
                         Column(Modifier.weight(1.14f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             if (categories.isEmpty()) Text("No category totals yet.", color = Muted, fontSize = 12.sp)
                             categories.take(7).forEach { (category, amount) ->
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { selectedCategory = category }.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                     Box(Modifier.size(8.dp).background(categoryColor(category), CircleShape))
                                     Text(category, modifier = Modifier.weight(1f), color = Color(0xFF173D70), fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                                     Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
