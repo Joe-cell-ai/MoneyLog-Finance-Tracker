@@ -3006,6 +3006,21 @@ private fun LoanDateField(label: String, date: String, onDateChange: (String) ->
     }
 }
 
+internal fun cleanLoanPdfLineFromIndices(line: String): String {
+    val fieldLabels = "(?:loan\\s+amount|amount\\s+of\\s+loan|principal\\s+amount|loan\\s+principal|amount\\s+financed|sanctioned\\s+amount|amount\\s+sanctioned|approved\\s+amount|credit\\s+facility\\s+amount|annual\\s+interest\\s+rate|interest\\s+rate|rate\\s+of\\s+interest|fixed\\s+rate|roi|emi|equated\\s+monthly|monthly\\s+installments?|monthly\\s+instalments?|installment\\s+amount|instalment\\s+amount|repayment|total\\s+tenure|loan\\s+tenure|tenure|loan\\s+term|loan\\s+period|loan\\s+duration|tenor|agreement\\s+number|contract\\s+number|borrower|applicant|customer|lender|bank|financial\\s+institution)"
+    return line.replaceFirst(
+        Regex("^\\\\s*\\\\d{1,3}(?:\\\\.[a-z0-9])?\\\\s+(?=$fieldLabels)", RegexOption.IGNORE_CASE),
+        ""
+    ).trim()
+}
+
+internal fun loanPdfValueMatchesRowIndex(rawLine: String, value: String): Boolean {
+    val prefix = Regex("^\\\\s*(\\\\d{1,3})(?:\\\\.[a-z0-9])?\\\\s+(?=[A-Za-z])").find(rawLine) ?: return false
+    val rowIndex = prefix.groupValues[1].toLongOrNull() ?: return false
+    val numericValue = value.replace(",", "").toDoubleOrNull() ?: return false
+    return numericValue == rowIndex.toDouble()
+}
+
 @Composable
 private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long, String, String, String, String) -> Unit) {
     val context = LocalContext.current
@@ -3084,41 +3099,52 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             Regex(pattern, RegexOption.IGNORE_CASE).find(normalizedSearchText)?.groupValues?.getOrNull(1)
                                 ?.replace(",", "")?.trim()
                         fun captureLabeled(labelPattern: String): String? {
-                            val number = "([0-9][0-9,]*(?:\\.[0-9]{1,2})?)"
-                            val suffix = "(?:%|months?|mos?\\.?|per\\s+month|/month)?"
-                            val inline = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*(?:₹|rs\\.?|inr)?\\s*$number\\s*$suffix(?:\\s+(?:p\\.?a\\.?|per\\s+annum))?\\s*$", RegexOption.IGNORE_CASE)
-                            val labelOnly = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$", RegexOption.IGNORE_CASE)
-                            val valueOnly = Regex("^\\s*(?:₹|rs\\.?|inr)?\\s*$number\\s*$suffix\\s*$", RegexOption.IGNORE_CASE)
+                            val number = "([0-9][0-9,]*(?:\\\\.[0-9]{1,2})?)"
+                            val suffix = "(?:%|months?|mos?\\\\.?|per\\\\s+month|/month)?"
+                            val inline = Regex("^\\\\s*(?:$labelPattern)\\\\s*(?:\\\\([^)]*\\\\))?\\\\s*[:\\\\-]?\\\\s*(?:₹|rs\\\\.?|inr)?\\\\s*$number\\\\s*$suffix(?:\\\\s+(?:p\\\\.?a\\\\.?|per\\\\s+annum))?\\\\s*$", RegexOption.IGNORE_CASE)
+                            val labelOnly = Regex("^\\\\s*(?:$labelPattern)\\\\s*(?:\\\\([^)]*\\\\))?\\\\s*[:\\\\-]?\\\\s*$", RegexOption.IGNORE_CASE)
+                            val valueOnly = Regex("^\\\\s*(?:₹|rs\\\\.?|inr)?\\\\s*$number\\\\s*$suffix\\\\s*$", RegexOption.IGNORE_CASE)
                             for (index in extractedLines.indices) {
-                                inline.find(extractedLines[index])?.let { return it.groupValues[1].replace(",", "").trim() }
-                                if (labelOnly.matches(extractedLines[index])) {
-                                    // Some lender PDFs place a table value immediately before its label.
-                                    val previousLine = extractedLines.take(index).lastOrNull { it.isNotBlank() }
-                                    if (previousLine != null) {
-                                        valueOnly.find(previousLine)?.let { return it.groupValues[1].replace(",", "").trim() }
+                                val rawLine = extractedLines[index]
+                                val cleanedLine = cleanLoanPdfLineFromIndices(rawLine)
+                                inline.find(cleanedLine)?.let { match ->
+                                    val value = match.groupValues[1].replace(",", "").trim()
+                                    if (!loanPdfValueMatchesRowIndex(rawLine, value)) return value
+                                }
+                                if (labelOnly.matches(cleanedLine)) {
+                                    // Only inspect the following cell/line. Looking backward can capture an
+                                    // unrelated row's serial number or the previous field's financial value.
+                                    val nextRawLine = extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } ?: continue
+                                    val nextLine = cleanLoanPdfLineFromIndices(nextRawLine)
+                                    valueOnly.find(nextLine)?.let { match ->
+                                        val value = match.groupValues[1].replace(",", "").trim()
+                                        if (!loanPdfValueMatchesRowIndex(rawLine, value)) return value
                                     }
-                                    val nextLine = extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } ?: continue
-                                    valueOnly.find(nextLine)?.let { return it.groupValues[1].replace(",", "").trim() }
                                 }
                             }
                             return null
                         }
-                        // PDFBox can emit table cells in a different order from their visual layout.
-                        // Search within a label's own line first, then check adjacent standalone values.
+                        // Nearby matching is intentionally conservative: it never takes a value from the
+                        // previous line, and it rejects a number that duplicates the row's leading index.
                         fun captureLabeledNearby(labelPattern: String): String? {
-                            val number = Regex("(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)", RegexOption.IGNORE_CASE)
-                            val standalone = Regex("^\\s*(?:₹|rs\\.?|inr)?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*(?:%|months?|mos?\\.?)?\\s*$", RegexOption.IGNORE_CASE)
+                            val number = Regex("^\\\\s*(?:₹|rs\\\\.?|inr)?\\\\s*([0-9][0-9,]*(?:\\\\.[0-9]{1,2})?)\\\\s*(?:%|months?|mos?\\\\.?)?\\\\s*$", RegexOption.IGNORE_CASE)
                             for (index in extractedLines.indices) {
-                                val line = extractedLines[index]
+                                val rawLine = extractedLines[index]
+                                val line = cleanLoanPdfLineFromIndices(rawLine)
                                 val label = Regex(labelPattern, RegexOption.IGNORE_CASE).find(line) ?: continue
                                 val after = line.substring(label.range.last + 1)
-                                    .replace(Regex("^\\s*\\([^)]*\\)\\s*"), "")
+                                    .replace(Regex("^\\\\s*\\\\([^)]*\\\\)\\\\s*"), "")
                                     .trim().trimStart(':', '-', ' ')
-                                number.find(after)?.let { return it.groupValues[1].replace(",", "").trim() }
-                                val previous = extractedLines.take(index).lastOrNull { it.isNotBlank() }
-                                if (previous != null) standalone.find(previous)?.let { return it.groupValues[1].replace(",", "").trim() }
-                                val next = extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() }
-                                if (next != null) standalone.find(next)?.let { return it.groupValues[1].replace(",", "").trim() }
+                                number.find(after)?.let { match ->
+                                    val value = match.groupValues[1].replace(",", "").trim()
+                                    if (!loanPdfValueMatchesRowIndex(rawLine, value)) return value
+                                }
+                                val nextRawLine = extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } ?: continue
+                                val nextLine = cleanLoanPdfLineFromIndices(nextRawLine)
+                                number.find(nextLine)?.let { match ->
+                                    val value = match.groupValues[1].replace(",", "").trim()
+                                    if (!loanPdfValueMatchesRowIndex(rawLine, value)) return value
+                                }
                             }
                             return null
                         }
@@ -3138,8 +3164,11 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         // Use the document's own section headings rather than assuming that values
                         // always appear on page 1. PDFTextStripper separates pages with form feeds.
                         val pdfPages = extracted.split('\u000C')
-                        val aprPage = pdfPages.firstOrNull { it.contains("Computation of APR", ignoreCase = true) }.orEmpty()
-                        val schedulePage = pdfPages.firstOrNull { it.contains("Illustrative Repayment Schedule", ignoreCase = true) }.orEmpty()
+                        // Keep every matching section; lender tables are often repeated or continued on later pages.
+                        val aprPage = pdfPages.filter { it.contains("Computation of APR", ignoreCase = true) }
+                            .joinToString("\\n")
+                        val schedulePage = pdfPages.filter { it.contains("Illustrative Repayment Schedule", ignoreCase = true) }
+                            .joinToString("\\n")
                         val emiLabel = "(?:amount\\s+of\\s+emi\\s+payable|(?:monthly\\s+)?(?:emi\\s*(?:amount|payable)?|equated\\s+monthly\\s+installments?|equated\\s+monthly\\s+instalments?|monthly\\s+installments?(?:\\s+amount)?|monthly\\s+instalments?(?:\\s+amount)?|installment\\s+amount|instalment\\s+amount|monthly\\s+repayment|repayment\\s+installment|repayment\\s+instalment))"
                         val scheduleRowPattern = Regex("^\\s*(\\d{1,3})\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
                         val scheduleRows = schedulePage.lines().mapNotNull { line ->
@@ -3161,10 +3190,32 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         val aprTenure = Regex("(?i)Loan Term \\(in years/ months/ days\\).*?Part 1\\)\\s*([0-9]{1,3})").find(aprNormalized)?.groupValues?.get(1)
                         val aprEmi = Regex("(?i)Amount of each EPI.*?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+nos\\.\\s+of EPIs").find(aprNormalized)?.groupValues?.get(1)?.replace(",", "")
                         val aprStartDate = Regex("(?i)Commencement of repayments?, post sanction.*?\\b([0-9]{4}-[0-9]{2}-[0-9]{2})\\b").find(aprNormalized)?.groupValues?.get(1)
-                        (captureLabeled(emiLabel) ?: captureLabeledNearby(emiLabel) ?: aprEmi ?: recurringScheduleEmi)
-                            ?.let { fields.put("emi", it.substringBefore(".")) }
+                        val principalCandidate = (captureLabeled(principalLabel) ?: captureLabeledNearby(principalLabel))
+                            ?.substringBefore(".")?.toLongOrNull()
+                        principalCandidate?.takeIf { it > 0L }?.let { fields.put("principal", it.toString()) }
+
+                        val parsedEmi = (recurringScheduleEmi?.takeIf { it > 0.0 }?.toString()
+                            ?: captureLabeled(emiLabel)
+                            ?: captureLabeledNearby(emiLabel)
+                            ?: aprEmi)
+                            ?.substringBefore(".")?.replace(",", "")?.toLongOrNull()
+                        // A tiny EMI against a substantial principal is treated as a suspicious extraction,
+                        // not silently accepted. Prefer a repeated repayment-schedule amount when available.
+                        val verifiedEmi = when {
+                            parsedEmi == null || parsedEmi <= 0L -> null
+                            principalCandidate != null && principalCandidate >= 1000L && parsedEmi < 100L ->
+                                recurringScheduleEmi?.takeIf { it >= 100.0 }?.toLong()
+                            else -> parsedEmi
+                        }
+                        verifiedEmi?.let { fields.put("emi", it.toString()) }
                         val rateLabel = "(?:annual\\s+)?(?:interest\\s+rate(?:\\s+per\\s+annum)?|fixed\\s+rate\\s+of\\s+interest|rate\\s+of\\s+interest|roi)"
-                        (captureLabeled(rateLabel) ?: captureLabeledNearby(rateLabel))?.let { fields.put("rate", it) }
+                        val parsedRate = (captureLabeled(rateLabel) ?: captureLabeledNearby(rateLabel))
+                            ?.replace("%", "")?.trim()?.toDoubleOrNull()
+                        // Accept only a positive, plausible percentage tied to an explicit interest-rate label.
+                        // No invented default is used when the source value cannot be verified.
+                        if (parsedRate != null && parsedRate > 0.0 && parsedRate <= 100.0) {
+                            fields.put("rate", parsedRate.toString())
+                        }
                         val tenureLabel = "(?:(?:total|loan|repayment)\\s+)*(?:tenure|term|period|duration|tenor)(?:\\s+in\\s+(?:months?|years?))?"
                         fun captureTenureMonths(): String? {
                             val labelRegex = Regex(tenureLabel, RegexOption.IGNORE_CASE)
@@ -3185,12 +3236,14 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             }
                             return null
                         }
-                        (captureTenureMonths() ?: captureLabeled(tenureLabel) ?: captureLabeledNearby(tenureLabel) ?: aprTenure ?: scheduleTenure)?.let { fields.put("totalPayments", it) }
-                            ?: captureLabeled("(?:total\\s+number\\s+of\\s+)?(?:emi|installments?|instalments?)(?:\\s+(?:count|tenure|months?))?")?.let { fields.put("totalPayments", it) }
+                        // Tenure must carry explicit year/month units or come from a parsed repayment schedule.
+                        // Do not accept arbitrary numbers such as "30 days" from unrelated policy text.
+                        (captureTenureMonths() ?: scheduleTenure)?.toIntOrNull()
+                            ?.takeIf { it > 0 }
+                            ?.let { fields.put("totalPayments", it.toString()) }
                         captureLabeled("(?:number\\s+of\\s+)?(?:emi|installments?|instalments?)\\s+(?:paid|completed)")?.let { fields.put("paymentsMade", it) }
                         captureLabeled("(?:(?:current|total)\\s+)?(?:outstanding\\s+(?:principal|balance|amount)?|principal\\s+outstanding)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
                         val principalLabel = "(?:(?:sanctioned|approved|total|original)\\s+)?(?:loan\\s+amount|amount\\s+of\\s+loan|principal\\s+amount|loan\\s+principal|amount\\s+financed|sanctioned\\s+amount|amount\\s+sanctioned|approved\\s+amount|credit\\s+facility\\s+amount)"
-                        (captureLabeled(principalLabel) ?: captureLabeledNearby(principalLabel))?.let { fields.put("principal", it.substringBefore(".")) }
                         captureAnywhere("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
                         (captureAnywhere("(?:repayment|first\\s*(?:emi|installment|instalment)|emi)\\s*(?:start|commencement|starting)?\\s*date\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z]{3,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})")
                             ?: aprStartDate
