@@ -9,6 +9,10 @@ import android.provider.Settings
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.graphics.pdf.PdfRenderer
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -35,6 +39,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -111,7 +117,7 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
 private fun categoryTint(category: String): Color = categoryColor(category).copy(alpha = 0.12f)
 
 private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "")
-private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L)
+private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -448,8 +454,8 @@ private fun FinanceApp() {
                     "Notifications" -> NotificationsSettingsScreen { tab = "Notifications" }
                     "About" -> AboutSettingsScreen()
                     "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: EmptyLoansScreen { tab = "Add loan" }
-                    "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi, totalPayments ->
-                        val newLoan = Loan(lender, balance, emi, "Set due date", rate, originalPrincipal, paymentsMade, totalPayments)
+                    "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi, totalPayments, borrowerName, agreementNumber, loanNumber, startDate ->
+                        val newLoan = Loan(lender, balance, emi, startDate.ifBlank { "Set due date" }, rate, originalPrincipal, paymentsMade, totalPayments, borrowerName, agreementNumber, loanNumber, startDate)
                         loans = listOf(newLoan) + loans
                         saveLoans(context, loans)
                         tab = "Loans"
@@ -2639,7 +2645,7 @@ private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.
 
 @Composable
 private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
-    val firstDueDate = nextLoanDueDate(loan.due)
+    val firstDueDate = runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due)
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
     val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
     val scheduleMonths = if (loan.totalPayments in 1L..600L) (loan.totalPayments - loan.paymentsMade).coerceIn(0L, 600L).toInt() else 60
@@ -2756,7 +2762,10 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Loan Details & EMI Schedule", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                    Text(loan.lender, color = Muted, fontSize = 12.sp)
+                    if (loan.borrowerName.isNotBlank()) Text("Borrower: ${loan.borrowerName}", color = Muted, fontSize = 12.sp)
+                        if (loan.agreementNumber.isNotBlank()) Text("Agreement / Loan No.: ${loan.agreementNumber}", color = Muted, fontSize = 12.sp)
+                        if (loan.loanNumber.isNotBlank() && loan.loanNumber != loan.agreementNumber) Text("Loan account number: ${loan.loanNumber}", color = Muted, fontSize = 12.sp)
+                        Text(loan.lender, color = Muted, fontSize = 12.sp)
                 }
                 Box(Modifier.clip(RoundedCornerShape(50)).background(mint).padding(horizontal = 10.dp, vertical = 7.dp)) {
                     Text("TRACKED", color = forest, fontSize = 9.sp, fontWeight = FontWeight.Bold)
@@ -2872,12 +2881,12 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                             }
                             Text("Enter the EMI amount and date exactly as shown on your lender statement. This compares one installment only; it does not connect to your bank.", color = Muted, fontSize = 11.sp)
                             OutlinedTextField(value = bankEmiAmount, onValueChange = { bankEmiAmount = it.filter { ch -> ch.isDigit() || ch == '.' }; bankCheckAttempted = false }, label = { Text("Bank EMI amount (₹)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                            OutlinedTextField(value = bankEmiDate, onValueChange = { bankEmiDate = it; bankCheckAttempted = false }, label = { Text("Bank EMI date (e.g. 5 Nov 2026)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            LoanDateField("Bank EMI date", bankEmiDate, { bankEmiDate = it; bankCheckAttempted = false })
                             Button(onClick = { bankCheckAttempted = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = forest)) { Text("Compare installment") }
                             if (bankCheckAttempted) {
                                 val amount = bankEmiAmount.toDoubleOrNull()
                                 val formatter = java.time.format.DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("d MMM yyyy").toFormatter(Locale.ENGLISH)
-                                val bankDate = runCatching { java.time.LocalDate.parse(bankEmiDate.trim(), formatter) }.getOrNull()
+                                val bankDate = runCatching { java.time.LocalDate.parse(bankEmiDate.trim().take(10)) }.getOrElse { runCatching { java.time.LocalDate.parse(bankEmiDate.trim(), formatter) }.getOrNull() }
                                 val expectedDate = firstDueDate
                                 val validInput = amount != null && amount >= 0.0 && bankDate != null
                                 val amountMatches = amount != null && kotlin.math.abs(amount - loan.emi.toDouble()) < 0.5
@@ -2978,10 +2987,34 @@ private fun loanPresentValue(emi: Double, annualRate: Double, months: Int): Doub
 private fun loanOutstandingEstimate(emi: Double, annualRate: Double, remainingMonths: Int): Double =
     loanPresentValue(emi, annualRate, remainingMonths)
 
+
+private fun normalizeLoanDate(raw: String): String = runCatching {
+    val value = raw.trim()
+    val patterns = listOf("d MMMM yyyy", "d MMM yyyy", "d-MMM-yyyy", "d/MM/yyyy", "dd/MM/yyyy", "yyyy-MM-dd")
+    patterns.firstNotNullOfOrNull { pattern -> runCatching { java.time.LocalDate.parse(value, java.time.format.DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern(pattern).toFormatter(Locale.ENGLISH)).toString() }.getOrNull() }
+        ?: java.time.LocalDate.parse(value).toString()
+}.getOrDefault(raw)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long) -> Unit) {
+private fun LoanDateField(label: String, date: String, onDateChange: (String) -> Unit) {
+    var showPicker by remember { mutableStateOf(false) }
+    val initialMillis = remember(date) { runCatching { java.time.LocalDate.parse(date.take(10)).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrDefault(System.currentTimeMillis()) }
+    OutlinedTextField(value = date, onValueChange = {}, readOnly = true, label = { Text(label) }, trailingIcon = { IconButton(onClick = { showPicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date") } }, modifier = Modifier.fillMaxWidth().clickable { showPicker = true }, singleLine = true)
+    if (showPicker) {
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+        DatePickerDialog(onDismissRequest = { showPicker = false }, confirmButton = { TextButton(onClick = { pickerState.selectedDateMillis?.let { millis -> onDateChange(java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()) }; showPicker = false }) { Text("Select") } }, dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Cancel") } }) { DatePicker(state = pickerState) }
+    }
+}
+
+@Composable
+private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long, String, String, String, String) -> Unit) {
     val context = LocalContext.current
     var lender by remember { mutableStateOf("") }
+    var borrowerName by remember { mutableStateOf("") }
+    var agreementNumber by remember { mutableStateOf("") }
+    var loanNumber by remember { mutableStateOf("") }
+    var startDate by remember { mutableStateOf(java.time.LocalDate.now().plusMonths(1).withDayOfMonth(10).toString()) }
     var paymentsMade by remember { mutableStateOf("0") }
     var totalPayments by remember { mutableStateOf("") }
     var rate by remember { mutableStateOf("12") }
@@ -2991,43 +3024,100 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long)
     var saved by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var pdfBusy by remember { mutableStateOf(false) }
+    val pdfImportScope = rememberCoroutineScope()
     val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             pdfBusy = true
             error = ""
             saved = false
-            runCatching {
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: throw IllegalArgumentException("Could not read the selected PDF.")
-                require(bytes.size >= 8 && bytes.copyOfRange(0, 5).toString(Charsets.US_ASCII).startsWith("%PDF-")) {
-                    "This file is not a readable PDF."
+            pdfImportScope.launch {
+                val result = runCatching {
+                    withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            ?: throw IllegalArgumentException("Could not read the selected PDF. Please choose it again.")
+                        require(bytes.size >= 8 && bytes.copyOfRange(0, 5).toString(Charsets.US_ASCII).startsWith("%PDF-")) {
+                            "This file is not a readable PDF."
+                        }
+                        PDFBoxResourceLoader.init(context.applicationContext)
+                        var extracted = PDDocument.load(bytes).use { document ->
+                            require(!document.isEncrypted) { "Password-protected PDFs are not supported. Choose an unlocked PDF." }
+                            require(document.numberOfPages in 1..300) { "The PDF has an unsupported page count." }
+                            PDFTextStripper().getText(document)
+                        }
+                        if (extracted.trim().length < 40) {
+                            val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
+                                ?: throw IllegalArgumentException("Could not render this PDF for OCR.")
+                            descriptor.use { pfd ->
+                                PdfRenderer(pfd).use { renderer ->
+                                    val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                                    try {
+                                        val ocrText = StringBuilder()
+                                        for (pageIndex in 0 until minOf(renderer.pageCount, 20)) {
+                                            renderer.openPage(pageIndex).use { page ->
+                                                val scale = minOf(2, maxOf(1, 1800 / maxOf(page.width, page.height)))
+                                                val bitmap = android.graphics.Bitmap.createBitmap(page.width * scale, page.height * scale, android.graphics.Bitmap.Config.ARGB_8888)
+                                                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                                val recognized = com.google.android.gms.tasks.Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)))
+                                                ocrText.append(recognized.text).append('\n')
+                                                bitmap.recycle()
+                                            }
+                                        }
+                                        extracted = ocrText.toString()
+                                    } finally { recognizer.close() }
+                                }
+                            }
+                        }
+                        require(Regex("(?i)\\b(loan|emi|installment|instalment|repayment|outstanding|principal)\\b").containsMatchIn(extracted)) {
+                            "This PDF doesn't appear to contain a loan statement or repayment schedule."
+                        }
+                        val normalizedExtracted = extracted.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ").replace(Regex("\\s+"), " ")
+                        fun capture(pattern: String): String? = Regex(pattern, RegexOption.IGNORE_CASE).find(normalizedExtracted)?.groupValues?.getOrNull(1)
+                            ?.replace(",", "")?.trim()
+                        val fields = JSONObject()
+                        capture("(?:monthly\\s*)?emi(?:\\s*amount)?\\s*[:\\-]?\\s*(?:(?:₹|rs\\.?|inr)\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { fields.put("emi", it.substringBefore(".")) }
+                        capture("(?:annual\\s*)?(?:interest\\s*rate|rate\\s*of\\s*interest)\\s*[:\\-]?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*%?")?.let { fields.put("rate", it) }
+                        capture("(?:total\\s*)?(?:loan\\s*)?(?:tenure|term)(?:\\s*(?:in\\s*)?\\(?months?\\)?)?\\s*[:\\-]?\\s*([0-9]{1,3})(?:\\s*(?:months?|mos?\\.?|installments?|instalments?))?")?.let { fields.put("totalPayments", it) }
+                            ?: capture("(?:total\\s*)?(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:count|tenure|months?)?\\s*[:\\-]?\\s*([0-9]{1,3})")?.let { fields.put("totalPayments", it) }
+                        capture("(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:paid|completed)\\s*[:\\-]?\\s*([0-9]+)")?.let { fields.put("paymentsMade", it) }
+                        capture("(?:current\\s*)?(?:outstanding\\s*(?:principal|balance|amount)?|principal\\s*outstanding)\\s*[:\\-]?\\s*(?:(?:₹|rs\\.?|inr)\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
+                        capture("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
+                        capture("(?:repayment|first\\s*(?:emi|installment|instalment)|emi)\\s*(?:start|commencement|starting)?\\s*date\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z]{3,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})")?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
+                        capture("(?:borrower|customer|applicant|name of borrower)\\s*(?:name)?\\s*[:\\-]\\s*([A-Z][A-Za-z .]{2,60})")?.let { fields.put("borrowerName", it) }
+                        capture("(?:agreement|contract)\\s*(?:number|no\\.?|#)\\s*[:\\-]?\\s*([A-Z0-9/-]{4,40})")?.let { fields.put("agreementNumber", it) }
+                        capture("(?:loan\\s*account\\s*(?:number|no\\.?|#)|LAN|account\\s*(?:number|no\\.?|#))\\s*[:\\-]?\\s*([A-Z0-9/-]{4,30})")?.let { fields.put("loanNumber", it) }
+                        if (!fields.has("agreementNumber")) capture("(?:loan\\s*(?:number|no\\.?|#))\\s*[:\\-]?\\s*([A-Z0-9/-]{4,40})")?.let { fields.put("agreementNumber", it) }
+                        Regex("(?im)^\\s*(?:lender|bank|financial institution)\\s*[:\\-]\\s*(.{2,60})$").find(extracted)
+                            ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+                            ?.let { fields.put("lender", it) }
+                            ?: Regex("(?m)^\\s*([A-Z][A-Z &.-]{3,50}\\b(?:BANK|FINANCE|FINANCIAL))\\s*$").find(extracted)
+                                ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }?.let { fields.put("lender", it) }
+                        fields
+                    }
                 }
-                PDFBoxResourceLoader.init(context.applicationContext)
-                val extracted = PDDocument.load(bytes).use { document ->
-                    require(!document.isEncrypted) { "Password-protected PDFs are not supported. Choose an unlocked PDF." }
-                    require(document.numberOfPages in 1..300) { "The PDF has an unsupported page count." }
-                    PDFTextStripper().getText(document)
+                result.onSuccess { fields ->
+                    if (fields.has("emi")) emi = fields.getString("emi")
+                    if (fields.has("rate")) rate = fields.getString("rate")
+                    if (fields.has("totalPayments")) totalPayments = fields.getString("totalPayments")
+                    if (fields.has("paymentsMade")) paymentsMade = fields.getString("paymentsMade")
+                    if (fields.has("statementOutstanding")) statementOutstanding = fields.getString("statementOutstanding")
+                    if (fields.has("statementDate")) statementDate = fields.getString("statementDate")
+                    if (fields.has("lender")) lender = fields.getString("lender")
+                    if (fields.has("borrowerName")) borrowerName = fields.getString("borrowerName")
+                    if (fields.has("agreementNumber")) agreementNumber = fields.getString("agreementNumber")
+                    if (fields.has("loanNumber")) loanNumber = fields.getString("loanNumber")
+                    if (fields.has("startDate")) startDate = fields.getString("startDate")
+                    if (listOf("emi", "rate", "totalPayments").none { fields.has(it) }) {
+                        error = "PDF opened, but no EMI amount, interest rate, or tenure could be identified. Enter those values manually or upload a text-based lender statement."
+                    } else {
+                        error = "PDF text extracted. Review every field and fill any missing values before saving; the PDF source is not authenticated."
+                    }
+                }.onFailure { failure ->
+                    error = failure.message ?: "Unable to read loan details from this PDF."
                 }
-                require(Regex("(?i)\\b(loan|emi|installment|instalment|repayment|outstanding|principal)\\b").containsMatchIn(extracted)) {
-                    "This PDF doesn't appear to contain a loan statement or repayment schedule."
-                }
-                val normalizedExtracted = extracted.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ").replace(Regex("\\s+"), " ")
-                fun capture(pattern: String): String? = Regex(pattern, RegexOption.IGNORE_CASE).find(normalizedExtracted)?.groupValues?.getOrNull(1)
-                    ?.replace(",", "")?.trim()
-                capture("(?:monthly\\s*)?emi(?:\\s*amount)?\\s*[:\\-]?\\s*(?:₹|rs\\.?\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { emi = it.substringBefore(".") }
-                capture("(?:annual\\s*)?(?:interest\\s*rate|rate\\s*of\\s*interest)\\s*[:\\-]?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*%?")?.let { rate = it }
-                // Lender PDFs commonly label tenure as "Tenure (Months): 60", "Tenure: 60 months",
-                // "Loan term - 60", or "Total number of EMIs: 60". Accept both label orders.
-                capture("(?:total\\s*)?(?:loan\\s*)?(?:tenure|term)(?:\\s*(?:in\\s*)?\\(?months?\\)?)?\\s*[:\\-]?\\s*([0-9]{1,3})(?:\\s*(?:months?|mos?\\.?|installments?|instalments?))?")?.let { totalPayments = it }
-                    ?: capture("(?:total\\s*)?(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:count|tenure|months?)?\\s*[:\\-]?\\s*([0-9]{1,3})")?.let { totalPayments = it }
-                capture("(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:paid|completed)\\s*[:\\-]?\\s*([0-9]+)")?.let { paymentsMade = it }
-                capture("(?:current\\s*)?(?:outstanding\\s*(?:principal|balance|amount)?|principal\\s*outstanding)\\s*[:\\-]?\\s*(?:₹|rs\\.?\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { statementOutstanding = it.substringBefore(".") }
-                capture("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { statementDate = it }
-                Regex("(?im)^\\s*(?:lender|bank|financial institution)\\s*[:\\-]\\s*(.{2,60})$").find(extracted)
-                    ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }?.let { lender = it }
-                "PDF text extracted into the fields below. Review and correct every value before saving; the PDF's source is not authenticated."
-            }.onFailure { error = it.message ?: "Unable to read loan details from this PDF." }
-            pdfBusy = false
+                pdfBusy = false
+            }
+        } else {
+            error = "No PDF selected."
         }
     }
     val monthly = emi.toDoubleOrNull() ?: 0.0
@@ -3060,13 +3150,17 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long)
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                     Text("Import or enter loan details", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text("Option 1 · Import a lender statement or EMI schedule PDF", color = Muted, fontSize = 12.sp)
-                    OutlinedButton(onClick = { pdfPicker.launch(arrayOf("application/pdf")) }, enabled = !pdfBusy, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = { pdfPicker.launch(arrayOf("application/pdf", "*/*")) }, enabled = !pdfBusy, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.PictureAsPdf, null)
                         Spacer(Modifier.width(8.dp))
                         Text(if (pdfBusy) "Reading PDF…" else "Import Loan PDF")
                     }
                     Text("Option 2 · Enter or correct the details manually", color = Muted, fontSize = 12.sp)
                     OutlinedTextField(lender, { lender = it; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Lender / Bank") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(borrowerName, { borrowerName = it; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Borrower name (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(agreementNumber, { agreementNumber = it; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Agreement / Loan No. (primary identifier)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(loanNumber, { loanNumber = it; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Loan Account Number / LAN (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    LoanDateField("Repayment start date", startDate, { startDate = it; saved = false })
                     OutlinedTextField(emi, { emi = it.filter { c -> c.isDigit() || c == '.' }; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(totalPayments, { totalPayments = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Total tenure (months)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
@@ -3100,7 +3194,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long)
                             error = "Check lender, EMI, interest rate, tenure and EMIs paid. Confirm the statement balance if provided."
                             saved = false
                         } else {
-                            onSave(lenderName, original, balance, count, annualRate, monthlyEmi, total.toLong())
+                            onSave(lenderName, original, balance, count, annualRate, monthlyEmi, total.toLong(), borrowerName.trim(), agreementNumber.trim().ifBlank { loanNumber.trim() }, loanNumber.trim(), startDate)
                             error = ""
                             saved = true
                         }
@@ -3317,7 +3411,7 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
                 OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit) }, label = { Text("EMI payments made (count)") }, singleLine = true)
                 OutlinedTextField(emi, { emi = it.filter(Char::isDigit) }, label = { Text("Monthly EMI (₹)") }, singleLine = true)
                 OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Annual interest (%)") }, singleLine = true)
-                OutlinedTextField(due, { due = it }, label = { Text("Next due date") }, singleLine = true)
+                LoanDateField("Next due date", due, { due = it })
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
             }
         },
@@ -3329,7 +3423,7 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
                 val parsedEmi = emi.toLongOrNull()
                 val parsedRate = rate.toDoubleOrNull()
                 if (lender.isBlank() || parsedBalance == null || parsedBalance < 0L || parsedPrincipal == null || parsedPrincipal <= 0L || parsedBalance > parsedPrincipal || parsedPayments == null || parsedPayments < 0L || parsedEmi == null || parsedEmi <= 0L || parsedRate == null || parsedRate < 0.0) error = "Check lender, principal, outstanding balance, payment count, EMI and rate."
-                else onSave(loan.copy(lender = lender.trim(), balance = parsedBalance, originalPrincipal = parsedPrincipal, paymentsMade = parsedPayments, emi = parsedEmi, annualRate = parsedRate, due = due.ifBlank { "Not set" }))
+                else onSave(loan.copy(lender = lender.trim(), balance = parsedBalance, originalPrincipal = parsedPrincipal, paymentsMade = parsedPayments, emi = parsedEmi, annualRate = parsedRate, due = due.ifBlank { "Not set" }, startDate = due.takeIf { it.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) } ?: loan.startDate))
             }) { Text("Save changes") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
@@ -3665,7 +3759,11 @@ private fun loadLoans(context: Context): List<Loan>? = runCatching {
             annualRate = item.optDouble("annualRate", 0.0),
             originalPrincipal = item.optLong("originalPrincipal", balance),
             paymentsMade = item.optLong("paymentsMade", 0L),
-            totalPayments = item.optLong("totalPayments", 0L)
+            totalPayments = item.optLong("totalPayments", 0L),
+            borrowerName = item.optString("borrowerName", ""),
+            agreementNumber = item.optString("agreementNumber", item.optString("loanNumber", "")),
+            loanNumber = item.optString("loanNumber", ""),
+            startDate = item.optString("startDate", item.optString("due", ""))
         )
     }
 }.getOrNull()
@@ -3681,7 +3779,11 @@ private fun saveLoans(context: Context, loans: List<Loan>) {
             .put("annualRate", loan.annualRate)
             .put("originalPrincipal", loan.originalPrincipal)
             .put("paymentsMade", loan.paymentsMade)
-            .put("totalPayments", loan.totalPayments))
+            .put("totalPayments", loan.totalPayments)
+            .put("borrowerName", loan.borrowerName)
+            .put("agreementNumber", loan.agreementNumber)
+            .put("loanNumber", loan.loanNumber)
+            .put("startDate", loan.startDate))
     }
     context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
         .edit().putString("loans", array.toString()).apply()
