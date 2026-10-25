@@ -3016,7 +3016,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long)
                         require(Regex("(?i)\\b(loan|emi|installment|instalment|repayment|outstanding|principal)\\b").containsMatchIn(extracted)) {
                             "This PDF doesn't appear to contain a loan statement or repayment schedule."
                         }
-                        val normalizedExtracted = extracted.replace('\\u00A0', ' ').replace(Regex("[ \\t]+"), " ").replace(Regex("\\s+"), " ")
+                        val normalizedExtracted = extracted.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ").replace(Regex("\\s+"), " ")
                         fun capture(pattern: String): String? = Regex(pattern, RegexOption.IGNORE_CASE).find(normalizedExtracted)?.groupValues?.getOrNull(1)
                             ?.replace(",", "")?.trim()
                         val fields = JSONObject()
