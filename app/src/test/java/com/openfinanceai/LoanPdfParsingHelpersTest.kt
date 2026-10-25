@@ -195,9 +195,9 @@ class LoanPdfParsingHelpersTest {
     @Test
     fun extractsFinancialValuesFromTabSeparatedLabelValueCells() {
         val lines = listOf(
-            "Loan Amount (INR)\\t569,000",
-            "Annual Interest Rate\\t12.5%",
-            "EMI Amount\\t12,657"
+            "Loan Amount (INR)\t569,000",
+            "Annual Interest Rate\t12.5%",
+            "EMI Amount\t12,657"
         )
         assertEquals("569000", captureLoanPdfTabbedNumericValue(lines, "(?:loan\\\\s+amount|principal\\\\s+amount)"))
         assertEquals("12.5", captureLoanPdfTabbedNumericValue(lines, "annual\\\\s+interest\\\\s+rate"))
@@ -207,8 +207,8 @@ class LoanPdfParsingHelpersTest {
     @Test
     fun extractsTextFromTabSeparatedLabelValueCells() {
         val lines = listOf(
-            "Borrower Name\\tAarav Sharma",
-            "Agreement Number\\tAGR-2026-12345"
+            "Borrower Name\tAarav Sharma",
+            "Agreement Number\tAGR-2026-12345"
         )
         assertEquals("Aarav Sharma", captureLoanPdfTabbedTextValue(lines, "borrower\\\\s+name"))
         assertEquals("AGR-2026-12345", captureLoanPdfTabbedTextValue(lines, "agreement\\\\s+number"))
