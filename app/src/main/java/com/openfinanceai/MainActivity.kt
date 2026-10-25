@@ -3044,7 +3044,8 @@ internal fun cleanLoanPdfLineFromIndices(line: String): String {
 
 internal fun parseLoanPdfScheduleRows(scheduleText: String): List<Pair<Int, Double>> {
     val compact = Regex("^\\s*(\\d{1,3})\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
-    val dated = Regex("^\\s*(\\d{1,3})\\s+(?:\\d{1,2}[-/][A-Za-z]{3}[-/]\\d{2,4}|\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4}|\\d{4}-\\d{2}-\\d{2})\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
+    val month = "(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
+    val dated = Regex("^\\s*(\\d{1,3})\\s+(?:\\d{1,2}[-/]" + month + "[-/]\\d{2,4}|\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4}|\\d{4}-\\d{2}-\\d{2})\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$", RegexOption.IGNORE_CASE)
     return scheduleText.lines().mapNotNull { line ->
         val datedMatch = dated.find(line)
         if (datedMatch != null) {
@@ -3058,6 +3059,16 @@ internal fun parseLoanPdfScheduleRows(scheduleText: String): List<Pair<Int, Doub
             if (installmentNo != null && emi != null) installmentNo to emi else null
         }
     }
+}
+
+// A schedule only establishes total tenure when it contains every numbered instalment from 1
+// through its final row. A partial statement must not be mistaken for the whole loan term.
+internal fun completeLoanPdfScheduleTenure(rows: List<Pair<Int, Double>>): Int? {
+    if (rows.isEmpty()) return null
+    val numbers = rows.map { it.first }.distinct().sorted()
+    val last = numbers.last()
+    if (numbers.first() != 1 || numbers.size != last || numbers != (1..last).toList()) return null
+    return last
 }
 
 internal fun loanPdfValueMatchesRowIndex(rawLine: String, value: String): Boolean {
@@ -3227,7 +3238,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         val scheduleInstallments = scheduleRows.map { it.second }
                         val recurringScheduleEmi = scheduleInstallments.groupingBy { it }.eachCount()
                             .maxByOrNull { it.value }?.takeIf { it.value >= 2 }?.key?.toString()
-                        val scheduleTenure = scheduleRows.maxOfOrNull { it.first }?.toString()
+                        val scheduleTenure = completeLoanPdfScheduleTenure(scheduleRows)?.toString()
                         // The APR computation table repeats the sanctioned term, EPI and repayment date.
                         val aprNormalized = aprPage.replace('\u00A0', ' ').replace(Regex("\\s+"), " ")
                         val aprTenure = Regex("(?i)Loan Term \\(in years/ months/ days\\).*?Part 1\\)\\s*([0-9]{1,3})").find(aprNormalized)?.groupValues?.get(1)
