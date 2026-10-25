@@ -128,6 +128,8 @@ private fun categoryTint(category: String): Color = categoryColor(category).copy
 private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "")
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
+private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -165,6 +167,9 @@ private fun FinanceApp() {
     var transactionTips by remember { mutableStateOf<Transaction?>(null) }
     var loanForActions by remember { mutableStateOf<Loan?>(null) }
     var loanToEdit by remember { mutableStateOf<Loan?>(null) }
+    var emiQuickAction by remember { mutableStateOf<EmiQuickAction?>(null) }
+    var emiRescheduleDate by remember { mutableStateOf("") }
+    var showEmiReschedule by remember { mutableStateOf<EmiQuickAction?>(null) }
     val context = LocalContext.current
     val drivePrefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
     var driveStatus by remember { mutableStateOf(drivePrefs.getString("drive_backup_status", "Google Drive backup is not connected") ?: "Google Drive backup is not connected") }
@@ -238,6 +243,8 @@ private fun FinanceApp() {
     ) {
         when {
             loanToEdit != null -> loanToEdit = null
+            showEmiReschedule != null -> showEmiReschedule = null
+            emiQuickAction != null -> emiQuickAction = null
             loanForActions != null -> loanForActions = null
             transactionToEdit != null -> transactionToEdit = null
             transactionTips != null -> transactionTips = null
@@ -507,7 +514,7 @@ private fun FinanceApp() {
                         onPreferenceChanged = { settingsRevision++ }
                     )
                     "About" -> AboutSettingsScreen()
-                    "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: EmptyLoansScreen { tab = "Add loan" }
+                    "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: EmptyLoansScreen { tab = "Add loan" }
                     "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi, totalPayments, borrowerName, agreementNumber, ignoredLoanNumber, startDate ->
                         val newLoan = Loan(lender, balance, emi, startDate.ifBlank { "Set due date" }, rate, originalPrincipal, paymentsMade, totalPayments, borrowerName, agreementNumber, "", startDate)
                         loans = listOf(newLoan) + loans
@@ -554,6 +561,55 @@ private fun FinanceApp() {
                     if (index >= 0) { transactions = transactions.toMutableList().also { it[index] = edited }; saveTransactions(context, transactions) }
                     transactionToEdit = null
                 }
+            }
+            emiQuickAction?.let { action ->
+                AlertDialog(
+                    onDismissRequest = { emiQuickAction = null },
+                    title = { Text("EMI quick actions") },
+                    text = { Text("${action.originalDate}\nAmount: ${Money.format(action.amount)}\nStatus: ${action.status}") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
+                                .putString("emi_status_${action.lender}_${action.originalDate}", "Paid").apply()
+                            emiQuickAction = null
+                        }) { Text("Mark as paid") }
+                    },
+                    dismissButton = {
+                        Row {
+                            TextButton(onClick = {
+                                emiRescheduleDate = action.originalDate
+                                showEmiReschedule = action
+                                emiQuickAction = null
+                            }) { Text("Reschedule") }
+                            TextButton(onClick = { emiQuickAction = null }) { Text("Cancel") }
+                        }
+                    }
+                )
+            }
+            showEmiReschedule?.let { action ->
+                AlertDialog(
+                    onDismissRequest = { showEmiReschedule = null },
+                    title = { Text("Reschedule EMI") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Enter a new date, for example 04-Nov-2026.", color = Muted, fontSize = 12.sp)
+                            OutlinedTextField(value = emiRescheduleDate, onValueChange = { emiRescheduleDate = it }, label = { Text("New due date") }, singleLine = true)
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val parsed = parseScheduleDate(emiRescheduleDate)
+                            if (parsed != null) {
+                                context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
+                                    .putString("emi_rescheduled_${action.lender}_${action.originalDate}", parsed.format(java.time.format.DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH)))
+                                    .putString("emi_status_${action.lender}_${action.originalDate}", if (parsed.isBefore(java.time.LocalDate.now())) "Overdue" else "Upcoming")
+                                    .apply()
+                                showEmiReschedule = null
+                            }
+                        }) { Text("Save date") }
+                    },
+                    dismissButton = { TextButton(onClick = { showEmiReschedule = null }) { Text("Cancel") } }
+                )
             }
             loanForActions?.let { loan ->
                 AlertDialog(
@@ -2688,7 +2744,7 @@ private fun AppearanceScreen() {
 private fun parseScheduleDate(raw: String): java.time.LocalDate? {
     val value = raw.trim()
     val patterns = listOf(
-        "d MMM yyyy", "dd MMM yyyy", "d-MMM-yyyy", "dd-MMM-yyyy",
+        "d MMM yyyy", "dd MMM yyyy", "d-MMM-yyyy", "dd-MMM-yyyy", "d-MMM-yy", "dd-MMM-yy",
         "d/MM/yyyy", "dd/MM/yyyy", "d-MM-yyyy", "dd-MM-yyyy",
         "yyyy-MM-dd", "d MMMM yyyy", "dd MMMM yyyy", "MMM d, yyyy"
     )
@@ -2750,7 +2806,7 @@ private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.
 }
 
 @Composable
-private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
+private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String) -> Unit) {
     val firstDueDate = parseScheduleDate(loan.due) ?: runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due)
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
     val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
@@ -3013,14 +3069,22 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
             if (selectedSection != "Bank Verify") {
                 if (importedSchedule.isNotEmpty()) items(importedSchedule.indices.toList()) { index ->
                     val row = importedSchedule[index]
-                    val dateLabel = row.first
+                    val originalDateLabel = row.first
+                    val dateLabel = schedulePrefs.getString("emi_rescheduled_${loan.lender}_${originalDateLabel}", originalDateLabel) ?: originalDateLabel
                     val amount = row.second
                     val actualDate = parseScheduleDate(dateLabel)
-                    val importedStatus = schedulePrefs.getString("emi_status_${loan.lender}_${dateLabel}", null)
-                        ?: if (actualDate != null && actualDate.isBefore(java.time.LocalDate.now())) "Overdue" else "Upcoming"
+                    val savedStatus = schedulePrefs.getString("emi_status_${loan.lender}_${originalDateLabel}", null)
+                    // A recorded payment count covers the earliest installments in schedule order.
+                    // Explicit per-installment Paid records remain authoritative.
+                    val installmentRecordedPaid = savedStatus == "Paid" || index < loan.paymentsMade
+                    val importedStatus = when {
+                        installmentRecordedPaid -> "Paid"
+                        actualDate != null && actualDate.isBefore(java.time.LocalDate.now()) -> "Overdue"
+                        else -> "Upcoming"
+                    }
                     val statusColor = when (importedStatus) { "Paid" -> Color(0xFF0E7490); "Overdue" -> Color(0xFFEF4444); else -> Color(0xFFF59E0B) }
                     val statusTint = when (importedStatus) { "Paid" -> Color(0xFFCCFBF1); "Overdue" -> Color(0xFFFFE4E6); else -> Color(0xFFFFF1D6) }
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }, onLongClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(dateLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
                             Text("Imported from lender PDF", color = Muted, fontSize = 9.sp)
@@ -3040,15 +3104,18 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                 val installmentDate = firstDueDate?.plusMonths(index.toLong())
                 val installmentLabel = installmentDate?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
                     ?: if (loan.due.equals("Set due date", ignoreCase = true) || loan.due.isBlank()) "Set due date" else loan.due
-                val paid = index < loan.paymentsMade
-                val statusDate = installmentDate
+                val installmentLabelOriginal = installmentLabel
+                val displayInstallmentLabel = schedulePrefs.getString("emi_rescheduled_${loan.lender}_${installmentLabelOriginal}", installmentLabelOriginal) ?: installmentLabelOriginal
+                val savedInstallmentStatus = schedulePrefs.getString("emi_status_${loan.lender}_${installmentLabelOriginal}", null)
+                val paid = index < loan.paymentsMade || savedInstallmentStatus == "Paid"
+                val statusDate = parseScheduleDate(displayInstallmentLabel) ?: installmentDate
                 val overdue = !paid && statusDate != null && statusDate.isBefore(java.time.LocalDate.now())
                 val installmentStatus = if (paid) "Paid" else if (overdue) "Overdue" else "Upcoming"
                 val installmentStatusColor = if (paid) Color(0xFF0E7490) else if (overdue) Color(0xFFEF4444) else upcomingAmber
                 val installmentStatusTint = if (paid) Color(0xFFCCFBF1) else if (overdue) Color(0xFFFFE4E6) else upcomingTint
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress() }, onLongClick = { onEmiLongPress() }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress(installmentLabelOriginal, loan.emi, installmentStatus) }, onLongClick = { onEmiLongPress(installmentLabelOriginal, loan.emi, installmentStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(installmentLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                        Text(displayInstallmentLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
                         Text("Principal ${Money.format(principalPart)}", color = Muted, fontSize = 9.sp)
                     }
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
