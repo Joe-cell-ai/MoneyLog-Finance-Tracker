@@ -3086,6 +3086,11 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             for (index in extractedLines.indices) {
                                 inline.find(extractedLines[index])?.let { return it.groupValues[1].replace(",", "").trim() }
                                 if (labelOnly.matches(extractedLines[index])) {
+                                    // Some lender PDFs place a table value immediately before its label.
+                                    val previousLine = extractedLines.take(index).lastOrNull { it.isNotBlank() }
+                                    if (previousLine != null) {
+                                        valueOnly.find(previousLine)?.let { return it.groupValues[1].replace(",", "").trim() }
+                                    }
                                     val nextLine = extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } ?: continue
                                     valueOnly.find(nextLine)?.let { return it.groupValues[1].replace(",", "").trim() }
                                 }
