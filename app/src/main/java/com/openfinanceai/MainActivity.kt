@@ -82,6 +82,7 @@ private var AppFontScale by mutableStateOf(1f)
 
 private fun applyAppearance(theme: String, accent: String, layout: String, fontSize: String, systemDark: Boolean = false) {
     val accentColor = when (accent) {
+        "Green" -> Color(0xFF07966F)
         "Blue" -> Color(0xFF0284C7)
         "Purple" -> Color(0xFF8B4DE8)
         "Orange" -> Color(0xFFF59E0B)
@@ -99,7 +100,14 @@ private fun applyAppearance(theme: String, accent: String, layout: String, fontS
     Ink = if (AppDarkTheme) Color(0xFFF1F5F2) else Color(0xFF22243A)
     Muted = if (AppDarkTheme) Color(0xFFB0BDB5) else Color(0xFF74788D)
 }
-private val Money = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
+private var Money by mutableStateOf(NumberFormat.getCurrencyInstance(Locale("en", "IN")))
+private fun applyCurrency(currency: String) {
+    Money = when (currency) {
+        "USD ($)" -> NumberFormat.getCurrencyInstance(Locale.US)
+        "EUR (€)" -> NumberFormat.getCurrencyInstance(Locale.GERMANY)
+        else -> NumberFormat.getCurrencyInstance(Locale("en", "IN"))
+    }
+}
 private val CategoryPalette = listOf(Color(0xFF356AE6), Color(0xFF159765), Color(0xFF8953D8), Color(0xFFD97732), Color(0xFFDB4765), Color(0xFF148D91), Color(0xFFB18A16), Color(0xFF477DAD), Color(0xFFAF5AB5), Color(0xFF567A35), Color(0xFFCF5A36), Color(0xFF5470C6))
 private fun categoryColor(category: String): Color = when (category.trim().lowercase(Locale.ROOT)) {
     "salary", "payroll", "wages" -> Color(0xFF356AE6)
@@ -144,12 +152,14 @@ private fun FinanceApp() {
             appearancePreferences.getString("appearance_font_size", "Medium") ?: "Medium",
             systemDark
         )
+        applyCurrency(appearancePreferences.getString("appearance_currency", "INR (₹)") ?: "INR (₹)")
     }
     var tab by remember { mutableStateOf("Home") }
     var selectedOverviewMonth by remember { mutableStateOf(YearMonth.now()) }
     var showAdd by remember { mutableStateOf(false) }
     var showAddAsIncome by remember { mutableStateOf(false) }
     var categoryRefreshToken by remember { mutableIntStateOf(0) }
+    var settingsRevision by remember { mutableIntStateOf(0) }
     var transactionForActions by remember { mutableStateOf<Transaction?>(null) }
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
     var transactionTips by remember { mutableStateOf<Transaction?>(null) }
@@ -169,6 +179,21 @@ private fun FinanceApp() {
                 androidx.work.PeriodicWorkRequestBuilder<GoogleDriveBackupWorker>(24, java.util.concurrent.TimeUnit.HOURS).build()
             )
         }.onFailure { error -> driveStatus = "Could not connect folder: " + (error.message ?: "permission error") }
+    }
+    // Open the actual Google Drive app first so users can sign in there. When they
+    // return to MoneyLog, continue with Android's folder picker to grant folder access.
+    val driveAppLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        driveFolderPicker.launch(null)
+    }
+    fun openGoogleDriveForConnection() {
+        val driveIntent = context.packageManager.getLaunchIntentForPackage("com.google.android.apps.docs")
+        if (driveIntent != null) {
+            driveStatus = "Google Drive opened. Sign in if prompted, then return here to choose a backup folder."
+            driveAppLauncher.launch(driveIntent)
+        } else {
+            driveStatus = "Google Drive app is not installed. Choose a cloud folder using the available document picker."
+            driveFolderPicker.launch(null)
+        }
     }
     var transactions by remember {
         mutableStateOf(loadTransactions(context) ?: listOf(
@@ -224,11 +249,16 @@ private fun FinanceApp() {
         }
     }
 
-    LaunchedEffect(loans) {
+    LaunchedEffect(loans, settingsRevision) {
+        val remindersEnabled = drivePrefs.getBoolean("settings_emi_reminders", true)
         loans.forEach { loan ->
+            val reminderId = 3000 + (loan.lender.lowercase(Locale.ROOT).hashCode() and 0x3fff)
+            if (!remindersEnabled) {
+                EmiReminderReceiver.cancelReminder(context, reminderId)
+                return@forEach
+            }
             if (loan.due.equals("Set due date", ignoreCase = true) || loan.due.isBlank()) return@forEach
             val dueDay = Regex("^\\s*(\\d{1,2})").find(loan.due)?.groupValues?.getOrNull(1)?.toIntOrNull()?.coerceIn(1, 28) ?: return@forEach
-            val reminderId = 3000 + (loan.lender.lowercase(Locale.ROOT).hashCode() and 0x3fff)
             EmiReminderReceiver.scheduleMonthly(context, loan.lender, loan.emi, dueDay, reminderId)
         }
     }
@@ -437,7 +467,10 @@ private fun FinanceApp() {
                 when (tab) {
                     "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = "Activity" }, { isIncome -> showAddAsIncome = isIncome; showAdd = true }, { tab = it }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
-                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = it })
+                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = it }, { transaction ->
+                        tab = "Activity"
+                        transactionForActions = transaction
+                    })
                     "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" }, { loanForActions = it })
                     "Settings" -> SettingsScreen { tab = it }
                     "Calendar" -> CalendarScreen(loans, transactions)
@@ -448,7 +481,7 @@ private fun FinanceApp() {
                     "Tag Management" -> TagManagementScreen()
                     "Backup & Export" -> BackupSecurityScreen(
                         onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
-                        onConnectDrive = { driveFolderPicker.launch(null) },
+                        onConnectDrive = { openGoogleDriveForConnection() },
                         onBackupNow = {
                             if (drivePrefs.getString("drive_backup_tree_uri", null).isNullOrBlank()) driveStatus = "Connect a Google Drive folder first."
                             else {
@@ -469,7 +502,10 @@ private fun FinanceApp() {
                     })
                     "Appearance" -> AppearanceScreen()
                     "Privacy & Security" -> PrivacySecurityScreen { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) }
-                    "Notifications" -> NotificationsSettingsScreen { tab = "Notifications" }
+                    "Notifications" -> NotificationsSettingsScreen(
+                        onOpenPaymentSettings = { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) },
+                        onPreferenceChanged = { settingsRevision++ }
+                    )
                     "About" -> AboutSettingsScreen()
                     "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { loanForActions = loan } } ?: EmptyLoansScreen { tab = "Add loan" }
                     "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi, totalPayments, borrowerName, agreementNumber, ignoredLoanNumber, startDate ->
@@ -909,7 +945,8 @@ private fun ReportsScreen(
     transactions: List<Transaction>,
     selectedMonth: YearMonth,
     onMonthChange: (YearMonth) -> Unit,
-    onOpen: (String) -> Unit
+    onOpen: (String) -> Unit,
+    onTransactionClick: (Transaction) -> Unit
 ) {
     var reportView by remember { mutableStateOf("By category") }
     var searchQuery by remember { mutableStateOf("") }
@@ -1015,7 +1052,7 @@ private fun ReportsScreen(
                     if (categories.isEmpty()) Text("No expenses recorded this month.", color = Muted)
                     else {
                         val top = categories.first()
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { selectedCategory = top.first }.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(42.dp).background(categoryTint(top.first), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
                                 Icon(Icons.Default.TrendingUp, null, tint = categoryColor(top.first))
                             }
@@ -1097,7 +1134,7 @@ private fun ReportsScreen(
                         Column(Modifier.weight(1.14f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             if (categories.isEmpty()) Text("No category totals yet.", color = Muted, fontSize = 12.sp)
                             categories.take(7).forEach { (category, amount) ->
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { selectedCategory = category }.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                     Box(Modifier.size(8.dp).background(categoryColor(category), CircleShape))
                                     Text(category, modifier = Modifier.weight(1f), color = Color(0xFF173D70), fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                                     Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
@@ -1266,7 +1303,7 @@ private fun ReportsScreen(
                                 Text("No transactions in this category for the selected month.", color = Muted, fontSize = 12.sp)
                             } else {
                                 categoryTransactions.take(8).forEach { transaction ->
-                                    TransactionRow(transaction, onLongPress = { onOpen("Transactions") })
+                                    TransactionRow(transaction, onLongPress = { onTransactionClick(transaction); selectedCategory = null; categoryDetailTab = 0 })
                                 }
                                 if (categoryTransactions.size > 8) {
                                     Text("Showing 8 of ${categoryTransactions.size} transactions", color = Muted, fontSize = 11.sp)
@@ -2242,13 +2279,13 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
             }
         }
         item { InfoCard("App lock", "PIN and biometric app-lock protection are not implemented in this build. Do not treat the app as locked; protect your device with Android screen lock.", Icons.Default.Fingerprint) }
-        item { InfoCard("Backups contain sensitive information", "Create backups only when needed and store exported JSON/CSV files in a trusted private location. MoneyLog does not currently sync backups to a cloud account.", Icons.Default.PrivacyTip) }
+        item { InfoCard("Backups contain sensitive information", "Local JSON/CSV exports stay on your device until you share them. If you connect a Google Drive folder in Backup & Export, MoneyLog can write dated backups there. Store exported files in a trusted private location.", Icons.Default.PrivacyTip) }
         item { InfoCard("Clear app data", "Clearing Android app storage or uninstalling may remove locally saved records. Export a backup first if you need to keep them.", Icons.Default.DeleteOutline) }
     }
 }
 
 @Composable
-private fun NotificationsSettingsScreen(onOpenPaymentSettings: () -> Unit) {
+private fun NotificationsSettingsScreen(onOpenPaymentSettings: () -> Unit, onPreferenceChanged: () -> Unit) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
         var emiReminder by remember { mutableStateOf(preferences.getBoolean("settings_emi_reminders", true)) }
@@ -2276,7 +2313,7 @@ private fun NotificationsSettingsScreen(onOpenPaymentSettings: () -> Unit) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(19.dp)) {
                 Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Reminders & summaries", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    SettingToggleRow("EMI reminders", "Preference saved on this device", emiReminder) { emiReminder = it; persist("settings_emi_reminders", it) }
+                    SettingToggleRow("EMI reminders", "Enable or disable scheduled EMI reminders", emiReminder) { emiReminder = it; persist("settings_emi_reminders", it); onPreferenceChanged() }
                     HorizontalDivider(color = Color(0xFFEDEFF4))
                     SettingToggleRow("Budget alerts", "Preference saved on this device", budgetAlerts) { budgetAlerts = it; persist("settings_budget_alerts", it) }
                     HorizontalDivider(color = Color(0xFFEDEFF4))
@@ -2531,7 +2568,7 @@ private fun BackupSecurityScreen(
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text("Your data stays on your device", color = Teal, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text("MoneyLog does not currently upload backups to Google Drive or another cloud service. Exported files contain sensitive financial information—store them somewhere private.", color = Ink, fontSize = 12.sp)
+                        Text("Google Drive backups are saved only after you connect a folder and grant access. Exported files contain sensitive financial information—store them somewhere private.", color = Ink, fontSize = 12.sp)
                     }
                 }
             }
@@ -2549,6 +2586,7 @@ private fun AppearanceScreen() {
     var fontSize by remember { mutableStateOf(preferences.getString("appearance_font_size", "Medium") ?: "Medium") }
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
     LaunchedEffect(theme, accent, layout, fontSize, systemDark) { applyAppearance(theme, accent, layout, fontSize, systemDark) }
+    LaunchedEffect(currency) { applyCurrency(currency) }
     val accents = listOf("Green" to Color(0xFF07966F), "Blue" to Color(0xFF3478F6), "Purple" to Color(0xFF8B4DE8), "Orange" to Color(0xFFF59E0B), "Pink" to Color(0xFFEC4899))
     fun save(key: String, value: String) { preferences.edit().putString(key, value).apply() }
     LazyColumn(
