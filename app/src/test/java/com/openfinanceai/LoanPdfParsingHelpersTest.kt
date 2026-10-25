@@ -182,4 +182,13 @@ class LoanPdfParsingHelpersTest {
         assertEquals(listOf(3), parseLoanPdfScheduleRows(fixture).map { it.first })
     }
 
+
+    @Test
+    fun onlyDerivesTenureFromACompleteNumberedSchedule() {
+        assertEquals(3, completeLoanPdfScheduleTenure(listOf(1 to 1000.0, 2 to 1000.0, 3 to 1000.0)))
+        assertEquals(null, completeLoanPdfScheduleTenure(listOf(2 to 1000.0, 3 to 1000.0)))
+        assertEquals(null, completeLoanPdfScheduleTenure(listOf(1 to 1000.0, 3 to 1000.0)))
+        assertEquals(null, completeLoanPdfScheduleTenure(listOf(1 to 1000.0, 2 to 1000.0, 2 to 1000.0)))
+    }
+
 }
