@@ -3067,7 +3067,7 @@ internal fun completeLoanPdfScheduleTenure(rows: List<Pair<Int, Double>>): Int? 
     if (rows.isEmpty()) return null
     val numbers = rows.map { it.first }.distinct().sorted()
     val last = numbers.last()
-    if (numbers.first() != 1 || numbers.size != last || numbers != (1..last).toList()) return null
+    if (numbers.size != rows.size || numbers.first() != 1 || numbers.size != last || numbers != (1..last).toList()) return null
     return last
 }
 
