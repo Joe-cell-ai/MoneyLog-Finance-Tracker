@@ -3073,6 +3073,39 @@ internal fun captureLoanPdfTabbedTextValue(lines: List<String>, labelPattern: St
     return null
 }
 
+/**
+ * Bounded global scans support labels and values separated by PDF line breaks.
+ * These helpers stop at another recognized field label to avoid crossing fields.
+ */
+internal fun captureLoanPdfGlobalNumericValue(text: String, labelPattern: String): String? {
+    val normalized = text.replace('\u00A0', ' ').replace(Regex("\\s+"), " ").trim()
+    val nextLabel = """(?:loan\s+amount|principal|sanctioned|approved|interest\s+rate|rate\s+of\s+interest|\broi\b|\bemi\b|installments?|instalments?|tenure|tenor|loan\s+term|outstanding|balance|agreement|contract|borrower|applicant|customer|lender|bank|repayment|commencement|start\s+date)"""
+    val number = """(?:₹|rs\.?|inr)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s*(?:%|months?|mos?\.?|per\s+month|/month)?"""
+    val regex = Regex(
+        """(?:^|\b)(?:$labelPattern)\b(?:\s*\([^)]*\))?\s*[:\-]?\s*(?:(?!$nextLabel).){0,40}?$number""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+    )
+    val match = regex.find(normalized) ?: return null
+    val raw = match.groupValues.getOrNull(1)?.replace(",", "")?.trim() ?: return null
+    return raw.takeIf { it.toDoubleOrNull() != null }
+}
+
+internal fun captureLoanPdfGlobalTextValue(text: String, labelPattern: String): String? {
+    val normalized = text.replace('\u00A0', ' ').replace(Regex("\\s+"), " ").trim()
+    val nextLabel = """(?:loan\s+amount|principal|interest\s+rate|rate\s+of\s+interest|\broi\b|\bemi\b|installments?|instalments?|tenure|tenor|outstanding|balance|agreement|contract|borrower|applicant|customer|lender|bank|repayment|start\s+date)"""
+    val regex = Regex(
+        """(?:^|\b)(?:$labelPattern)\b\s*[:\-]?\s*(?:(?!$nextLabel).){1,70}?""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+    )
+    val match = regex.find(normalized) ?: return null
+    val label = Regex(labelPattern, RegexOption.IGNORE_CASE).find(match.value)?.value ?: return null
+    val value = match.value.substringAfter(label).trim().trimStart(':', '-', ' ')
+        .substringBefore(Regex("""(?i)\b(?:$nextLabel)\b""")).trim().trimEnd(',', ';', ':', '-')
+    if (value.length !in 2..80) return null
+    if (Regex("""(?i)^(?:no\.?|number|amount|date|details|not available)$""").matches(value)) return null
+    return value
+}
+
 internal fun parseLoanPdfScheduleRows(scheduleText: String): List<Pair<Int, Double>> {
     val compact = Regex("^\\s*(\\d{1,3})\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s*$")
     val month = "(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
@@ -3187,6 +3220,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             Regex(pattern, RegexOption.IGNORE_CASE).find(normalizedSearchText)?.groupValues?.getOrNull(1)
                                 ?.replace(",", "")?.trim()
                         fun captureLabeled(labelPattern: String): String? {
+                            captureLoanPdfGlobalNumericValue(normalizedSearchText, labelPattern)?.let { return it }
                             val number = "([0-9][0-9,]*(?:\\.[0-9]{1,2})?)"
                             val suffix = "(?:%|months?|mos?\\.?|per\\s+month|/month)?"
                             val inline = Regex("^\\s*(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*(?:₹|rs\\.?|inr)?\\s*$number\\s*$suffix(?:\\s+(?:p\\.?a\\.?|per\\s+annum))?\\s*$", RegexOption.IGNORE_CASE)
@@ -3237,6 +3271,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             return null
                         }
                         fun captureLabeledText(labelPattern: String): String? {
+                            captureLoanPdfGlobalTextValue(normalizedSearchText, labelPattern)?.let { return it }
                             val inline = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s+(.{2,80}?)\\s*$", RegexOption.IGNORE_CASE)
                             val labelOnly = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$", RegexOption.IGNORE_CASE)
                             for (index in extractedLines.indices) {
