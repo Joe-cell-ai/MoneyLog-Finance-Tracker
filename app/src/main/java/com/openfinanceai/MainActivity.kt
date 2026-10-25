@@ -3019,6 +3019,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     var emi by remember { mutableStateOf("") }
     var statementOutstanding by remember { mutableStateOf("") }
     var statementDate by remember { mutableStateOf("") }
+    var importedPrincipal by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var pdfBusy by remember { mutableStateOf(false) }
@@ -3068,20 +3069,59 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         require(Regex("(?i)\\b(loan|emi|installment|instalment|repayment|outstanding|principal)\\b").containsMatchIn(extracted)) {
                             "This PDF doesn't appear to contain a loan statement or repayment schedule."
                         }
-                        val normalizedExtracted = extracted.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ").replace(Regex("\\s+"), " ")
-                        fun capture(pattern: String): String? = Regex(pattern, RegexOption.IGNORE_CASE).find(normalizedExtracted)?.groupValues?.getOrNull(1)
-                            ?.replace(",", "")?.trim()
+                        // Preserve line boundaries: flattening the PDF before matching made the first
+                        // unrelated number after "EMI" / "tenure" look like the field value.
+                        val normalizedExtracted = extracted.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ")
+                        val normalizedSearchText = normalizedExtracted.replace(Regex("\\s+"), " ")
+                        val extractedLines = normalizedExtracted.lines().map { it.trim() }
+                        fun captureAnywhere(pattern: String): String? =
+                            Regex(pattern, RegexOption.IGNORE_CASE).find(normalizedSearchText)?.groupValues?.getOrNull(1)
+                                ?.replace(",", "")?.trim()
+                        fun captureLabeled(labelPattern: String): String? {
+                            val number = "([0-9][0-9,]*(?:\\.[0-9]{1,2})?)"
+                            val suffix = "(?:%|months?|mos?\\.?|per\\s+month|/month)?"
+                            val inline = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*(?:₹|rs\\.?|inr)?\\s*$number\\s*$suffix(?:\\s+(?:p\\.?a\\.?|per\\s+annum))?\\s*$", RegexOption.IGNORE_CASE)
+                            val labelOnly = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$", RegexOption.IGNORE_CASE)
+                            val valueOnly = Regex("^\\s*(?:₹|rs\\.?|inr)?\\s*$number\\s*$suffix\\s*$", RegexOption.IGNORE_CASE)
+                            for (index in extractedLines.indices) {
+                                inline.find(extractedLines[index])?.let { return it.groupValues[1].replace(",", "").trim() }
+                                if (labelOnly.matches(extractedLines[index])) {
+                                    // Some lender PDFs place a table value immediately before its label.
+                                    val previousLine = extractedLines.take(index).lastOrNull { it.isNotBlank() }
+                                    if (previousLine != null) {
+                                        valueOnly.find(previousLine)?.let { return it.groupValues[1].replace(",", "").trim() }
+                                    }
+                                    val nextLine = extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } ?: continue
+                                    valueOnly.find(nextLine)?.let { return it.groupValues[1].replace(",", "").trim() }
+                                }
+                            }
+                            return null
+                        }
+                        fun captureLabeledText(labelPattern: String): String? {
+                            val inline = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]\\s*(.{2,80}?)\\s*$", RegexOption.IGNORE_CASE)
+                            val labelOnly = Regex("^\\s*(?:[0-9]{1,2}\\s+)?(?:$labelPattern)\\s*(?:\\([^)]*\\))?\\s*[:\\-]?\\s*$", RegexOption.IGNORE_CASE)
+                            for (index in extractedLines.indices) {
+                                inline.find(extractedLines[index])?.let { return it.groupValues[1].trim() }
+                                if (labelOnly.matches(extractedLines[index])) {
+                                    val nextLine = extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } ?: continue
+                                    if (!Regex("(?i)^(?:[0-9]{1,2}\\s+)?(?:loan|emi|interest|tenure|agreement|lender|date|amount|rate|applicant|customer|borrower)\\b").containsMatchIn(nextLine)) return nextLine.takeIf { it.length in 2..80 }
+                                }
+                            }
+                            return null
+                        }
                         val fields = JSONObject()
-                        capture("(?:monthly\\s*)?emi(?:\\s*amount)?\\s*[:\\-]?\\s*(?:(?:₹|rs\\.?|inr)\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { fields.put("emi", it.substringBefore(".")) }
-                        capture("(?:annual\\s*)?(?:interest\\s*rate|rate\\s*of\\s*interest)\\s*[:\\-]?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*%?")?.let { fields.put("rate", it) }
-                        capture("(?:total\\s*)?(?:loan\\s*)?(?:tenure|term)(?:\\s*(?:in\\s*)?\\(?months?\\)?)?\\s*[:\\-]?\\s*([0-9]{1,3})(?:\\s*(?:months?|mos?\\.?|installments?|instalments?))?")?.let { fields.put("totalPayments", it) }
-                            ?: capture("(?:total\\s*)?(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:count|tenure|months?)?\\s*[:\\-]?\\s*([0-9]{1,3})")?.let { fields.put("totalPayments", it) }
-                        capture("(?:number\\s*of\\s*)?(?:emi|installments?|instalments?)\\s*(?:paid|completed)\\s*[:\\-]?\\s*([0-9]+)")?.let { fields.put("paymentsMade", it) }
-                        capture("(?:current\\s*)?(?:outstanding\\s*(?:principal|balance|amount)?|principal\\s*outstanding)\\s*[:\\-]?\\s*(?:(?:₹|rs\\.?|inr)\\s*)?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
-                        capture("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
-                        capture("(?:repayment|first\\s*(?:emi|installment|instalment)|emi)\\s*(?:start|commencement|starting)?\\s*date\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z]{3,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})")?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
-                        capture("(?:borrower|customer|applicant|name of borrower)\\s*(?:name)?\\s*[:\\-]\\s*([A-Z][A-Za-z.' -]{1,60}?)(?=\\s+(?:loan\\s+amount|loan\\s+(?:account\\s+)?(?:number|no\\b)|agreement\\s+(?:number|no\\b)|contract\\s+(?:number|no\\b)|emi\\b|interest\\s+rate|tenure\\b|outstanding\\b|address\\b|date\\b|mobile\\b|phone\\b|pan\\b|customer\\s+id\\b)|$)")?.let { fields.put("borrowerName", it.trim()) }
-                        capture("(?:agreement|contract)\\s*(?:number|no\\.?|#)\\s*[:\\-]?\\s*([A-Z0-9/-]{4,40})")?.let { fields.put("agreementNumber", it) }
+                        captureLabeled("(?:amount\\s+of\\s+emi\\s+payable|(?:monthly\\s+)?(?:emi\\s*(?:amount|payable)?|equated\\s+monthly\\s+installments?|equated\\s+monthly\\s+instalments?|monthly\\s+installments?|monthly\\s+instalments?))")?.let { fields.put("emi", it.substringBefore(".")) }
+                        captureLabeled("(?:annual\\s+)?(?:interest\\s+rate(?:\\s+per\\s+annum)?|fixed\\s+rate\\s+of\\s+interest|rate\\s+of\\s+interest|roi)")?.let { fields.put("rate", it) }
+                        captureLabeled("(?:(?:total|loan)\\s+)*(?:tenure|term)(?:\\s+in\\s+months?)?")?.let { fields.put("totalPayments", it) }
+                            ?: captureLabeled("(?:total\\s+number\\s+of\\s+)?(?:emi|installments?|instalments?)(?:\\s+(?:count|tenure|months?))?")?.let { fields.put("totalPayments", it) }
+                        captureLabeled("(?:number\\s+of\\s+)?(?:emi|installments?|instalments?)\\s+(?:paid|completed)")?.let { fields.put("paymentsMade", it) }
+                        captureLabeled("(?:(?:current|total)\\s+)?(?:outstanding\\s+(?:principal|balance|amount)?|principal\\s+outstanding)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
+                        captureLabeled("(?:(?:sanctioned|approved|total)\\s+)?(?:loan\\s+amount|amount\\s+of\\s+loan|principal\\s+amount|loan\\s+principal|amount\\s+financed)")?.let { fields.put("principal", it.substringBefore(".")) }
+                        captureAnywhere("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
+                        (captureAnywhere("(?:repayment|first\\s*(?:emi|installment|instalment)|emi)\\s*(?:start|commencement|starting)?\\s*date\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z]{3,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})")
+                            ?: captureAnywhere("commencement\\s+of\\s+repayment[^\\n]{0,120}?([0-9]{4}-[0-9]{2}-[0-9]{2})"))?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
+                        captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?borrower|borrower(?:\\s+name)?|customer(?:\\s+name)?|applicant(?:\\s+name)?)")?.let { fields.put("borrowerName", it) }
+                        captureAnywhere("(?:agreement|contract)\\s*(?:number|no\\.?|#)\\s*[:\\-]?\\s*([A-Z0-9/-]{4,40})")?.let { fields.put("agreementNumber", it) }
                         Regex("(?im)^\\s*(?:lender|bank|financial institution)\\s*[:\\-]\\s*(.{2,60})$").find(extracted)
                             ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
                             ?.let { fields.put("lender", it) }
@@ -3097,6 +3137,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     if (fields.has("paymentsMade")) paymentsMade = fields.getString("paymentsMade")
                     if (fields.has("statementOutstanding")) statementOutstanding = fields.getString("statementOutstanding")
                     if (fields.has("statementDate")) statementDate = fields.getString("statementDate")
+                    importedPrincipal = if (fields.has("principal")) fields.getString("principal") else ""
                     if (fields.has("lender")) lender = fields.getString("lender")
                     if (fields.has("borrowerName")) borrowerName = fields.getString("borrowerName")
                     if (fields.has("agreementNumber")) agreementNumber = fields.getString("agreementNumber")
@@ -3121,6 +3162,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     val paid = paymentsMade.toIntOrNull() ?: 0
     val validInputs = monthly > 0.0 && annualRate >= 0.0 && total > 0 && paid in 0..total
     val originalEstimate = if (validInputs) loanPresentValue(monthly, annualRate, total) else 0.0
+    val originalPrincipal = importedPrincipal.toDoubleOrNull()?.takeIf { it > 0.0 } ?: originalEstimate
     val remainingMonths = (total - paid).coerceAtLeast(0)
     val calculatedOutstanding = if (validInputs) loanOutstandingEstimate(monthly, annualRate, remainingMonths) else 0.0
     val actualStatementBalance = statementOutstanding.toDoubleOrNull()
@@ -3155,9 +3197,9 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     OutlinedTextField(borrowerName, { borrowerName = it; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Borrower name (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(agreementNumber, { agreementNumber = it; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Agreement / Loan No. (primary identifier)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     LoanDateField("Repayment start date", startDate, { startDate = it; saved = false })
-                    OutlinedTextField(emi, { emi = it.filter { c -> c.isDigit() || c == '.' }; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                    OutlinedTextField(totalPayments, { totalPayments = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Total tenure (months)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(emi, { emi = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(totalPayments, { totalPayments = it.filter(Char::isDigit); importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Total tenure (months)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(statementOutstanding, { statementOutstanding = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Statement outstanding principal (optional, ₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     if (statementDate.isNotBlank()) Text("Statement date: $statementDate", color = Muted, fontSize = 11.sp)
@@ -3165,7 +3207,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         Card(colors = CardDefaults.cardColors(containerColor = Mint), shape = RoundedCornerShape(16.dp)) {
                             Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Text("Estimated loan summary", color = Green, fontWeight = FontWeight.Bold)
-                                Text("Original principal: ${Money.format(kotlin.math.round(originalEstimate).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
+                                Text("Original principal: ${Money.format(kotlin.math.round(originalPrincipal).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
                                 Text("Outstanding principal: ${Money.format(kotlin.math.round(currentOutstanding).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
                                 Text("EMIs remaining: $remainingMonths", color = Ink)
                                 Text("Total remaining EMI payments: ${Money.format(kotlin.math.round(remainingPayments).toLong())}", color = Ink)
@@ -3180,7 +3222,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     if (pdfBusy) Text("Opening PDF and extracting loan details…", color = Green, fontSize = 12.sp)
                     Button(onClick = {
                         val lenderName = lender.trim()
-                        val original = kotlin.math.round(originalEstimate).toLong()
+                        val original = kotlin.math.round(originalPrincipal).toLong()
                         val balance = kotlin.math.round(currentOutstanding).toLong()
                         val count = paid.toLong()
                         val monthlyEmi = kotlin.math.round(monthly).toLong()
