@@ -2757,7 +2757,7 @@ private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.
 }
 
 @Composable
-private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
+private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String) -> Unit) {
     val firstDueDate = parseScheduleDate(loan.due) ?: runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due)
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
     val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
@@ -3020,14 +3020,19 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
             if (selectedSection != "Bank Verify") {
                 if (importedSchedule.isNotEmpty()) items(importedSchedule.indices.toList()) { index ->
                     val row = importedSchedule[index]
-                    val dateLabel = row.first
+                    val originalDateLabel = row.first
+                    val dateLabel = schedulePrefs.getString("emi_rescheduled_${loan.lender}_${originalDateLabel}", originalDateLabel) ?: originalDateLabel
                     val amount = row.second
                     val actualDate = parseScheduleDate(dateLabel)
-                    val importedStatus = schedulePrefs.getString("emi_status_${loan.lender}_${dateLabel}", null)
-                        ?: if (actualDate != null && actualDate.isBefore(java.time.LocalDate.now())) "Overdue" else "Upcoming"
+                    val savedStatus = schedulePrefs.getString("emi_status_${loan.lender}_${originalDateLabel}", null)
+                    val importedStatus = when {
+                        savedStatus == "Paid" -> "Paid"
+                        actualDate != null && actualDate.isBefore(java.time.LocalDate.now()) -> "Overdue"
+                        else -> "Upcoming"
+                    }
                     val statusColor = when (importedStatus) { "Paid" -> Color(0xFF0E7490); "Overdue" -> Color(0xFFEF4444); else -> Color(0xFFF59E0B) }
                     val statusTint = when (importedStatus) { "Paid" -> Color(0xFFCCFBF1); "Overdue" -> Color(0xFFFFE4E6); else -> Color(0xFFFFF1D6) }
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }, onLongClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(dateLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
                             Text("Imported from lender PDF", color = Muted, fontSize = 9.sp)
@@ -3047,15 +3052,18 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                 val installmentDate = firstDueDate?.plusMonths(index.toLong())
                 val installmentLabel = installmentDate?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
                     ?: if (loan.due.equals("Set due date", ignoreCase = true) || loan.due.isBlank()) "Set due date" else loan.due
-                val paid = index < loan.paymentsMade
-                val statusDate = installmentDate
+                val installmentLabelOriginal = installmentLabel
+                val displayInstallmentLabel = schedulePrefs.getString("emi_rescheduled_${loan.lender}_${installmentLabelOriginal}", installmentLabelOriginal) ?: installmentLabelOriginal
+                val savedInstallmentStatus = schedulePrefs.getString("emi_status_${loan.lender}_${installmentLabelOriginal}", null)
+                val paid = index < loan.paymentsMade || savedInstallmentStatus == "Paid"
+                val statusDate = parseScheduleDate(displayInstallmentLabel) ?: installmentDate
                 val overdue = !paid && statusDate != null && statusDate.isBefore(java.time.LocalDate.now())
                 val installmentStatus = if (paid) "Paid" else if (overdue) "Overdue" else "Upcoming"
                 val installmentStatusColor = if (paid) Color(0xFF0E7490) else if (overdue) Color(0xFFEF4444) else upcomingAmber
                 val installmentStatusTint = if (paid) Color(0xFFCCFBF1) else if (overdue) Color(0xFFFFE4E6) else upcomingTint
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress() }, onLongClick = { onEmiLongPress() }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress(installmentLabelOriginal, loan.emi, installmentStatus) }, onLongClick = { onEmiLongPress(installmentLabelOriginal, loan.emi, installmentStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(installmentLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                        Text(displayInstallmentLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
                         Text("Principal ${Money.format(principalPart)}", color = Muted, fontSize = 9.sp)
                     }
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
