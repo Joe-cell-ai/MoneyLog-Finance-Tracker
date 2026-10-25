@@ -2880,12 +2880,12 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                             }
                             Text("Enter the EMI amount and date exactly as shown on your lender statement. This compares one installment only; it does not connect to your bank.", color = Muted, fontSize = 11.sp)
                             OutlinedTextField(value = bankEmiAmount, onValueChange = { bankEmiAmount = it.filter { ch -> ch.isDigit() || ch == '.' }; bankCheckAttempted = false }, label = { Text("Bank EMI amount (₹)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                            OutlinedTextField(value = bankEmiDate, onValueChange = { bankEmiDate = it; bankCheckAttempted = false }, label = { Text("Bank EMI date (e.g. 5 Nov 2026)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            LoanDateField("Bank EMI date", bankEmiDate, { bankEmiDate = it; bankCheckAttempted = false })
                             Button(onClick = { bankCheckAttempted = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = forest)) { Text("Compare installment") }
                             if (bankCheckAttempted) {
                                 val amount = bankEmiAmount.toDoubleOrNull()
                                 val formatter = java.time.format.DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("d MMM yyyy").toFormatter(Locale.ENGLISH)
-                                val bankDate = runCatching { java.time.LocalDate.parse(bankEmiDate.trim(), formatter) }.getOrNull()
+                                val bankDate = runCatching { java.time.LocalDate.parse(bankEmiDate.trim().take(10)) }.getOrElse { runCatching { java.time.LocalDate.parse(bankEmiDate.trim(), formatter) }.getOrNull() }
                                 val expectedDate = firstDueDate
                                 val validInput = amount != null && amount >= 0.0 && bankDate != null
                                 val amountMatches = amount != null && kotlin.math.abs(amount - loan.emi.toDouble()) < 0.5
