@@ -191,4 +191,46 @@ class LoanPdfParsingHelpersTest {
         assertEquals(null, completeLoanPdfScheduleTenure(listOf(1 to 1000.0, 2 to 1000.0, 2 to 1000.0)))
     }
 
+
+    @Test
+    fun extractsFinancialValuesFromTabSeparatedLabelValueCells() {
+        val lines = listOf(
+            "Loan Amount (INR)\t569,000",
+            "Annual Interest Rate\t12.5%",
+            "EMI Amount\t12,657"
+        )
+        assertEquals("569000", captureLoanPdfTabbedNumericValue(lines, "(?:loan\\s+amount|principal\\s+amount)"))
+        assertEquals("12.5", captureLoanPdfTabbedNumericValue(lines, "annual\\s+interest\\s+rate"))
+        assertEquals("12657", captureLoanPdfTabbedNumericValue(lines, "(?:emi\\s+amount)"))
+    }
+
+    @Test
+    fun extractsTextFromTabSeparatedLabelValueCells() {
+        val lines = listOf(
+            "Borrower Name\tAarav Sharma",
+            "Agreement Number\tAGR-2026-12345"
+        )
+        assertEquals("Aarav Sharma", captureLoanPdfTabbedTextValue(lines, "borrower\\s+name"))
+        assertEquals("AGR-2026-12345", captureLoanPdfTabbedTextValue(lines, "agreement\\s+number"))
+    }
+
+
+    @Test
+    fun capturesNumericValueAcrossNormalizedLineBreaks() {
+        val text = "Annual Interest Rate\n\n12.5%\nEMI Amount\n12,657"
+        assertEquals("12.5", captureLoanPdfGlobalNumericValue(text, "annual\\s+interest\\s+rate"))
+        assertEquals("12657", captureLoanPdfGlobalNumericValue(text, "EMI\\s+Amount"))
+    }
+
+    @Test
+    fun globalNumericScanStopsBeforeTheNextFieldLabel() {
+        val text = "Interest Rate\nEMI Amount\n12657"
+        assertEquals(null, captureLoanPdfGlobalNumericValue(text, "Interest Rate"))
+    }
+
+    @Test
+    fun capturesBorrowerTextAcrossLineBreaks() {
+        val text = "Borrower Name\nAarav Sharma\nAgreement Number\nAGR-2026-12345"
+        assertEquals("Aarav Sharma", captureLoanPdfGlobalTextValue(text, "Borrower\\s+Name"))
+    }
 }
