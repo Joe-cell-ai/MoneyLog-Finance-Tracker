@@ -3018,11 +3018,11 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long)
                         Card(colors = CardDefaults.cardColors(containerColor = Mint), shape = RoundedCornerShape(16.dp)) {
                             Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Text("Estimated loan summary", color = Green, fontWeight = FontWeight.Bold)
-                                Text("Original principal: \${Money.format(kotlin.math.round(originalEstimate).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
-                                Text("Outstanding principal: \${Money.format(kotlin.math.round(currentOutstanding).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
+                                Text("Original principal: ${Money.format(kotlin.math.round(originalEstimate).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
+                                Text("Outstanding principal: ${Money.format(kotlin.math.round(currentOutstanding).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
                                 Text("EMIs remaining: $remainingMonths", color = Ink)
-                                Text("Total remaining EMI payments: \${Money.format(kotlin.math.round(remainingPayments).toLong())}", color = Ink)
-                                Text("Estimated remaining interest: \${Money.format(kotlin.math.round(remainingInterest).toLong())}", color = Ink)
+                                Text("Total remaining EMI payments: ${Money.format(kotlin.math.round(remainingPayments).toLong())}", color = Ink)
+                                Text("Estimated remaining interest: ${Money.format(kotlin.math.round(remainingInterest).toLong())}", color = Ink)
                                 Text(if (actualStatementBalance != null) "Outstanding balance uses the imported statement value; verify its date." else "Outstanding balance is an estimate for a fixed-rate reducing-balance loan.", color = Muted, fontSize = 10.sp)
                             }
                         }
