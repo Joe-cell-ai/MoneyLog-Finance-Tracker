@@ -52,11 +52,10 @@ class EmiReminderReceiver : BroadcastReceiver() {
                 }
             }
             else -> {
-                // The recurring due-date alarm schedules next month's installment.
+                // A new monthly installment starts a new payment cycle.
+                prefs.edit().putBoolean(paidKey(id), false).apply()
                 scheduleMonthly(context, lender, amount, day, id)
-                if (!prefs.getBoolean(paidKey(id), false)) {
-                    showNotification(context, id, lender, amount, "EMI due today: $lender", "Your EMI of ₹$amount is due today. Please confirm your payment status.", true)
-                }
+                showNotification(context, id, lender, amount, "EMI due today: $lender", "Your EMI of ₹$amount is due today. Please confirm your payment status.", true)
             }
         }
     }
@@ -199,14 +198,16 @@ class EmiReminderReceiver : BroadcastReceiver() {
                 alarmManager.cancel(duePending)
                 duePending.cancel()
             }
-            val followIntent = Intent(context, EmiReminderReceiver::class.java).apply { action = ACTION_OVERDUE_DAILY }
-            val followPending = PendingIntent.getBroadcast(
-                context, followupRequestCode(notificationId), followIntent,
-                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-            )
-            if (followPending != null) {
-                alarmManager.cancel(followPending)
-                followPending.cancel()
+            listOf(ACTION_OVERDUE_DAILY, ACTION_CONFIRM).forEach { action ->
+                val followIntent = Intent(context, EmiReminderReceiver::class.java).apply { this.action = action }
+                val followPending = PendingIntent.getBroadcast(
+                    context, followupRequestCode(notificationId), followIntent,
+                    PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+                )
+                if (followPending != null) {
+                    alarmManager.cancel(followPending)
+                    followPending.cancel()
+                }
             }
         }
     }
