@@ -214,4 +214,23 @@ class LoanPdfParsingHelpersTest {
         assertEquals("AGR-2026-12345", captureLoanPdfTabbedTextValue(lines, "agreement\\s+number"))
     }
 
+
+    @Test
+    fun capturesNumericValueAcrossNormalizedLineBreaks() {
+        val text = "Annual Interest Rate\\n\\n12.5%\\nEMI Amount\\n12,657"
+        assertEquals("12.5", captureLoanPdfGlobalNumericValue(text, "annual\\\\s+interest\\\\s+rate"))
+        assertEquals("12657", captureLoanPdfGlobalNumericValue(text, "EMI\\\\s+Amount"))
+    }
+
+    @Test
+    fun globalNumericScanStopsBeforeTheNextFieldLabel() {
+        val text = "Interest Rate\\nEMI Amount\\n12657"
+        assertEquals(null, captureLoanPdfGlobalNumericValue(text, "Interest Rate"))
+    }
+
+    @Test
+    fun capturesBorrowerTextAcrossLineBreaks() {
+        val text = "Borrower Name\\nAarav Sharma\\nAgreement Number\\nAGR-2026-12345"
+        assertEquals("Aarav Sharma", captureLoanPdfGlobalTextValue(text, "Borrower\\\\s+Name"))
+    }
 }
