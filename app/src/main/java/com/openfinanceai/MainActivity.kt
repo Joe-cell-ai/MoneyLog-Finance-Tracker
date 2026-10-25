@@ -1285,7 +1285,7 @@ private fun ReportsScreen(
                                 Text("No transactions in this category for the selected month.", color = Muted, fontSize = 12.sp)
                             } else {
                                 categoryTransactions.take(8).forEach { transaction ->
-                                    TransactionRow(transaction, onLongPress = { onTransactionClick(transaction) })
+                                    TransactionRow(transaction, onLongPress = { onTransactionClick(transaction); selectedCategory = null; categoryDetailTab = 0 })
                                 }
                                 if (categoryTransactions.size > 8) {
                                     Text("Showing 8 of ${categoryTransactions.size} transactions", color = Muted, fontSize = 11.sp)
