@@ -3168,7 +3168,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         val tenureLabel = "(?:(?:total|loan|repayment)\\s+)*(?:tenure|term|period|duration|tenor)(?:\\s+in\\s+(?:months?|years?))?"
                         fun captureTenureMonths(): String? {
                             val labelRegex = Regex(tenureLabel, RegexOption.IGNORE_CASE)
-                            val valueRegex = Regex("(?:^|\\\\s)([0-9]{1,3})\\\\s*(years?|yrs?)(?:\\\\s+([0-9]{1,2})\\\\s*(months?|mos?))?|(?:^|\\\\s)([0-9]{1,3})\\\\s*(months?|mos?)", RegexOption.IGNORE_CASE)
+                            val valueRegex = Regex("(?:^|\\s)([0-9]{1,3})\\s*(years?|yrs?)(?:\\s+([0-9]{1,2})\\s*(months?|mos?))?|(?:^|\\s)([0-9]{1,3})\\s*(months?|mos?)", RegexOption.IGNORE_CASE)
                             for (index in extractedLines.indices) {
                                 val labelMatch = labelRegex.find(extractedLines[index]) ?: continue
                                 val after = extractedLines[index].substring(labelMatch.range.last + 1).trim().trimStart(':', '-', ' ')
