@@ -238,8 +238,13 @@ private fun FinanceApp() {
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
             val savedCategories = runCatching { JSONArray(prefs.getString("custom_categories", "[]") ?: "[]") }.getOrDefault(JSONArray())
             val savedTags = runCatching { JSONArray(prefs.getString("custom_tags", "[]") ?: "[]") }.getOrDefault(JSONArray())
+            val bankSchedules = JSONObject()
+            prefs.all.keys.filter { it.startsWith("bank_schedule_") }.forEach { key ->
+                runCatching { bankSchedules.put(key, JSONArray(prefs.getString(key, "[]") ?: "[]")) }
+            }
             root.put("transactions", transactionArray)
                 .put("loans", loanArray)
+                .put("bankSchedules", bankSchedules)
                 .put("categories", savedCategories)
                 .put("tags", savedTags)
                 .put("appearanceTheme", prefs.getString("appearance_theme", "Light"))
@@ -292,6 +297,13 @@ private fun FinanceApp() {
                 else editor.remove("user_reported_credit_score")
             }
             root.optJSONObject("monthlyCategoryBudgets")?.let { editor.putString("monthly_category_budgets", it.toString()) }
+            root.optJSONObject("bankSchedules")?.let { schedules ->
+                val keys = schedules.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    if (key.startsWith("bank_schedule_")) editor.putString(key, schedules.optJSONArray(key)?.toString() ?: "[]")
+                }
+            }
             editor.apply()
             transactions = restoredTransactions
             loans = restoredLoans
