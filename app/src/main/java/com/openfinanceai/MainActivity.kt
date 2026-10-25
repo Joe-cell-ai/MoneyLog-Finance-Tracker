@@ -2631,6 +2631,11 @@ private fun parseScheduleDate(raw: String): java.time.LocalDate? {
             return java.time.LocalDate.parse(value, java.time.format.DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH))
         }
     }
+    listOf("d MMM", "dd MMM", "d MMMM", "dd MMMM").forEach { pattern ->
+        runCatching {
+            return java.time.LocalDate.parse(value + " " + java.time.LocalDate.now().year, java.time.format.DateTimeFormatter.ofPattern(pattern + " yyyy", Locale.ENGLISH))
+        }
+    }
     return null
 }
 
@@ -2679,7 +2684,7 @@ private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.
 
 @Composable
 private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
-    val firstDueDate = runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due)
+    val firstDueDate = parseScheduleDate(loan.due) ?: runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due)
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
     val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
     val scheduleMonths = if (loan.totalPayments in 1L..600L) (loan.totalPayments - loan.paymentsMade).coerceIn(0L, 600L).toInt() else 60
