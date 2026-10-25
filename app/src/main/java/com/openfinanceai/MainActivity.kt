@@ -3041,7 +3041,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         var extracted = PDDocument.load(bytes).use { document ->
                             require(!document.isEncrypted) { "Password-protected PDFs are not supported. Choose an unlocked PDF." }
                             require(document.numberOfPages in 1..300) { "The PDF has an unsupported page count." }
-                            PDFTextStripper().getText(document)
+                            PDFTextStripper().apply { setSortByPosition(true) }.getText(document)
                         }
                         if (extracted.trim().length < 40) {
                             val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
