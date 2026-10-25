@@ -131,9 +131,9 @@ class LoanPdfParsingHelpersTest {
     @Test
     fun handlesTabsAndIrregularSpacingInExtractedScheduleText() {
         val fixture = listOf(
-            "1\\t04-FEB-26\\t569,000.00\\t12,657.00\\t7,536.00\\t5,121.00\\t561,464.00",
+            "1\t04-FEB-26\t569,000.00\t12,657.00\t7,536.00\t5,121.00\t561,464.00",
             "2     04-MAR-26    561,464.00     12,657.00    7,042.00    5,615.00    554,422.00"
-        ).joinToString("\\n")
+        ).joinToString("\n")
         val rows = parseLoanPdfScheduleRows(fixture)
         assertEquals(listOf(1, 2), rows.map { it.first })
         assertTrue(rows.all { it.second == 12657.0 })
