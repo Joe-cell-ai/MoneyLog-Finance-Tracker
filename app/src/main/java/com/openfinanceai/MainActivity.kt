@@ -20,6 +20,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
+import com.tom_roush.pdfbox.text.TextPosition
 import androidx.compose.ui.platform.LocalContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -2720,7 +2721,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: () -> Unit) {
                 val extractedText = PDDocument.load(bytes.inputStream()).use { document ->
                     if (document.isEncrypted) error("Password-protected PDFs are not supported. Upload an unlocked PDF.")
                     if (document.numberOfPages !in 1..300) error("The PDF has an invalid or unsupported page count.")
-                    PDFTextStripper().apply { setSortByPosition(true) }.getText(document)
+                    LayoutAwareLoanPdfTextStripper().getText(document)
                 }
                 val normalized = extractedText.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ")
                 val looksLikeSchedule = Regex("(?i)\\b(emi|installment|instalment|repayment|due date|principal|outstanding)\\b").containsMatchIn(normalized)
@@ -3006,6 +3007,33 @@ private fun LoanDateField(label: String, date: String, onDateChange: (String) ->
     }
 }
 
+private class LayoutAwareLoanPdfTextStripper : PDFTextStripper() {
+    init {
+        setSortByPosition(true)
+    }
+
+    // PDFTextStripper normally returns a flat line. Preserve large horizontal gaps as
+    // cell separators so downstream matching can distinguish adjacent table columns.
+    override fun writeString(text: String, textPositions: MutableList<TextPosition>) {
+        val ordered = textPositions.sortedBy { it.xDirAdj }
+        val rebuilt = StringBuilder()
+        var previous: TextPosition? = null
+        for (position in ordered) {
+            val prior = previous
+            if (prior != null) {
+                val gap = position.xDirAdj - (prior.xDirAdj + prior.widthDirAdj)
+                when {
+                    gap >= 14f -> rebuilt.append('\t')
+                    gap >= 2.5f -> rebuilt.append(' ')
+                }
+            }
+            rebuilt.append(position.unicode)
+            previous = position
+        }
+        super.writeString(rebuilt.toString())
+    }
+}
+
 internal fun cleanLoanPdfLineFromIndices(line: String): String {
     val fieldLabels = """(?:loan\s+amount|amount\s+of\s+loan|principal\s+amount|loan\s+principal|amount\s+financed|sanctioned\s+amount|amount\s+sanctioned|approved\s+amount|credit\s+facility\s+amount|annual\s+interest\s+rate|interest\s+rate|rate\s+of\s+interest|fixed\s+rate|roi|emi|equated\s+monthly|monthly\s+installments?|monthly\s+instalments?|installment\s+amount|instalment\s+amount|repayment|total\s+tenure|loan\s+tenure|tenure|loan\s+term|loan\s+period|loan\s+duration|tenor|agreement\s+number|contract\s+number|borrower|applicant|customer|lender|bank|financial\s+institution)"""
     return line.replaceFirst(
@@ -3092,7 +3120,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         }
                         // Preserve line boundaries: flattening the PDF before matching made the first
                         // unrelated number after "EMI" / "tenure" look like the field value.
-                        val normalizedExtracted = extracted.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ")
+                        val normalizedExtracted = extracted.replace('\u00A0', ' ').replace(Regex(" +"), " ")
                         val normalizedSearchText = normalizedExtracted.replace(Regex("\\s+"), " ")
                         val extractedLines = normalizedExtracted.lines().map { it.trim() }
                         fun captureAnywhere(pattern: String): String? =
