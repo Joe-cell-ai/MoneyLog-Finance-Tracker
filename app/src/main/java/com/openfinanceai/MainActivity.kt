@@ -1184,7 +1184,7 @@ private fun ReportsScreen(
                             }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("Total Expense", color = Color(0xFF8094B0), fontSize = 11.sp)
-                                Text(Money.format(totalSpend), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                                Text(Money.format(totalSpend).substringBeforeLast("."), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             }
                         }
                         Column(Modifier.weight(1.14f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
