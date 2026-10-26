@@ -3268,12 +3268,14 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     val amount = row.second
                     val actualDate = parseScheduleDate(dateLabel)
                     val savedStatus = schedulePrefs.getString("emi_status_${loan.lender}_${originalDateLabel}", null)
-                    // A recorded payment count covers the earliest installments in schedule order.
-                    // Explicit per-installment Paid records remain authoritative.
-                    val installmentRecordedPaid = savedStatus == "Paid" || index < loan.paymentsMade
+                    // Explicit per-installment payment records remain authoritative.
+                    // The aggregate paid count must not mark future-dated installments as paid.
+                    val today = java.time.LocalDate.now()
+                    val installmentRecordedPaid = savedStatus == "Paid" ||
+                        (index < loan.paymentsMade && (actualDate == null || !actualDate.isAfter(today)))
                     val importedStatus = when {
                         installmentRecordedPaid -> "Paid"
-                        actualDate != null && actualDate.isBefore(java.time.LocalDate.now()) -> "Overdue"
+                        actualDate != null && actualDate.isBefore(today) -> "Overdue"
                         else -> "Upcoming"
                     }
                     val statusColor = when (importedStatus) { "Paid" -> Color(0xFF0E7490); "Overdue" -> Color(0xFFEF4444); else -> Color(0xFFF59E0B) }
@@ -3302,9 +3304,13 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 val displayInstallmentLabel = schedulePrefs.getString("emi_rescheduled_${loan.lender}_${installmentLabelOriginal}", installmentLabelOriginal) ?: installmentLabelOriginal
                 val savedInstallmentStatus = schedulePrefs.getString("emi_status_${loan.lender}_${installmentLabelOriginal}", null)
                 val installmentAmount = schedulePrefs.getLong("emi_amount_${loan.lender}_${installmentLabelOriginal}", loan.emi)
-                val paid = index < loan.paymentsMade || savedInstallmentStatus == "Paid"
                 val statusDate = parseScheduleDate(displayInstallmentLabel) ?: installmentDate
-                val overdue = !paid && statusDate != null && statusDate.isBefore(java.time.LocalDate.now())
+                val today = java.time.LocalDate.now()
+                // Keep explicit installment payment records, but don't let the aggregate count
+                // turn future-dated installments into Paid.
+                val paid = savedInstallmentStatus == "Paid" ||
+                    (index < loan.paymentsMade && (statusDate == null || !statusDate.isAfter(today)))
+                val overdue = !paid && statusDate != null && statusDate.isBefore(today)
                 val installmentStatus = if (paid) "Paid" else if (overdue) "Overdue" else "Upcoming"
                 val installmentStatusColor = if (paid) Color(0xFF0E7490) else if (overdue) Color(0xFFEF4444) else upcomingAmber
                 val installmentStatusTint = if (paid) Color(0xFFCCFBF1) else if (overdue) Color(0xFFFFE4E6) else upcomingTint
