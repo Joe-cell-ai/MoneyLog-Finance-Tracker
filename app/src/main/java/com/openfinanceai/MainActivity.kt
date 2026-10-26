@@ -22,6 +22,8 @@ import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.toArgb
 import org.json.JSONArray
 import org.json.JSONObject
 import androidx.compose.foundation.background
@@ -146,6 +148,19 @@ private fun FinanceApp() {
     val appearanceContext = LocalContext.current
     val appearancePreferences = remember { appearanceContext.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val systemBarView = LocalView.current
+    SideEffect {
+        val activity = systemBarView.context as? android.app.Activity
+        activity?.window?.let { window ->
+            window.statusBarColor = (if (systemDark) Color(0xFF121713) else Color(0xFFF7F7FB)).toArgb()
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = if (systemDark) {
+                window.decorView.systemUiVisibility and android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+            } else {
+                window.decorView.systemUiVisibility or android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+            }
+        }
+    }
     LaunchedEffect(Unit) {
         applyAppearance(
             appearancePreferences.getString("appearance_theme", "Light") ?: "Light",
