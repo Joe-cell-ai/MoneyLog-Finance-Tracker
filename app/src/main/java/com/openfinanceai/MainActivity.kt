@@ -127,10 +127,45 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
 }
 private fun categoryTint(category: String): Color = categoryColor(category).copy(alpha = 0.12f)
 
+private fun loanAccent(lender: String): Color = when {
+    lender.contains("yes bank", true) -> Color(0xFFEF4444)
+    lender.contains("fibe", true) -> Color(0xFFFF7A00)
+    lender.contains("kreditbee", true) -> Color(0xFF8953E9)
+    lender.contains("hdfc", true) -> Color(0xFF00A86B)
+    lender.contains("icici", true) -> Color(0xFFB84DDB)
+    lender.contains("axis", true) -> Color(0xFF0891B2)
+    else -> CategoryPalette[(lender.trim().lowercase(Locale.ROOT).hashCode() and 0x7fffffff) % CategoryPalette.size]
+}
+private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
+
+
 private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "")
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
+@Composable
+private fun EmiQuickActionRow(
+    icon: ImageVector, title: String, subtitle: String, rowTint: Color, iconColor: Color,
+    darkTheme: Boolean, textColor: Color, mutedColor: Color, onClick: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+            .background(if (darkTheme) rowTint.copy(alpha = .16f) else rowTint.copy(alpha = .55f))
+            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(Modifier.size(38.dp).clip(CircleShape).background(iconColor.copy(alpha = .14f)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = iconColor, modifier = Modifier.size(21.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, color = textColor, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = mutedColor, fontSize = 11.sp)
+        }
+        Icon(Icons.Default.ChevronRight, null, tint = mutedColor, modifier = Modifier.size(19.dp))
+    }
+}
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -578,28 +613,72 @@ private fun FinanceApp() {
                 }
             }
             emiQuickAction?.let { action ->
-                AlertDialog(
+                val accent = loanAccent(action.lender)
+                val tint = loanTint(action.lender)
+                val dialogSurface = if (AppDarkTheme) Color(0xFF1C2430) else Color.White
+                val dialogText = if (AppDarkTheme) Color(0xFFF1F5F9) else Color(0xFF172033)
+                val dialogMuted = if (AppDarkTheme) Color(0xFFB8C2D1) else Color(0xFF718096)
+                val statusPaid = action.status.equals("Paid", true)
+                androidx.compose.ui.window.Dialog(
                     onDismissRequest = { emiQuickAction = null },
-                    title = { Text("EMI quick actions") },
-                    text = { Text("${action.originalDate}\nAmount: ${Money.format(action.amount)}\nStatus: ${action.status}") },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
-                                .putString("emi_status_${action.lender}_${action.originalDate}", "Paid").apply()
-                            emiQuickAction = null
-                        }) { Text("Mark as paid") }
-                    },
-                    dismissButton = {
-                        Row {
-                            TextButton(onClick = {
-                                emiRescheduleDate = action.originalDate
-                                showEmiReschedule = action
-                                emiQuickAction = null
-                            }) { Text("Reschedule") }
-                            TextButton(onClick = { emiQuickAction = null }) { Text("Cancel") }
+                    properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                ) {
+                    Box(Modifier.fillMaxSize().clickable { emiQuickAction = null }, contentAlignment = Alignment.BottomCenter) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp).clickable { },
+                            color = dialogSurface,
+                            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 22.dp, bottomEnd = 22.dp),
+                            shadowElevation = 12.dp
+                        ) {
+                            Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                Box(Modifier.align(Alignment.CenterHorizontally).width(38.dp).height(4.dp).clip(RoundedCornerShape(50)).background(dialogMuted.copy(alpha = .45f)))
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Box(Modifier.size(48.dp).clip(CircleShape).background(tint), contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.AccountBalance, contentDescription = null, tint = accent, modifier = Modifier.size(24.dp))
+                                    }
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text("EMI quick actions", color = dialogText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                        Text(action.lender, color = dialogMuted, fontSize = 12.sp, maxLines = 1)
+                                    }
+                                    IconButton(onClick = { emiQuickAction = null }) { Icon(Icons.Default.Close, contentDescription = "Close", tint = dialogMuted) }
+                                }
+                                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(tint).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("NEXT EMI", color = accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        Text(action.originalDate, color = dialogText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                    Box(Modifier.width(1.dp).height(38.dp).background(accent.copy(alpha = .22f)))
+                                    Column(Modifier.weight(1f).padding(start = 14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("AMOUNT", color = accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        Text(Money.format(action.amount), color = dialogText, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                    }
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Box(Modifier.clip(RoundedCornerShape(50)).background(if (statusPaid) Color(0xFFDCFCE7) else Color(0xFFFFF1D6)).padding(horizontal = 11.dp, vertical = 6.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                            Icon(if (statusPaid) Icons.Default.CheckCircle else Icons.Default.Schedule, null, tint = if (statusPaid) Color(0xFF15803D) else Color(0xFFB45309), modifier = Modifier.size(14.dp))
+                                            Text(action.status, color = if (statusPaid) Color(0xFF15803D) else Color(0xFFB45309), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    Spacer(Modifier.weight(1f))
+                                    Text("Choose an action", color = dialogMuted, fontSize = 11.sp)
+                                }
+                                EmiQuickActionRow(Icons.Default.CheckCircle, "Mark as paid", "Set this EMI as paid", Color(0xFF10B981), Color(0xFF10B981), AppDarkTheme, dialogText, dialogMuted) {
+                                    context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
+                                        .putString("emi_status_${action.lender}_${action.originalDate}", "Paid").apply()
+                                    emiQuickAction = null
+                                }
+                                EmiQuickActionRow(Icons.Default.Schedule, "Reschedule", "Change EMI date", Color(0xFF3B82F6), Color(0xFF3B82F6), AppDarkTheme, dialogText, dialogMuted) {
+                                    emiRescheduleDate = action.originalDate
+                                    showEmiReschedule = action
+                                    emiQuickAction = null
+                                }
+                                EmiQuickActionRow(Icons.Default.Cancel, "Cancel", "Close quick actions", Color(0xFFEF4444), Color(0xFFEF4444), AppDarkTheme, dialogText, dialogMuted) { emiQuickAction = null }
+                                TextButton(onClick = { emiQuickAction = null }, modifier = Modifier.fillMaxWidth()) { Text("Close", color = accent, fontWeight = FontWeight.SemiBold) }
+                            }
                         }
                     }
-                )
+                }
             }
             showEmiReschedule?.let { action ->
                 AlertDialog(
@@ -1600,8 +1679,8 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
         }
         items(loans) { loan ->
             val index = loans.indexOf(loan)
-            val accent = accents[index.mod(accents.size)]
-            val tint = tints[index.mod(tints.size)]
+            val accent = loanAccent(loan.lender)
+            val tint = loanTint(loan.lender)
             val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
             val dueDate = nextLoanDueDate(loan.due)
             val isUpcoming = dueDate != null && !dueDate.isBefore(java.time.LocalDate.now()) &&
@@ -2835,9 +2914,9 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         row
     }
     val paymentTooLow = monthlyRate > 0.0 && loan.emi.toDouble() <= loan.balance.toDouble() * monthlyRate
-    val emerald = Color(0xFF087F5B)
-    val forest = Color(0xFF065F46)
-    val mint = Color(0xFFE6F7F0)
+    val emerald = loanAccent(loan.lender)
+    val forest = loanAccent(loan.lender)
+    val mint = loanTint(loan.lender)
     val page = Color(0xFFF5F7FA)
     val paidGreen = Color(0xFF10B981)
     val paidTint = Color(0xFFE6FBF3)
