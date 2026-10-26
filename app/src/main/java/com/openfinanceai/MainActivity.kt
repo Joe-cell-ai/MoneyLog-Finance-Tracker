@@ -2983,7 +2983,9 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
     val firstDueDate = parseScheduleDate(loan.due) ?: runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due)
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
     val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
-    val scheduleMonths = if (loan.totalPayments in 1L..600L) (loan.totalPayments - loan.paymentsMade).coerceIn(0L, 600L).toInt() else 60
+    // Generate the full contractual schedule, including paid installments. The payment count
+    // controls each row's status; it must not shrink the schedule itself to zero.
+    val scheduleMonths = if (loan.totalPayments in 1L..600L) loan.totalPayments.toInt() else 60
     val schedule = (0 until scheduleMonths).map { index ->
         val interest = scheduleBalance * monthlyRate
         val principalPart = (loan.emi.toDouble() - interest).coerceAtLeast(0.0).coerceAtMost(scheduleBalance)
@@ -3181,7 +3183,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(if (selectedSection == "Bank Verify") "Bank Schedule Verify" else "EMI Schedule", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text(if (selectedSection == "Bank Schedule") "Compare your lender statement" else "Next 6 installments · estimate", color = Muted, fontSize = 11.sp)
+                        Text(if (selectedSection == "Bank Schedule") "Compare your lender statement" else "All installments · estimate", color = Muted, fontSize = 11.sp)
                     }
                     Box(Modifier.clip(RoundedCornerShape(50)).background(mint).padding(horizontal = 10.dp, vertical = 7.dp)) {
                         Text(if (selectedSection == "Bank Schedule") "VERIFY" else "ESTIMATE", color = forest, fontSize = 9.sp, fontWeight = FontWeight.Bold)
