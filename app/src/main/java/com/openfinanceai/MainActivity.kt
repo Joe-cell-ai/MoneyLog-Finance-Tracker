@@ -3,6 +3,7 @@
 package com.openfinanceai
 
 import android.os.Bundle
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
@@ -22,6 +23,8 @@ import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.toArgb
 import org.json.JSONArray
 import org.json.JSONObject
 import androidx.compose.foundation.background
@@ -146,6 +149,19 @@ private fun FinanceApp() {
     val appearanceContext = LocalContext.current
     val appearancePreferences = remember { appearanceContext.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val statusBarView = LocalView.current
+    SideEffect {
+        val window = (statusBarView.context as? Activity)?.window
+        if (window != null) {
+            window.statusBarColor = Page.toArgb()
+            val flags = window.decorView.systemUiVisibility
+            window.decorView.systemUiVisibility = if (AppDarkTheme) {
+                flags and android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+            } else {
+                flags or android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+            }
+        }
+    }
     LaunchedEffect(Unit) {
         applyAppearance(
             appearancePreferences.getString("appearance_theme", "Light") ?: "Light",
