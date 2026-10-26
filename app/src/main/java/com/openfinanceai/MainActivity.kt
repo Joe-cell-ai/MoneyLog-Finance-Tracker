@@ -276,10 +276,11 @@ private fun FinanceApp() {
 
     BackHandler(
         enabled = tab != "Home" || showAdd || showAddAsIncome || transactionForActions != null ||
-            transactionToEdit != null || transactionTips != null || loanForActions != null || loanToEdit != null
+            transactionToEdit != null || transactionTips != null || loanForActions != null || loanToEdit != null || emiAmountEdit != null
     ) {
         when {
             loanToEdit != null -> loanToEdit = null
+            emiAmountEdit != null -> emiAmountEdit = null
             showEmiReschedule != null -> showEmiReschedule = null
             emiQuickAction != null -> emiQuickAction = null
             loanForActions != null -> loanForActions = null
@@ -3305,7 +3306,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 val installmentStatus = if (paid) "Paid" else if (overdue) "Overdue" else "Upcoming"
                 val installmentStatusColor = if (paid) Color(0xFF0E7490) else if (overdue) Color(0xFFEF4444) else upcomingAmber
                 val installmentStatusTint = if (paid) Color(0xFFCCFBF1) else if (overdue) Color(0xFFFFE4E6) else upcomingTint
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress(installmentLabelOriginal, installmentAmount, installmentStatus) }, onLongClick = { onEmiLongPress(installmentLabelOriginal, loan.emi, installmentStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress(installmentLabelOriginal, installmentAmount, installmentStatus) }, onLongClick = { onEmiLongPress(installmentLabelOriginal, installmentAmount, installmentStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(displayInstallmentLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
                         Text("Principal ${Money.format(principalPart)}", color = Muted, fontSize = 9.sp)
