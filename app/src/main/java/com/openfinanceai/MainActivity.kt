@@ -203,6 +203,8 @@ private fun FinanceApp() {
     var loanForActions by remember { mutableStateOf<Loan?>(null) }
     var loanToEdit by remember { mutableStateOf<Loan?>(null) }
     var emiQuickAction by remember { mutableStateOf<EmiQuickAction?>(null) }
+    var emiAmountEdit by remember { mutableStateOf<EmiQuickAction?>(null) }
+    var emiAmountText by remember { mutableStateOf("") }
     var emiRescheduleDate by remember { mutableStateOf("") }
     var showEmiReschedule by remember { mutableStateOf<EmiQuickAction?>(null) }
     val context = LocalContext.current
@@ -653,6 +655,11 @@ private fun FinanceApp() {
                                         .putString("emi_status_${action.lender}_${action.originalDate}", "Paid").apply()
                                     emiQuickAction = null
                                 }
+                                EmiQuickActionRow(Icons.Default.Edit, "Edit Amount", "Change only this installment", accent, accent, AppDarkTheme, dialogText, dialogMuted) {
+                                    emiAmountText = action.amount.toString()
+                                    emiAmountEdit = action
+                                    emiQuickAction = null
+                                }
                                 EmiQuickActionRow(Icons.Default.Schedule, "Reschedule", "Change EMI date", Color(0xFF3B82F6), Color(0xFF3B82F6), AppDarkTheme, dialogText, dialogMuted) {
                                     emiRescheduleDate = action.originalDate
                                     showEmiReschedule = action
@@ -688,6 +695,29 @@ private fun FinanceApp() {
                         }) { Text("Save date") }
                     },
                     dismissButton = { TextButton(onClick = { showEmiReschedule = null }) { Text("Cancel") } }
+                )
+            }
+            emiAmountEdit?.let { action ->
+                AlertDialog(
+                    onDismissRequest = { emiAmountEdit = null },
+                    title = { Text("Edit EMI amount") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Only ${action.originalDate} will change. Other installments remain unchanged.", color = Muted, fontSize = 12.sp)
+                            OutlinedTextField(value = emiAmountText, onValueChange = { value -> emiAmountText = value.filter { it.isDigit() }.take(12) }, label = { Text("New amount (₹)") }, singleLine = true)
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val amount = emiAmountText.toLongOrNull()
+                            if (amount != null && amount > 0L) {
+                                context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
+                                    .putLong("emi_amount_${action.lender}_${action.originalDate}", amount).apply()
+                                emiAmountEdit = null
+                            }
+                        }) { Text("Save amount") }
+                    },
+                    dismissButton = { TextButton(onClick = { emiAmountEdit = null }) { Text("Cancel") } }
                 )
             }
             loanForActions?.let { loan ->
@@ -2611,6 +2641,12 @@ private fun BackupSecurityScreen(
     onExportCsv: () -> Unit,
     message: String
 ) {
+    val backupContext = LocalContext.current
+    val backupPreferences = remember { backupContext.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
+    var automaticBackup by remember { mutableStateOf(backupPreferences.getBoolean("automatic_backup_enabled", false)) }
+    var backupFrequency by remember { mutableStateOf(backupPreferences.getString("automatic_backup_frequency", "daily") ?: "daily") }
+    var backupDestination by remember { mutableStateOf(backupPreferences.getString("automatic_backup_destination", "device") ?: "device") }
+    var backupRetention by remember { mutableIntStateOf(backupPreferences.getInt("automatic_backup_retention", 30)) }
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(Page),
         contentPadding = PaddingValues(16.dp),
@@ -2619,6 +2655,63 @@ private fun BackupSecurityScreen(
         item {
             Text("Backup & Export", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
             Text("Keep a safe copy of your financial records", color = Muted, fontSize = 13.sp)
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Autorenew, null, tint = IncomeGreen, modifier = Modifier.size(26.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Automatic Backup", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("Configure a recurring backup schedule", color = Muted, fontSize = 12.sp)
+                        }
+                        Switch(checked = automaticBackup, onCheckedChange = {
+                            automaticBackup = it
+                            backupPreferences.edit().putBoolean("automatic_backup_enabled", it).apply()
+                        })
+                    }
+                    Text("Frequency", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        listOf("daily" to "Daily", "weekly" to "Weekly", "monthly" to "Monthly").forEach { (value, label) ->
+                            val selected = backupFrequency == value
+                            Surface(onClick = { backupFrequency = value; backupPreferences.edit().putString("automatic_backup_frequency", value).apply() },
+                                color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
+                                border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
+                                Text(label, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
+                                    color = if (selected) Color.White else Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                    Text("Destination", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("device" to "Device", "drive" to "Google Drive").forEach { (value, label) ->
+                            val selected = backupDestination == value
+                            Surface(onClick = { backupDestination = value; backupPreferences.edit().putString("automatic_backup_destination", value).apply() },
+                                color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
+                                border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
+                                Text(label, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
+                                    color = if (selected) Color.White else Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                    Text("Keep recent backups", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(7, 30, 90).forEach { count ->
+                            val selected = backupRetention == count
+                            Surface(onClick = { backupRetention = count; backupPreferences.edit().putInt("automatic_backup_retention", count).apply() },
+                                color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
+                                border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
+                                Text("$count files", modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    color = if (selected) Color.White else Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                    Text(if (!automaticBackup) "Automatic backup is off." else "Enabled: ${backupFrequency} · ${if (backupDestination == "device") "Local device" else "Google Drive"} · Keep ${backupRetention} backups",
+                        color = Muted, fontSize = 11.sp)
+                    Text("Schedule settings are saved; background file creation must be handled by the backup worker.", color = Muted, fontSize = 11.sp)
+                }
+            }
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
@@ -2931,6 +3024,9 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         if (count >= 1200 && remaining > 0.0) estimateValid = false
     }
     var selectedSection by remember(loan.lender) { mutableStateOf("Schedule") }
+    var selectedScheduleYear by remember(loan.lender) { mutableIntStateOf(java.time.LocalDate.now().year) }
+    val scheduleYears = (0 until scheduleMonths).mapNotNull { firstDueDate?.plusMonths(it.toLong())?.year }.distinct().sorted()
+    if (scheduleYears.isNotEmpty() && selectedScheduleYear !in scheduleYears) selectedScheduleYear = scheduleYears.first()
     var bankEmiAmount by remember(loan.lender) { mutableStateOf("") }
     var bankEmiDate by remember(loan.lender) { mutableStateOf("") }
     var bankCheckAttempted by remember(loan.lender) { mutableStateOf(false) }
@@ -3091,6 +3187,22 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     }
                 }
             }
+            if (selectedSection == "Schedule" && scheduleYears.isNotEmpty()) item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("EMI schedule by year", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        scheduleYears.forEach { year ->
+                            val selectedYear = selectedScheduleYear == year
+                            Surface(onClick = { selectedScheduleYear = year }, color = if (selectedYear) forest else MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(14.dp),
+                                border = if (selectedYear) null else androidx.compose.foundation.BorderStroke(1.dp, forest.copy(alpha = .25f))) {
+                                Text(year.toString(), modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp),
+                                    color = if (selectedYear) Color.White else Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
             if (selectedSection == "Bank Verify") {
                 item {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
@@ -3178,7 +3290,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                             }
                         }
                     }
-                } else items(schedule.indices.toList()) { index ->
+                } else items(schedule.indices.toList().filter { index -> firstDueDate?.plusMonths(index.toLong())?.year == selectedScheduleYear }) { index ->
                 val (interest, principalPart, closingBalance) = schedule[index]
                 val installmentDate = firstDueDate?.plusMonths(index.toLong())
                 val installmentLabel = installmentDate?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
@@ -3186,19 +3298,20 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 val installmentLabelOriginal = installmentLabel
                 val displayInstallmentLabel = schedulePrefs.getString("emi_rescheduled_${loan.lender}_${installmentLabelOriginal}", installmentLabelOriginal) ?: installmentLabelOriginal
                 val savedInstallmentStatus = schedulePrefs.getString("emi_status_${loan.lender}_${installmentLabelOriginal}", null)
+                val installmentAmount = schedulePrefs.getLong("emi_amount_${loan.lender}_${installmentLabelOriginal}", loan.emi)
                 val paid = index < loan.paymentsMade || savedInstallmentStatus == "Paid"
                 val statusDate = parseScheduleDate(displayInstallmentLabel) ?: installmentDate
                 val overdue = !paid && statusDate != null && statusDate.isBefore(java.time.LocalDate.now())
                 val installmentStatus = if (paid) "Paid" else if (overdue) "Overdue" else "Upcoming"
                 val installmentStatusColor = if (paid) Color(0xFF0E7490) else if (overdue) Color(0xFFEF4444) else upcomingAmber
                 val installmentStatusTint = if (paid) Color(0xFFCCFBF1) else if (overdue) Color(0xFFFFE4E6) else upcomingTint
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress(installmentLabelOriginal, loan.emi, installmentStatus) }, onLongClick = { onEmiLongPress(installmentLabelOriginal, loan.emi, installmentStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress(installmentLabelOriginal, installmentAmount, installmentStatus) }, onLongClick = { onEmiLongPress(installmentLabelOriginal, loan.emi, installmentStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(displayInstallmentLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
                         Text("Principal ${Money.format(principalPart)}", color = Muted, fontSize = 9.sp)
                     }
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(Money.format(loan.emi), color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(Money.format(installmentAmount), color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         Text("Int. ${Money.format(interest)}", color = Muted, fontSize = 9.sp)
                     }
                     Box(Modifier.weight(.85f), contentAlignment = Alignment.CenterEnd) {
