@@ -3305,7 +3305,9 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             require(document.numberOfPages in 1..300) { "The PDF has an unsupported page count." }
                             PDFTextStripper().apply { setSortByPosition(true) }.getText(document)
                         }
-                        if (extracted.trim().length < 40) {
+                        val extractedLabelCount = Regex("(?i)\\b(?:loan\\s+amount|principal\\s+amount|amount\\s+of\\s+loan|emi|equated\\s+monthly|interest\\s+rate|tenure|loan\\s+term|borrower|applicant|repayment|sanctioned\\s+amount|agreement\\s+number)\\b").findAll(extracted).count()
+                        // A scanned PDF may still contain a short text layer with a logo or page footer.
+                        if (extracted.trim().length < 40 || extractedLabelCount < 2) {
                             val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
                                 ?: throw IllegalArgumentException("Could not render this PDF for OCR.")
                             descriptor.use { pfd ->
@@ -3323,7 +3325,9 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                                 bitmap.recycle()
                                             }
                                         }
-                                        extracted = ocrText.toString()
+                                        val recognizedText = ocrText.toString()
+                                        // Combine OCR and selectable text because lender PDFs may mix scanned tables and text headings.
+                                        extracted = listOf(extracted, recognizedText).filter { it.isNotBlank() }.joinToString("\\n")
                                     } finally { recognizer.close() }
                                 }
                             }
@@ -3421,24 +3425,41 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             ?.let { fields.put("emi", it.substringBefore(".")) }
                         val rateLabel = "(?:annual\\s+)?(?:interest\\s+rate(?:\\s+per\\s+annum)?|fixed\\s+rate\\s+of\\s+interest|rate\\s+of\\s+interest|roi)"
                         (captureLabeled(rateLabel) ?: captureLabeledNearby(rateLabel))?.let { fields.put("rate", it) }
-                        val tenureLabel = "(?:(?:total|loan)\\s+)*(?:tenure|term)(?:\\s+in\\s+months?)?"
-                        (captureLabeled(tenureLabel) ?: captureLabeledNearby(tenureLabel) ?: aprTenure ?: scheduleTenure)?.let { fields.put("totalPayments", it) }
+                        val tenureLabel = "(?:(?:total|loan|repayment)\\s+)*(?:tenure|term|period|duration|tenor)(?:\\s+in\\s+(?:months?|years?))?"
+                        fun captureTenureMonths(): String? {
+                            val labelRegex = Regex(tenureLabel, RegexOption.IGNORE_CASE)
+                            val valueRegex = Regex("(?:^|\\s)([0-9]{1,3})\\s*(years?|yrs?)(?:\\s+([0-9]{1,2})\\s*(months?|mos?))?|(?:^|\\s)([0-9]{1,3})\\s*(months?|mos?)", RegexOption.IGNORE_CASE)
+                            for (index in extractedLines.indices) {
+                                val labelMatch = labelRegex.find(extractedLines[index]) ?: continue
+                                val after = extractedLines[index].substring(labelMatch.range.last + 1).trim().trimStart(':', '-', ' ')
+                                val inline = valueRegex.find(after)
+                                val adjacent = if (inline == null) extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } else null
+                                val match = inline ?: adjacent?.let { valueRegex.find(it) } ?: continue
+                                val years = match.groupValues.getOrNull(1)?.takeIf { it.isNotBlank() }?.toIntOrNull()
+                                if (years != null) {
+                                    val extraMonths = match.groupValues.getOrNull(3)?.toIntOrNull() ?: 0
+                                    return (years * 12 + extraMonths).takeIf { it > 0 }?.toString()
+                                }
+                                val months = match.groupValues.getOrNull(5)?.takeIf { it.isNotBlank() }?.toIntOrNull()
+                                if (months != null) return months.takeIf { it > 0 }?.toString()
+                            }
+                            return null
+                        }
+                        (captureTenureMonths() ?: captureLabeled(tenureLabel) ?: captureLabeledNearby(tenureLabel) ?: aprTenure ?: scheduleTenure)?.let { fields.put("totalPayments", it) }
                             ?: captureLabeled("(?:total\\s+number\\s+of\\s+)?(?:emi|installments?|instalments?)(?:\\s+(?:count|tenure|months?))?")?.let { fields.put("totalPayments", it) }
                         captureLabeled("(?:number\\s+of\\s+)?(?:emi|installments?|instalments?)\\s+(?:paid|completed)")?.let { fields.put("paymentsMade", it) }
                         captureLabeled("(?:(?:current|total)\\s+)?(?:outstanding\\s+(?:principal|balance|amount)?|principal\\s+outstanding)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
-                        val principalLabel = "(?:(?:sanctioned|approved|total)\\s+)?(?:loan\\s+amount|amount\\s+of\\s+loan|principal\\s+amount|loan\\s+principal|amount\\s+financed)"
+                        val principalLabel = "(?:(?:sanctioned|approved|total|original)\\s+)?(?:loan\\s+amount|amount\\s+of\\s+loan|principal\\s+amount|loan\\s+principal|amount\\s+financed|sanctioned\\s+amount|amount\\s+sanctioned|approved\\s+amount|credit\\s+facility\\s+amount)"
                         (captureLabeled(principalLabel) ?: captureLabeledNearby(principalLabel))?.let { fields.put("principal", it.substringBefore(".")) }
                         captureAnywhere("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
                         (captureAnywhere("(?:repayment|first\\s*(?:emi|installment|instalment)|emi)\\s*(?:start|commencement|starting)?\\s*date\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z]{3,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})")
                             ?: aprStartDate
                             ?: captureAnywhere("commencement\\s+of\\s+repayments?[^\\n]{0,250}?([0-9]{4}-[0-9]{2}-[0-9]{2})"))?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
-                        captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?borrower|borrower(?:\\s+name)?|customer(?:\\s+name)?|applicant(?:\\s+name)?)")?.let { fields.put("borrowerName", it) }
+                        captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?borrower|borrower(?:'s)?(?:\\s+(?:full\\s+)?name)?|customer(?:\\s+(?:full\\s+)?name)?|applicant(?:\\s+(?:full\\s+)?name)?|name\\s+of\\s+(?:the\\s+)?applicant)")?.let { fields.put("borrowerName", it) }
                         captureAnywhere("(?:agreement|contract)\\s*(?:number|no\\.?|#)\\s*[:\\-]?\\s*([A-Z0-9/-]{4,40})")?.let { fields.put("agreementNumber", it) }
-                        Regex("(?im)^\\s*(?:lender|bank|financial institution)\\s*[:\\-]\\s*(.{2,60})$").find(extracted)
-                            ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
-                            ?.let { fields.put("lender", it) }
-                            ?: Regex("(?m)^\\s*([A-Z][A-Z &.-]{3,50}\\b(?:BANK|FINANCE|FINANCIAL))\\s*$").find(extracted)
-                                ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }?.let { fields.put("lender", it) }
+                        (captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?(?:lender|regulated\\s+entity|bank|financial\\s+institution)|(?:lender|bank|nbfc|financial\\s+institution)\\s+name|lender|bank|financial\\s+institution|nbfc)")
+                            ?: Regex("(?im)^\\s*(?:lender|bank|financial institution|name of (?:the )?regulated entity)\\s*[:\\-]\\s*(.{2,80})$").find(extracted)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+                            ?: Regex("(?m)^\\s*([A-Z][A-Z &.-]{3,50}\\b(?:BANK|FINANCE|FINANCIAL|LIMITED|LTD\\.?))\\s*$").find(extracted)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() })?.let { fields.put("lender", it) }
                         fields
                     }
                 }
