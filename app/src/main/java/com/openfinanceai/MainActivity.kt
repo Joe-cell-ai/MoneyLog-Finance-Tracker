@@ -771,10 +771,20 @@ private fun FinanceApp() {
                             if (fullPayment) prefs.edit().putString("emi_status_${loan.lender}_${emiDate}", "Paid").apply()
                             val firstUnpaidDate = runCatching {
                                 val raw = prefs.getString("bank_schedule_${loan.lender}", null)
-                                if (!raw.isNullOrBlank()) { val rows = JSONArray(raw); (0 until rows.length()).map { rows.getJSONObject(it).getString("date") }.firstOrNull { prefs.getString("emi_status_${loan.lender}_${it}", null) != "Paid" } } else null
+                                val installmentDates = if (!raw.isNullOrBlank()) {
+                                    val rows = JSONArray(raw)
+                                    (0 until rows.length()).map { rows.getJSONObject(it).getString("date") }
+                                } else {
+                                    val first = parseScheduleDate(loan.due) ?: nextLoanDueDate(loan.due)
+                                    val count = if (loan.totalPayments > 0L) loan.totalPayments.coerceIn(1L, 600L).toInt() else 60
+                                    (0 until count).mapNotNull { i -> first?.plusMonths(i.toLong())?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)) }
+                                }
+                                installmentDates.firstOrNull { prefs.getString("emi_status_${loan.lender}_${it}", null) != "Paid" }
                             }.getOrNull()
-                            val sequentialPayment = fullPayment && (firstUnpaidDate == null || firstUnpaidDate == emiDate)
-                            loans = loans.map { existing -> if (existing.lender.equals(loan.lender, true)) existing.copy(balance = (existing.balance - amount).coerceAtLeast(0L), paymentsMade = if (sequentialPayment) existing.paymentsMade + 1 else existing.paymentsMade) else existing }
+                            val sequentialPayment = fullPayment && firstUnpaidDate == emiDate
+                            val monthlyInterest = kotlin.math.round(loan.balance.toDouble() * loan.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
+                            val principalReduction = (amount - monthlyInterest).coerceAtLeast(0L).coerceAtMost(loan.balance)
+                            loans = loans.map { existing -> if (existing.lender.equals(loan.lender, true)) existing.copy(balance = (existing.balance - principalReduction).coerceAtLeast(0L), paymentsMade = if (sequentialPayment) existing.paymentsMade + 1 else existing.paymentsMade) else existing }
                             saveLoans(context, loans)
                         } else if (isLoanReceipt && loan != null) {
                             loans = loans.map { existing -> if (existing.lender.equals(loan.lender, true)) { if (existing.balance == 0L) existing.copy(balance = amount, originalPrincipal = maxOf(existing.originalPrincipal, amount)) else existing.copy(balance = existing.balance + amount, originalPrincipal = existing.originalPrincipal + amount) } else existing }
