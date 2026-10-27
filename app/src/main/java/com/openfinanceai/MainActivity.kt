@@ -4290,6 +4290,49 @@ private fun AddTransactionDialog(
         )
     }
 
+    if (showInlineAddLoan) {
+        AlertDialog(
+            onDismissRequest = { showInlineAddLoan = false },
+            title = { Text("Add a new loan") },
+            text = {
+                Column(Modifier.fillMaxWidth().heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text("Create the loan here, then link this transaction to it.", color = Muted, fontSize = 12.sp)
+                    OutlinedTextField(newLoanLender, { newLoanLender = it; newLoanError = "" }, label = { Text("Bank / lender name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(newLoanEmi, { newLoanEmi = it.filter(Char::isDigit); newLoanError = "" }, label = { Text("Monthly EMI (₹)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(newLoanRate, { newLoanRate = it.filter { c -> c.isDigit() || c == '.' }; newLoanError = "" }, label = { Text("Annual interest rate (%)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(newLoanTenure, { newLoanTenure = it.filter(Char::isDigit); newLoanError = "" }, label = { Text("Tenure (months)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(newLoanDue, { newLoanDue = it; newLoanError = "" }, label = { Text("First EMI date (YYYY-MM-DD)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    if (newLoanError.isNotBlank()) Text(newLoanError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val parsedEmi = newLoanEmi.toLongOrNull()
+                    val parsedRate = newLoanRate.toDoubleOrNull()
+                    val parsedTenure = newLoanTenure.toLongOrNull()
+                    val validDue = runCatching { java.time.LocalDate.parse(newLoanDue); true }.getOrDefault(false)
+                    if (newLoanLender.isBlank() || loans.any { it.lender.equals(newLoanLender.trim(), true) }) newLoanError = "Enter a lender name that is not already in your loan list."
+                    else if (parsedEmi == null || parsedEmi <= 0L || parsedRate == null || parsedRate < 0.0 || parsedTenure == null || parsedTenure !in 1L..600L || !validDue) newLoanError = "Check EMI, interest rate, tenure and first EMI date."
+                    else {
+                        val principal = amount.toLongOrNull()?.coerceAtLeast(1L) ?: parsedEmi
+                        val newLoan = Loan(newLoanLender.trim(), 0L, parsedEmi, newLoanDue, parsedRate, principal, 0L, parsedTenure, startDate = newLoanDue)
+                        onAddLoan(newLoan)
+                        selectedLoanLender = newLoan.lender
+                        selectedEmiDate = ""
+                        if (transactionKind == "Expense" || transactionKind == "Income") {
+                            transactionKind = "Loan received"
+                            isIncome = true
+                            category = "Loan received"
+                            if (title.isBlank()) title = "Loan received"
+                        }
+                        showInlineAddLoan = false
+                    }
+                }) { Text("Add loan") }
+            },
+            dismissButton = { TextButton(onClick = { showInlineAddLoan = false }) { Text("Cancel") } }
+        )
+    }
+
 }
 
 
