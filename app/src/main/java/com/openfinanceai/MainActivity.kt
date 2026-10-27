@@ -553,7 +553,7 @@ private fun FinanceApp() {
                         onPreferenceChanged = { settingsRevision++ }
                     )
                     "About" -> AboutSettingsScreen()
-                    "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: EmptyLoansScreen { tab = "Add loan" }
+                    "Loan details" -> selectedLoan?.let { selected -> val loan = loans.firstOrNull { it.lender.equals(selected.lender, true) } ?: selected; LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: EmptyLoansScreen { tab = "Add loan" }
                     "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi, totalPayments, borrowerName, agreementNumber, ignoredLoanNumber, startDate ->
                         val newLoan = Loan(lender, balance, emi, startDate.ifBlank { "Set due date" }, rate, originalPrincipal, paymentsMade, totalPayments, borrowerName, agreementNumber, "", startDate)
                         loans = listOf(newLoan) + loans
@@ -4087,7 +4087,7 @@ private fun AddTransactionDialog(
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.fillMaxWidth().heightIn(max = 540.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Card(
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
