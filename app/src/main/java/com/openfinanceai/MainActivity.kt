@@ -137,7 +137,7 @@ private fun loanAccent(lender: String): Color = when {
 private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
 
 
-private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "")
+private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "")
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
@@ -330,7 +330,8 @@ private fun FinanceApp() {
                 .put("title", t.title).put("category", t.category).put("date", t.date)
                 .put("amount", t.amount).put("income", t.income).put("source", t.source)
                 .put("notificationKey", t.notificationKey).put("captureStatus", t.captureStatus)
-                .put("paymentMethod", t.paymentMethod).put("notes", t.notes).put("tag", t.tag)) }
+                .put("paymentMethod", t.paymentMethod).put("notes", t.notes).put("tag", t.tag)
+                .put("loanLender", t.loanLender).put("emiInstallmentDate", t.emiInstallmentDate).put("transactionKind", t.transactionKind)) }
             val loanArray = JSONArray()
             loans.forEach { l -> loanArray.put(JSONObject().put("lender", l.lender).put("balance", l.balance)
                 .put("emi", l.emi).put("due", l.due).put("annualRate", l.annualRate).put("originalPrincipal", l.originalPrincipal).put("paymentsMade", l.paymentsMade).put("totalPayments", l.totalPayments)) }
@@ -370,7 +371,7 @@ private fun FinanceApp() {
                 (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
                     Transaction(j.getString("title"), j.optString("category", "Other"), j.optString("date", "Today"),
                         j.getLong("amount"), j.optBoolean("income"), j.optString("source"), j.optString("notificationKey"),
-                        j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""))
+                        j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""), j.optString("loanLender", ""), j.optString("emiInstallmentDate", ""), j.optString("transactionKind", ""))
                 } }
             }
             val restoredLoans = root.optJSONArray("loans")?.let { a ->
@@ -552,7 +553,7 @@ private fun FinanceApp() {
                         onPreferenceChanged = { settingsRevision++ }
                     )
                     "About" -> AboutSettingsScreen()
-                    "Loan details" -> selectedLoan?.let { loan -> LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: EmptyLoansScreen { tab = "Add loan" }
+                    "Loan details" -> selectedLoan?.let { selected -> val loan = loans.firstOrNull { it.lender.equals(selected.lender, true) } ?: selected; LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: EmptyLoansScreen { tab = "Add loan" }
                     "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi, totalPayments, borrowerName, agreementNumber, ignoredLoanNumber, startDate ->
                         val newLoan = Loan(lender, balance, emi, startDate.ifBlank { "Set due date" }, rate, originalPrincipal, paymentsMade, totalPayments, borrowerName, agreementNumber, "", startDate)
                         loans = listOf(newLoan) + loans
@@ -748,8 +749,49 @@ private fun FinanceApp() {
                     onDismiss = { showAdd = false },
                     initialIncome = showAddAsIncome,
                     categoryRefreshToken = categoryRefreshToken,
-                    onSave = { title, amount, isIncome, category, date, paymentMethod, notes, tag ->
-                        transactions = listOf(Transaction(title, category, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes, tag = tag)) + transactions
+                    loans = loans,
+                    onAddLoan = { newLoan ->
+                        loans = listOf(newLoan) + loans
+                        saveLoans(context, loans)
+                    },
+                    onSave = { title, amount, kind, category, date, paymentMethod, notes, tag, loanLender, emiDate ->
+                        val isLoanReceipt = kind == "Loan received"
+                        val isLoanRepayment = kind == "Loan repayment / EMI"
+                        val isIncome = kind == "Income" || isLoanReceipt
+                        val loan = loans.firstOrNull { it.lender.equals(loanLender, ignoreCase = true) }
+                        if (isLoanRepayment && loan != null) {
+                            val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+                            val importedAmount = runCatching {
+                                val raw = prefs.getString("bank_schedule_${loan.lender}", null) ?: return@runCatching loan.emi
+                                val rows = JSONArray(raw)
+                                (0 until rows.length()).firstNotNullOfOrNull { i -> rows.getJSONObject(i).takeIf { it.optString("date") == emiDate }?.optLong("amount") } ?: loan.emi
+                            }.getOrDefault(loan.emi)
+                            val scheduledAmount = prefs.getLong("emi_amount_${loan.lender}_${emiDate}", importedAmount)
+                            val fullPayment = amount >= scheduledAmount
+                            if (fullPayment) prefs.edit().putString("emi_status_${loan.lender}_${emiDate}", "Paid").apply()
+                            val firstUnpaidDate = runCatching {
+                                val raw = prefs.getString("bank_schedule_${loan.lender}", null)
+                                val installmentDates = if (!raw.isNullOrBlank()) {
+                                    val rows = JSONArray(raw)
+                                    (0 until rows.length()).map { rows.getJSONObject(it).getString("date") }
+                                } else {
+                                    val first = parseScheduleDate(loan.due) ?: nextLoanDueDate(loan.due)
+                                    val count = if (loan.totalPayments > 0L) loan.totalPayments.coerceIn(1L, 600L).toInt() else 60
+                                    (0 until count).mapNotNull { i -> first?.plusMonths(i.toLong())?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)) }
+                                }
+                                installmentDates.firstOrNull { prefs.getString("emi_status_${loan.lender}_${it}", null) != "Paid" }
+                            }.getOrNull()
+                            val sequentialPayment = fullPayment && firstUnpaidDate == emiDate
+                            val monthlyInterest = kotlin.math.round(loan.balance.toDouble() * loan.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
+                            val principalReduction = (amount - monthlyInterest).coerceAtLeast(0L).coerceAtMost(loan.balance)
+                            loans = loans.map { existing -> if (existing.lender.equals(loan.lender, true)) existing.copy(balance = (existing.balance - principalReduction).coerceAtLeast(0L), paymentsMade = if (sequentialPayment) existing.paymentsMade + 1 else existing.paymentsMade) else existing }
+                            saveLoans(context, loans)
+                        } else if (isLoanReceipt && loan != null) {
+                            loans = loans.map { existing -> if (existing.lender.equals(loan.lender, true)) { if (existing.balance == 0L) existing.copy(balance = amount, originalPrincipal = maxOf(existing.originalPrincipal, amount)) else existing.copy(balance = existing.balance + amount, originalPrincipal = existing.originalPrincipal + amount) } else existing }
+                            saveLoans(context, loans)
+                        }
+                        val displayCategory = when (kind) { "Loan received" -> "Loan received"; "Loan repayment / EMI" -> "Loan repayment"; else -> category }
+                        transactions = listOf(Transaction(title, displayCategory, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes, tag = tag, loanLender = loanLender, emiInstallmentDate = emiDate, transactionKind = kind)) + transactions
                         saveTransactions(context, transactions)
                         showAdd = false
                     }
@@ -3930,7 +3972,9 @@ private fun AddTransactionDialog(
     onDismiss: () -> Unit,
     initialIncome: Boolean = false,
     categoryRefreshToken: Int = 0,
-    onSave: (String, Long, Boolean, String, String, String, String, String) -> Unit
+    loans: List<Loan>,
+    onAddLoan: (Loan) -> Unit,
+    onSave: (String, Long, String, String, String, String, String, String, String, String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
@@ -3955,6 +3999,33 @@ private fun AddTransactionDialog(
     val transactionCategoryOptions = (savedCategories + listOf("Salary", "Other income"))
         .distinctBy { it.lowercase(Locale.ROOT) }
     var isIncome by remember { mutableStateOf(initialIncome) }
+    var transactionKind by remember { mutableStateOf(if (initialIncome) "Income" else "Expense") }
+    var selectedLoanLender by remember { mutableStateOf(loans.firstOrNull()?.lender.orEmpty()) }
+    var selectedEmiDate by remember { mutableStateOf("") }
+    var loanMenuExpanded by remember { mutableStateOf(false) }
+    var emiMenuExpanded by remember { mutableStateOf(false) }
+    var showInlineAddLoan by remember { mutableStateOf(false) }
+    var newLoanLender by remember { mutableStateOf("") }
+    var newLoanEmi by remember { mutableStateOf("") }
+    var newLoanRate by remember { mutableStateOf("0") }
+    var newLoanTenure by remember { mutableStateOf("12") }
+    var newLoanDue by remember { mutableStateOf(java.time.LocalDate.now().plusMonths(1).withDayOfMonth(1).toString()) }
+    var newLoanError by remember { mutableStateOf("") }
+    val selectedLoan = loans.firstOrNull { it.lender.equals(selectedLoanLender, ignoreCase = true) }
+    val emiChoices = remember(selectedLoanLender, loans) {
+        val currentLoan = loans.firstOrNull { it.lender.equals(selectedLoanLender, ignoreCase = true) }
+        if (currentLoan == null) emptyList() else runCatching {
+            val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+            val raw = prefs.getString("bank_schedule_${currentLoan.lender}", null)
+            val imported = if (raw.isNullOrBlank()) emptyList() else { val arr = JSONArray(raw); (0 until arr.length()).map { i -> arr.getJSONObject(i).getString("date") to arr.getJSONObject(i).getLong("amount") } }
+            val generated = if (imported.isNotEmpty()) imported else {
+                val first = parseScheduleDate(currentLoan.due) ?: nextLoanDueDate(currentLoan.due)
+                val count = if (currentLoan.totalPayments > 0L) currentLoan.totalPayments.coerceIn(1L, 600L).toInt() else 60
+                (0 until count).mapNotNull { i -> first?.plusMonths(i.toLong())?.let { it.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)) to currentLoan.emi } }
+            }
+            generated.filter { (label, _) -> prefs.getString("emi_status_${currentLoan.lender}_${label}", null) != "Paid" }
+        }.getOrDefault(emptyList())
+    }
     var category by remember {
         mutableStateOf(
             savedCategories.firstOrNull {
@@ -3990,6 +4061,19 @@ private fun AddTransactionDialog(
     var notes by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
 
+    LaunchedEffect(selectedLoanLender, amount, date, emiChoices) {
+        if (emiChoices.isNotEmpty()) {
+            val parsedAmount = amount.toLongOrNull()
+            val transactionDate = runCatching { java.time.LocalDate.parse(date) }.getOrNull()
+            val best = emiChoices.minByOrNull { (label, emiAmount) ->
+                val dueDate = parseScheduleDate(label)
+                val dateDistance = if (dueDate != null && transactionDate != null) kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(transactionDate, dueDate)) else 36500L
+                (if (parsedAmount != null && parsedAmount == emiAmount) 0L else 100000L) + dateDistance
+            }
+            if (selectedEmiDate.isBlank() || emiChoices.none { it.first == selectedEmiDate } || parsedAmount != null || transactionDate != null) selectedEmiDate = best?.first.orEmpty()
+        } else selectedEmiDate = ""
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(28.dp),
@@ -4003,39 +4087,57 @@ private fun AddTransactionDialog(
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.fillMaxWidth().heightIn(max = 540.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Card(
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = !isIncome,
-                        onClick = {
-                            isIncome = false
-                            if (category.equals("Salary", true) || category.equals("Other income", true) || category.equals("Income", true)) {
-                                category = savedCategories.firstOrNull { !it.equals("Salary", true) && !it.equals("Other income", true) && !it.equals("Income", true) } ?: "Other"
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .65f)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("Expense", "Income", "Loan").forEach { option ->
+                        val selected = if (option == "Loan") transactionKind.startsWith("Loan") else transactionKind == option
+                        val accent = when (option) { "Expense" -> ExpenseRed; "Income" -> IncomeGreen; else -> Purple }
+                        Box(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (selected) accent else Color.Transparent).clickable {
+                            transactionKind = option
+                            isIncome = option == "Income"
+                            if (option == "Expense" && (category.equals("Salary", true) || category.equals("Other income", true) || category.equals("Income", true))) category = "Other"
+                            if (option == "Income" && !category.equals("Salary", true) && !category.equals("Other income", true) && !category.equals("Income", true)) category = "Salary"
+                            if (option == "Loan") { transactionKind = "Loan repayment / EMI"; isIncome = false; title = if (title.isBlank()) "Loan EMI payment" else title; category = "Loan repayment" }
+                        }.padding(vertical = 11.dp), contentAlignment = Alignment.Center) {
+                            Text(option, color = if (selected) Color.White else Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                    }
+                }
+                if (transactionKind.startsWith("Loan")) {
+                    Card(colors = CardDefaults.cardColors(containerColor = loanTint(selectedLoanLender.ifBlank { "Loan" })), shape = RoundedCornerShape(16.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                            Text("LOAN TRANSACTION", color = loanAccent(selectedLoanLender.ifBlank { "Loan" }), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                FilterChip(selected = transactionKind == "Loan received", onClick = { transactionKind = "Loan received"; isIncome = true; category = "Loan received"; if (title.isBlank() || title == "Loan EMI payment") title = "Loan received" }, label = { Text("Loan received") }, modifier = Modifier.weight(1f))
+                                FilterChip(selected = transactionKind == "Loan repayment / EMI", onClick = { transactionKind = "Loan repayment / EMI"; isIncome = false; category = "Loan repayment"; if (title.isBlank() || title == "Loan received") title = "Loan EMI payment" }, label = { Text("Repayment / EMI") }, modifier = Modifier.weight(1f))
                             }
-                        },
-                        label = { Text("Expense", fontWeight = FontWeight.SemiBold) },
-                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ExpenseTint, selectedLabelColor = ExpenseRed),
-                        modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)
-                    )
-                    FilterChip(
-                        selected = isIncome,
-                        onClick = {
-                            isIncome = true
-                            if (!category.equals("Salary", true) && !category.equals("Other income", true) && !category.equals("Income", true)) {
-                                category = savedCategories.firstOrNull { it.equals("Income", true) }
-                                    ?: savedCategories.firstOrNull { it.equals("Salary", true) }
-                                    ?: "Salary"
+                            ExposedDropdownMenuBox(expanded = loanMenuExpanded, onExpandedChange = { loanMenuExpanded = it }) {
+                                OutlinedTextField(value = selectedLoanLender, onValueChange = {}, readOnly = true, modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), label = { Text("Select existing loan") }, placeholder = { Text("Choose a loan") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = loanMenuExpanded) }, singleLine = true, shape = RoundedCornerShape(12.dp))
+                                ExposedDropdownMenu(expanded = loanMenuExpanded, onDismissRequest = { loanMenuExpanded = false }) {
+                                    loans.forEach { loan -> DropdownMenuItem(text = { Column { Text(loan.lender); Text("EMI \${Money.format(loan.emi)} · Balance \${Money.format(loan.balance)}", color = Muted, fontSize = 11.sp) } }, onClick = { selectedLoanLender = loan.lender; loanMenuExpanded = false; selectedEmiDate = "" }) }
+                                }
                             }
-                        },
-                        label = { Text("Income", fontWeight = FontWeight.SemiBold) },
-                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = IncomeTint, selectedLabelColor = IncomeGreen),
-                        modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)
-                    )
+                            OutlinedButton(onClick = { newLoanLender = ""; newLoanEmi = ""; newLoanRate = "0"; newLoanTenure = "12"; newLoanDue = java.time.LocalDate.now().plusMonths(1).withDayOfMonth(1).toString(); newLoanError = ""; showInlineAddLoan = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Add a new loan") }
+                            if (transactionKind == "Loan repayment / EMI") {
+                                ExposedDropdownMenuBox(expanded = emiMenuExpanded, onExpandedChange = { emiMenuExpanded = it }) {
+                                    OutlinedTextField(value = selectedEmiDate, onValueChange = {}, readOnly = true, modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), label = { Text("EMI installment (auto-matched; change if needed)") }, placeholder = { Text("Select installment") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = emiMenuExpanded) }, singleLine = true, shape = RoundedCornerShape(12.dp))
+                                    ExposedDropdownMenu(expanded = emiMenuExpanded, onDismissRequest = { emiMenuExpanded = false }) {
+                                        emiChoices.forEach { (label, scheduledAmount) -> DropdownMenuItem(text = { Column { Text(label); Text("Scheduled \${Money.format(scheduledAmount)}", color = Muted, fontSize = 11.sp) } }, onClick = { selectedEmiDate = label; emiMenuExpanded = false }) }
+                                    }
+                                }
+                                if (selectedLoan != null && selectedEmiDate.isNotBlank()) {
+                                    val expectedAmount = emiChoices.firstOrNull { it.first == selectedEmiDate }?.second ?: selectedLoan.emi
+                                    val enteredAmount = amount.toLongOrNull() ?: 0L
+                                    Text(if (enteredAmount >= expectedAmount) "Full EMI amount covered — this installment can be marked Paid." else "Partial payment: \${Money.format((expectedAmount - enteredAmount).coerceAtLeast(0L))} still due. Status will not change to Paid.", color = if (enteredAmount >= expectedAmount) IncomeGreen else Color(0xFFB45309), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
+                    }
                 }
                 OutlinedTextField(title, { title = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                 OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp), textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
@@ -4122,7 +4224,9 @@ private fun AddTransactionDialog(
                 } else if (!validDate) {
                     error = "Enter the date as YYYY-MM-DD."
                 } else {
-                    onSave(title.trim(), parsed, isIncome, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTag)
+                    if (transactionKind.startsWith("Loan") && selectedLoanLender.isBlank()) error = "Select an existing loan or add a new loan first."
+                    else if (transactionKind == "Loan repayment / EMI" && selectedEmiDate.isBlank()) error = "Select the EMI installment to match this repayment."
+                    else onSave(title.trim(), parsed, transactionKind, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTag, selectedLoanLender, selectedEmiDate)
                 }
             }, colors = ButtonDefaults.buttonColors(containerColor = if (isIncome) IncomeGreen else Green), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save transaction", fontWeight = FontWeight.Bold) }
         },
@@ -4151,6 +4255,92 @@ private fun AddTransactionDialog(
                 }) { Text("Save tag", color = Green) }
             },
             dismissButton = { TextButton(onClick = { showCreateTag = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showInlineAddLoan) {
+        AlertDialog(
+            onDismissRequest = { showInlineAddLoan = false },
+            title = { Text("Add a new loan") },
+            text = {
+                Column(Modifier.fillMaxWidth().heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text("Create the loan here, then link this transaction to it.", color = Muted, fontSize = 12.sp)
+                    OutlinedTextField(newLoanLender, { newLoanLender = it; newLoanError = "" }, label = { Text("Bank / lender name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(newLoanEmi, { newLoanEmi = it.filter(Char::isDigit); newLoanError = "" }, label = { Text("Monthly EMI (₹)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(newLoanRate, { newLoanRate = it.filter { c -> c.isDigit() || c == '.' }; newLoanError = "" }, label = { Text("Annual interest rate (%)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(newLoanTenure, { newLoanTenure = it.filter(Char::isDigit); newLoanError = "" }, label = { Text("Tenure (months)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(newLoanDue, { newLoanDue = it; newLoanError = "" }, label = { Text("First EMI date (YYYY-MM-DD)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    if (newLoanError.isNotBlank()) Text(newLoanError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val parsedEmi = newLoanEmi.toLongOrNull()
+                    val parsedRate = newLoanRate.toDoubleOrNull()
+                    val parsedTenure = newLoanTenure.toLongOrNull()
+                    val validDue = runCatching { java.time.LocalDate.parse(newLoanDue); true }.getOrDefault(false)
+                    if (newLoanLender.isBlank() || loans.any { it.lender.equals(newLoanLender.trim(), true) }) newLoanError = "Enter a lender name that is not already in your loan list."
+                    else if (parsedEmi == null || parsedEmi <= 0L || parsedRate == null || parsedRate < 0.0 || parsedTenure == null || parsedTenure !in 1L..600L || !validDue) newLoanError = "Check EMI, interest rate, tenure and first EMI date."
+                    else {
+                        val principal = amount.toLongOrNull()?.coerceAtLeast(1L) ?: parsedEmi
+                        val newLoan = Loan(newLoanLender.trim(), 0L, parsedEmi, newLoanDue, parsedRate, principal, 0L, parsedTenure, startDate = newLoanDue)
+                        onAddLoan(newLoan)
+                        selectedLoanLender = newLoan.lender
+                        selectedEmiDate = ""
+                        if (transactionKind == "Expense" || transactionKind == "Income") {
+                            transactionKind = "Loan received"
+                            isIncome = true
+                            category = "Loan received"
+                            if (title.isBlank()) title = "Loan received"
+                        }
+                        showInlineAddLoan = false
+                    }
+                }) { Text("Add loan") }
+            },
+            dismissButton = { TextButton(onClick = { showInlineAddLoan = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showInlineAddLoan) {
+        AlertDialog(
+            onDismissRequest = { showInlineAddLoan = false },
+            title = { Text("Add a new loan") },
+            text = {
+                Column(Modifier.fillMaxWidth().heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text("Create the loan here, then link this transaction to it.", color = Muted, fontSize = 12.sp)
+                    OutlinedTextField(newLoanLender, { newLoanLender = it; newLoanError = "" }, label = { Text("Bank / lender name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(newLoanEmi, { newLoanEmi = it.filter(Char::isDigit); newLoanError = "" }, label = { Text("Monthly EMI (₹)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(newLoanRate, { newLoanRate = it.filter { c -> c.isDigit() || c == '.' }; newLoanError = "" }, label = { Text("Annual interest rate (%)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(newLoanTenure, { newLoanTenure = it.filter(Char::isDigit); newLoanError = "" }, label = { Text("Tenure (months)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(newLoanDue, { newLoanDue = it; newLoanError = "" }, label = { Text("First EMI date (YYYY-MM-DD)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    if (newLoanError.isNotBlank()) Text(newLoanError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val parsedEmi = newLoanEmi.toLongOrNull()
+                    val parsedRate = newLoanRate.toDoubleOrNull()
+                    val parsedTenure = newLoanTenure.toLongOrNull()
+                    val validDue = runCatching { java.time.LocalDate.parse(newLoanDue); true }.getOrDefault(false)
+                    if (newLoanLender.isBlank() || loans.any { it.lender.equals(newLoanLender.trim(), true) }) newLoanError = "Enter a lender name that is not already in your loan list."
+                    else if (parsedEmi == null || parsedEmi <= 0L || parsedRate == null || parsedRate < 0.0 || parsedTenure == null || parsedTenure !in 1L..600L || !validDue) newLoanError = "Check EMI, interest rate, tenure and first EMI date."
+                    else {
+                        val principal = amount.toLongOrNull()?.coerceAtLeast(1L) ?: parsedEmi
+                        val newLoan = Loan(newLoanLender.trim(), 0L, parsedEmi, newLoanDue, parsedRate, principal, 0L, parsedTenure, startDate = newLoanDue)
+                        onAddLoan(newLoan)
+                        selectedLoanLender = newLoan.lender
+                        selectedEmiDate = ""
+                        if (transactionKind == "Expense" || transactionKind == "Income") {
+                            transactionKind = "Loan received"
+                            isIncome = true
+                            category = "Loan received"
+                            if (title.isBlank()) title = "Loan received"
+                        }
+                        showInlineAddLoan = false
+                    }
+                }) { Text("Add loan") }
+            },
+            dismissButton = { TextButton(onClick = { showInlineAddLoan = false }) { Text("Cancel") } }
         )
     }
 
@@ -4210,6 +4400,9 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("paymentMethod", transaction.paymentMethod)
             put("notes", transaction.notes)
             put("tag", transaction.tag)
+            put("loanLender", transaction.loanLender)
+            put("emiInstallmentDate", transaction.emiInstallmentDate)
+            put("transactionKind", transaction.transactionKind)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -4233,7 +4426,10 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optString("captureStatus", ""),
             item.optString("paymentMethod", "Not set"),
             item.optString("notes", ""),
-            item.optString("tag", "")
+            item.optString("tag", ""),
+            item.optString("loanLender", ""),
+            item.optString("emiInstallmentDate", ""),
+            item.optString("transactionKind", "")
         )
     }
 }.getOrNull()
