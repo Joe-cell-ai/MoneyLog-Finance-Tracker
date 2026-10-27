@@ -137,7 +137,7 @@ private fun loanAccent(lender: String): Color = when {
 private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
 
 
-private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "")
+private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "")
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
@@ -330,7 +330,8 @@ private fun FinanceApp() {
                 .put("title", t.title).put("category", t.category).put("date", t.date)
                 .put("amount", t.amount).put("income", t.income).put("source", t.source)
                 .put("notificationKey", t.notificationKey).put("captureStatus", t.captureStatus)
-                .put("paymentMethod", t.paymentMethod).put("notes", t.notes).put("tag", t.tag)) }
+                .put("paymentMethod", t.paymentMethod).put("notes", t.notes).put("tag", t.tag)
+                .put("loanLender", t.loanLender).put("emiInstallmentDate", t.emiInstallmentDate).put("transactionKind", t.transactionKind)) }
             val loanArray = JSONArray()
             loans.forEach { l -> loanArray.put(JSONObject().put("lender", l.lender).put("balance", l.balance)
                 .put("emi", l.emi).put("due", l.due).put("annualRate", l.annualRate).put("originalPrincipal", l.originalPrincipal).put("paymentsMade", l.paymentsMade).put("totalPayments", l.totalPayments)) }
@@ -370,7 +371,7 @@ private fun FinanceApp() {
                 (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
                     Transaction(j.getString("title"), j.optString("category", "Other"), j.optString("date", "Today"),
                         j.getLong("amount"), j.optBoolean("income"), j.optString("source"), j.optString("notificationKey"),
-                        j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""))
+                        j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""), j.optString("loanLender", ""), j.optString("emiInstallmentDate", ""), j.optString("transactionKind", ""))
                 } }
             }
             val restoredLoans = root.optJSONArray("loans")?.let { a ->
@@ -3930,7 +3931,9 @@ private fun AddTransactionDialog(
     onDismiss: () -> Unit,
     initialIncome: Boolean = false,
     categoryRefreshToken: Int = 0,
-    onSave: (String, Long, Boolean, String, String, String, String, String) -> Unit
+    loans: List<Loan>,
+    onAddLoan: (Loan) -> Unit,
+    onSave: (String, Long, String, String, String, String, String, String, String, String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
@@ -3955,6 +3958,45 @@ private fun AddTransactionDialog(
     val transactionCategoryOptions = (savedCategories + listOf("Salary", "Other income"))
         .distinctBy { it.lowercase(Locale.ROOT) }
     var isIncome by remember { mutableStateOf(initialIncome) }
+    var transactionKind by remember { mutableStateOf(if (initialIncome) "Income" else "Expense") }
+    var selectedLoanLender by remember { mutableStateOf(loans.firstOrNull()?.lender.orEmpty()) }
+    var selectedEmiDate by remember { mutableStateOf("") }
+    var loanMenuExpanded by remember { mutableStateOf(false) }
+    var emiMenuExpanded by remember { mutableStateOf(false) }
+    var showInlineAddLoan by remember { mutableStateOf(false) }
+    var newLoanLender by remember { mutableStateOf("") }
+    var newLoanEmi by remember { mutableStateOf("") }
+    var newLoanRate by remember { mutableStateOf("0") }
+    var newLoanTenure by remember { mutableStateOf("12") }
+    var newLoanDue by remember { mutableStateOf(java.time.LocalDate.now().plusMonths(1).withDayOfMonth(1).toString()) }
+    var newLoanError by remember { mutableStateOf("") }
+    val selectedLoan = loans.firstOrNull { it.lender.equals(selectedLoanLender, ignoreCase = true) }
+    val emiChoices = remember(selectedLoanLender, loans) {
+        val currentLoan = loans.firstOrNull { it.lender.equals(selectedLoanLender, ignoreCase = true) }
+        if (currentLoan == null) emptyList() else runCatching {
+            val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+            val raw = prefs.getString("bank_schedule_${currentLoan.lender}", null)
+            val imported = if (raw.isNullOrBlank()) emptyList() else { val arr = JSONArray(raw); (0 until arr.length()).map { i -> arr.getJSONObject(i).getString("date") to arr.getJSONObject(i).getLong("amount") } }
+            val generated = if (imported.isNotEmpty()) imported else {
+                val first = parseScheduleDate(currentLoan.due) ?: nextLoanDueDate(currentLoan.due)
+                val count = if (currentLoan.totalPayments > 0L) currentLoan.totalPayments.coerceIn(1L, 600L).toInt() else 60
+                (0 until count).mapNotNull { i -> first?.plusMonths(i.toLong())?.let { it.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)) to currentLoan.emi } }
+            }
+            generated.filter { (label, _) -> prefs.getString("emi_status_${currentLoan.lender}_${label}", null) != "Paid" }
+        }.getOrDefault(emptyList())
+    }
+    LaunchedEffect(selectedLoanLender, amount, date, emiChoices) {
+        if (emiChoices.isNotEmpty()) {
+            val parsedAmount = amount.toLongOrNull()
+            val transactionDate = runCatching { java.time.LocalDate.parse(date) }.getOrNull()
+            val best = emiChoices.minByOrNull { (label, emiAmount) ->
+                val dueDate = parseScheduleDate(label)
+                val dateDistance = if (dueDate != null && transactionDate != null) kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(transactionDate, dueDate)) else 36500L
+                (if (parsedAmount != null && parsedAmount == emiAmount) 0L else 100000L) + dateDistance
+            }
+            if (selectedEmiDate.isBlank() || emiChoices.none { it.first == selectedEmiDate } || parsedAmount != null || transactionDate != null) selectedEmiDate = best?.first.orEmpty()
+        } else selectedEmiDate = ""
+    }
     var category by remember {
         mutableStateOf(
             savedCategories.firstOrNull {
@@ -4210,6 +4252,9 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("paymentMethod", transaction.paymentMethod)
             put("notes", transaction.notes)
             put("tag", transaction.tag)
+            put("loanLender", transaction.loanLender)
+            put("emiInstallmentDate", transaction.emiInstallmentDate)
+            put("transactionKind", transaction.transactionKind)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -4233,7 +4278,10 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optString("captureStatus", ""),
             item.optString("paymentMethod", "Not set"),
             item.optString("notes", ""),
-            item.optString("tag", "")
+            item.optString("tag", ""),
+            item.optString("loanLender", ""),
+            item.optString("emiInstallmentDate", ""),
+            item.optString("transactionKind", "")
         )
     }
 }.getOrNull()
