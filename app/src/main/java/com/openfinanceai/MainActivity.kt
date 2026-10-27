@@ -749,8 +749,39 @@ private fun FinanceApp() {
                     onDismiss = { showAdd = false },
                     initialIncome = showAddAsIncome,
                     categoryRefreshToken = categoryRefreshToken,
-                    onSave = { title, amount, isIncome, category, date, paymentMethod, notes, tag ->
-                        transactions = listOf(Transaction(title, category, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes, tag = tag)) + transactions
+                    loans = loans,
+                    onAddLoan = { newLoan ->
+                        loans = listOf(newLoan) + loans
+                        saveLoans(context, loans)
+                    },
+                    onSave = { title, amount, kind, category, date, paymentMethod, notes, tag, loanLender, emiDate ->
+                        val isLoanReceipt = kind == "Loan received"
+                        val isLoanRepayment = kind == "Loan repayment / EMI"
+                        val isIncome = kind == "Income" || isLoanReceipt
+                        val loan = loans.firstOrNull { it.lender.equals(loanLender, ignoreCase = true) }
+                        if (isLoanRepayment && loan != null) {
+                            val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+                            val importedAmount = runCatching {
+                                val raw = prefs.getString("bank_schedule_${loan.lender}", null) ?: return@runCatching loan.emi
+                                val rows = JSONArray(raw)
+                                (0 until rows.length()).firstNotNullOfOrNull { i -> rows.getJSONObject(i).takeIf { it.optString("date") == emiDate }?.optLong("amount") } ?: loan.emi
+                            }.getOrDefault(loan.emi)
+                            val scheduledAmount = prefs.getLong("emi_amount_${loan.lender}_${emiDate}", importedAmount)
+                            val fullPayment = amount >= scheduledAmount
+                            if (fullPayment) prefs.edit().putString("emi_status_${loan.lender}_${emiDate}", "Paid").apply()
+                            val firstUnpaidDate = runCatching {
+                                val raw = prefs.getString("bank_schedule_${loan.lender}", null)
+                                if (!raw.isNullOrBlank()) { val rows = JSONArray(raw); (0 until rows.length()).map { rows.getJSONObject(it).getString("date") }.firstOrNull { prefs.getString("emi_status_${loan.lender}_${it}", null) != "Paid" } } else null
+                            }.getOrNull()
+                            val sequentialPayment = fullPayment && (firstUnpaidDate == null || firstUnpaidDate == emiDate)
+                            loans = loans.map { existing -> if (existing.lender.equals(loan.lender, true)) existing.copy(balance = (existing.balance - amount).coerceAtLeast(0L), paymentsMade = if (sequentialPayment) existing.paymentsMade + 1 else existing.paymentsMade) else existing }
+                            saveLoans(context, loans)
+                        } else if (isLoanReceipt && loan != null) {
+                            loans = loans.map { existing -> if (existing.lender.equals(loan.lender, true)) { if (existing.balance == 0L) existing.copy(balance = amount, originalPrincipal = maxOf(existing.originalPrincipal, amount)) else existing.copy(balance = existing.balance + amount, originalPrincipal = existing.originalPrincipal + amount) } else existing }
+                            saveLoans(context, loans)
+                        }
+                        val displayCategory = when (kind) { "Loan received" -> "Loan received"; "Loan repayment / EMI" -> "Loan repayment"; else -> category }
+                        transactions = listOf(Transaction(title, displayCategory, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes, tag = tag, loanLender = loanLender, emiInstallmentDate = emiDate, transactionKind = kind)) + transactions
                         saveTransactions(context, transactions)
                         showAdd = false
                     }
