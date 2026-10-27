@@ -52,23 +52,39 @@ jobs:
           ls -lh app/build/outputs/apk/release/app-release.apk
           sha256sum app/build/outputs/apk/release/app-release.apk
       - name: Upload persistently signed APK
+        id: upload_release_apk
         if: success() && env.MONEYLOG_KEYSTORE_BASE64 != '' && env.MONEYLOG_KEYSTORE_PASSWORD != '' && env.MONEYLOG_KEY_ALIAS != '' && env.MONEYLOG_KEY_PASSWORD != ''
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: MoneyLog-android-signed-apk
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
+      - name: Report release artifact upload warning
+        if: steps.upload_release_apk.outcome == 'failure'
+        run: |
+          echo "::warning::Release APK was built, but GitHub Actions could not store the artifact. Check Actions and Packages storage quota."
+          echo "## APK artifact upload warning" >> "$GITHUB_STEP_SUMMARY"
+          echo "The signed release APK built successfully, but GitHub did not store it as an artifact. Check account-level Actions and Packages storage usage; reducing retention does not immediately reset already-accrued monthly usage." >> "$GITHUB_STEP_SUMMARY"
       - name: Report debug APK
         if: success() && (env.MONEYLOG_KEYSTORE_BASE64 == '' || env.MONEYLOG_KEYSTORE_PASSWORD == '' || env.MONEYLOG_KEY_ALIAS == '' || env.MONEYLOG_KEY_PASSWORD == '')
         run: |
           ls -lh app/build/outputs/apk/debug/app-debug.apk
           sha256sum app/build/outputs/apk/debug/app-debug.apk
       - name: Upload debug APK
+        id: upload_debug_apk
         if: success() && (env.MONEYLOG_KEYSTORE_BASE64 == '' || env.MONEYLOG_KEYSTORE_PASSWORD == '' || env.MONEYLOG_KEY_ALIAS == '' || env.MONEYLOG_KEY_PASSWORD == '')
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: MoneyLog-android-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
+      - name: Report debug artifact upload warning
+        if: steps.upload_debug_apk.outcome == 'failure'
+        run: |
+          echo "::warning::Debug APK was built, but GitHub Actions could not store the artifact. Check Actions and Packages storage quota."
+          echo "## APK artifact upload warning" >> "$GITHUB_STEP_SUMMARY"
+          echo "The debug APK built successfully, but GitHub did not store it as an artifact. Check account-level Actions and Packages storage usage; reducing retention does not immediately reset already-accrued monthly usage." >> "$GITHUB_STEP_SUMMARY"
