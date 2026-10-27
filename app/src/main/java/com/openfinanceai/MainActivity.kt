@@ -4082,33 +4082,51 @@ private fun AddTransactionDialog(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = !isIncome,
-                        onClick = {
-                            isIncome = false
-                            if (category.equals("Salary", true) || category.equals("Other income", true) || category.equals("Income", true)) {
-                                category = savedCategories.firstOrNull { !it.equals("Salary", true) && !it.equals("Other income", true) && !it.equals("Income", true) } ?: "Other"
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .65f)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("Expense", "Income", "Loan").forEach { option ->
+                        val selected = if (option == "Loan") transactionKind.startsWith("Loan") else transactionKind == option
+                        val accent = when (option) { "Expense" -> ExpenseRed; "Income" -> IncomeGreen; else -> Purple }
+                        Box(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (selected) accent else Color.Transparent).clickable {
+                            transactionKind = option
+                            isIncome = option == "Income"
+                            if (option == "Expense" && (category.equals("Salary", true) || category.equals("Other income", true) || category.equals("Income", true))) category = "Other"
+                            if (option == "Income" && !category.equals("Salary", true) && !category.equals("Other income", true) && !category.equals("Income", true)) category = "Salary"
+                            if (option == "Loan") { transactionKind = "Loan repayment / EMI"; isIncome = false; title = if (title.isBlank()) "Loan EMI payment" else title; category = "Loan repayment" }
+                        }.padding(vertical = 11.dp), contentAlignment = Alignment.Center) {
+                            Text(option, color = if (selected) Color.White else Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                    }
+                }
+                if (transactionKind.startsWith("Loan")) {
+                    Card(colors = CardDefaults.cardColors(containerColor = loanTint(selectedLoanLender.ifBlank { "Loan" })), shape = RoundedCornerShape(16.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                            Text("LOAN TRANSACTION", color = loanAccent(selectedLoanLender.ifBlank { "Loan" }), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                FilterChip(selected = transactionKind == "Loan received", onClick = { transactionKind = "Loan received"; isIncome = true; category = "Loan received"; if (title.isBlank() || title == "Loan EMI payment") title = "Loan received" }, label = { Text("Loan received") }, modifier = Modifier.weight(1f))
+                                FilterChip(selected = transactionKind == "Loan repayment / EMI", onClick = { transactionKind = "Loan repayment / EMI"; isIncome = false; category = "Loan repayment"; if (title.isBlank() || title == "Loan received") title = "Loan EMI payment" }, label = { Text("Repayment / EMI") }, modifier = Modifier.weight(1f))
                             }
-                        },
-                        label = { Text("Expense", fontWeight = FontWeight.SemiBold) },
-                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ExpenseTint, selectedLabelColor = ExpenseRed),
-                        modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)
-                    )
-                    FilterChip(
-                        selected = isIncome,
-                        onClick = {
-                            isIncome = true
-                            if (!category.equals("Salary", true) && !category.equals("Other income", true) && !category.equals("Income", true)) {
-                                category = savedCategories.firstOrNull { it.equals("Income", true) }
-                                    ?: savedCategories.firstOrNull { it.equals("Salary", true) }
-                                    ?: "Salary"
+                            ExposedDropdownMenuBox(expanded = loanMenuExpanded, onExpandedChange = { loanMenuExpanded = it }) {
+                                OutlinedTextField(value = selectedLoanLender, onValueChange = {}, readOnly = true, modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), label = { Text("Select existing loan") }, placeholder = { Text("Choose a loan") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = loanMenuExpanded) }, singleLine = true, shape = RoundedCornerShape(12.dp))
+                                ExposedDropdownMenu(expanded = loanMenuExpanded, onDismissRequest = { loanMenuExpanded = false }) {
+                                    loans.forEach { loan -> DropdownMenuItem(text = { Column { Text(loan.lender); Text("EMI \${Money.format(loan.emi)} · Balance \${Money.format(loan.balance)}", color = Muted, fontSize = 11.sp) } }, onClick = { selectedLoanLender = loan.lender; loanMenuExpanded = false; selectedEmiDate = "" }) }
+                                }
                             }
-                        },
-                        label = { Text("Income", fontWeight = FontWeight.SemiBold) },
-                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = IncomeTint, selectedLabelColor = IncomeGreen),
-                        modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)
-                    )
+                            OutlinedButton(onClick = { newLoanLender = ""; newLoanEmi = ""; newLoanRate = "0"; newLoanTenure = "12"; newLoanDue = java.time.LocalDate.now().plusMonths(1).withDayOfMonth(1).toString(); newLoanError = ""; showInlineAddLoan = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Add a new loan") }
+                            if (transactionKind == "Loan repayment / EMI") {
+                                ExposedDropdownMenuBox(expanded = emiMenuExpanded, onExpandedChange = { emiMenuExpanded = it }) {
+                                    OutlinedTextField(value = selectedEmiDate, onValueChange = {}, readOnly = true, modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), label = { Text("EMI installment (auto-matched; change if needed)") }, placeholder = { Text("Select installment") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = emiMenuExpanded) }, singleLine = true, shape = RoundedCornerShape(12.dp))
+                                    ExposedDropdownMenu(expanded = emiMenuExpanded, onDismissRequest = { emiMenuExpanded = false }) {
+                                        emiChoices.forEach { (label, scheduledAmount) -> DropdownMenuItem(text = { Column { Text(label); Text("Scheduled \${Money.format(scheduledAmount)}", color = Muted, fontSize = 11.sp) } }, onClick = { selectedEmiDate = label; emiMenuExpanded = false }) }
+                                    }
+                                }
+                                if (selectedLoan != null && selectedEmiDate.isNotBlank()) {
+                                    val expectedAmount = emiChoices.firstOrNull { it.first == selectedEmiDate }?.second ?: selectedLoan.emi
+                                    val enteredAmount = amount.toLongOrNull() ?: 0L
+                                    Text(if (enteredAmount >= expectedAmount) "Full EMI amount covered — this installment can be marked Paid." else "Partial payment: \${Money.format((expectedAmount - enteredAmount).coerceAtLeast(0L))} still due. Status will not change to Paid.", color = if (enteredAmount >= expectedAmount) IncomeGreen else Color(0xFFB45309), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
+                    }
                 }
                 OutlinedTextField(title, { title = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                 OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp), textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
@@ -4195,7 +4213,9 @@ private fun AddTransactionDialog(
                 } else if (!validDate) {
                     error = "Enter the date as YYYY-MM-DD."
                 } else {
-                    onSave(title.trim(), parsed, isIncome, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTag)
+                    if (transactionKind.startsWith("Loan") && selectedLoanLender.isBlank()) error = "Select an existing loan or add a new loan first."
+                    else if (transactionKind == "Loan repayment / EMI" && selectedEmiDate.isBlank()) error = "Select the EMI installment to match this repayment."
+                    else onSave(title.trim(), parsed, transactionKind, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTag, selectedLoanLender, selectedEmiDate)
                 }
             }, colors = ButtonDefaults.buttonColors(containerColor = if (isIncome) IncomeGreen else Green), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save transaction", fontWeight = FontWeight.Bold) }
         },
