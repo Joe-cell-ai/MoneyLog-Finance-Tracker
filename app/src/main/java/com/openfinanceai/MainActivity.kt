@@ -4026,18 +4026,6 @@ private fun AddTransactionDialog(
             generated.filter { (label, _) -> prefs.getString("emi_status_${currentLoan.lender}_${label}", null) != "Paid" }
         }.getOrDefault(emptyList())
     }
-    LaunchedEffect(selectedLoanLender, amount, date, emiChoices) {
-        if (emiChoices.isNotEmpty()) {
-            val parsedAmount = amount.toLongOrNull()
-            val transactionDate = runCatching { java.time.LocalDate.parse(date) }.getOrNull()
-            val best = emiChoices.minByOrNull { (label, emiAmount) ->
-                val dueDate = parseScheduleDate(label)
-                val dateDistance = if (dueDate != null && transactionDate != null) kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(transactionDate, dueDate)) else 36500L
-                (if (parsedAmount != null && parsedAmount == emiAmount) 0L else 100000L) + dateDistance
-            }
-            if (selectedEmiDate.isBlank() || emiChoices.none { it.first == selectedEmiDate } || parsedAmount != null || transactionDate != null) selectedEmiDate = best?.first.orEmpty()
-        } else selectedEmiDate = ""
-    }
     var category by remember {
         mutableStateOf(
             savedCategories.firstOrNull {
@@ -4072,6 +4060,19 @@ private fun AddTransactionDialog(
     var paymentMethod by remember { mutableStateOf("UPI") }
     var notes by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
+
+    LaunchedEffect(selectedLoanLender, amount, date, emiChoices) {
+        if (emiChoices.isNotEmpty()) {
+            val parsedAmount = amount.toLongOrNull()
+            val transactionDate = runCatching { java.time.LocalDate.parse(date) }.getOrNull()
+            val best = emiChoices.minByOrNull { (label, emiAmount) ->
+                val dueDate = parseScheduleDate(label)
+                val dateDistance = if (dueDate != null && transactionDate != null) kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(transactionDate, dueDate)) else 36500L
+                (if (parsedAmount != null && parsedAmount == emiAmount) 0L else 100000L) + dateDistance
+            }
+            if (selectedEmiDate.isBlank() || emiChoices.none { it.first == selectedEmiDate } || parsedAmount != null || transactionDate != null) selectedEmiDate = best?.first.orEmpty()
+        } else selectedEmiDate = ""
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
