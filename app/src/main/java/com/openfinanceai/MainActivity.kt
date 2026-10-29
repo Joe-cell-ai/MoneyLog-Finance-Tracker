@@ -274,9 +274,14 @@ private fun FinanceApp() {
         ).also { saveLoans(context, it) })
     }
 
+    var tabHistory by remember { mutableStateOf(listOf("Home")) }
+    LaunchedEffect(tab) {
+        if (tabHistory.lastOrNull() != tab) tabHistory = tabHistory + tab
+    }
     BackHandler(
         enabled = tab != "Home" || showAdd || showAddAsIncome || transactionForActions != null ||
-            transactionToEdit != null || transactionTips != null || loanForActions != null || loanToEdit != null || emiAmountEdit != null
+            transactionToEdit != null || transactionTips != null || loanForActions != null || loanToEdit != null || emiAmountEdit != null ||
+            showEmiReschedule != null || emiQuickAction != null
     ) {
         when {
             loanToEdit != null -> loanToEdit = null
@@ -290,7 +295,11 @@ private fun FinanceApp() {
             showAddAsIncome -> showAddAsIncome = false
             showAdd -> showAdd = false
             tab == "Loan details" -> { tab = "Loans"; selectedLoan = null }
-            tab != "Home" -> tab = "Home"
+            tab != "Home" -> {
+                val previous = tabHistory.dropLast(1).lastOrNull() ?: "Home"
+                tabHistory = tabHistory.dropLast(1).ifEmpty { listOf("Home") }
+                tab = previous
+            }
         }
     }
 
@@ -1741,8 +1750,10 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
             val tint = loanTint(loan.lender)
             val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
             val dueDate = nextLoanDueDate(loan.due)
-            val isUpcoming = dueDate != null && !dueDate.isBefore(java.time.LocalDate.now()) &&
-                java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), dueDate) <= 7
+            val today = java.time.LocalDate.now()
+            val isOverdue = dueDate != null && dueDate.isBefore(today)
+            val isUpcoming = dueDate != null && !dueDate.isBefore(today) &&
+                java.time.temporal.ChronoUnit.DAYS.between(today, dueDate) <= 7
             Card(
                 modifier = Modifier.fillMaxWidth().combinedClickable(
                     onClick = { onDetails(loan) },
@@ -1771,12 +1782,13 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
                             Text(Money.format(loan.emi), color = navy, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                             Text("/month", color = slate, fontSize = 11.sp)
                         }
-                        val statusColor = if (isUpcoming) orange else green
-                        val statusTint = if (isUpcoming) orangeTint else greenTint
+                        val statusColor = when { isOverdue -> Color(0xFFDC2626); isUpcoming -> orange; else -> green }
+                        val statusTint = when { isOverdue -> Color(0xFFFEE2E2); isUpcoming -> orangeTint; else -> greenTint }
+                        val statusLabel = when { isOverdue -> "Overdue"; isUpcoming -> "Upcoming"; else -> "On Track" }
                         Box(Modifier.clip(RoundedCornerShape(50)).background(statusTint).padding(horizontal = 10.dp, vertical = 7.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Icon(if (isUpcoming) Icons.Default.Schedule else Icons.Default.CheckCircle, null, tint = statusColor, modifier = Modifier.size(14.dp))
-                                Text(if (isUpcoming) "Upcoming" else "On Track", color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Icon(when { isOverdue -> Icons.Default.Warning; isUpcoming -> Icons.Default.Schedule; else -> Icons.Default.CheckCircle }, null, tint = statusColor, modifier = Modifier.size(14.dp))
+                                Text(statusLabel, color = statusColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -3939,21 +3951,34 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
     var error by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit loan / EMI") },
+        containerColor = Color(0xFFF8FAFF),
+        shape = RoundedCornerShape(28.dp),
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Edit Loan / EMI", color = Color(0xFF14284B), fontWeight = FontWeight.Bold)
+                Text("Update your loan details and EMI information", color = Color(0xFF64748B), fontSize = 12.sp)
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                OutlinedTextField(lender, { lender = it }, label = { Text("Lender") }, singleLine = true)
-                OutlinedTextField(originalPrincipal, { originalPrincipal = it.filter(Char::isDigit) }, label = { Text("Original principal (₹)") }, singleLine = true)
-                OutlinedTextField(balance, { balance = it.filter(Char::isDigit) }, label = { Text("Outstanding balance (₹)") }, singleLine = true)
-                OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit) }, label = { Text("EMI payments made (count)") }, singleLine = true)
-                OutlinedTextField(emi, { emi = it.filter(Char::isDigit) }, label = { Text("Monthly EMI (₹)") }, singleLine = true)
-                OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Annual interest (%)") }, singleLine = true)
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(lender, { lender = it }, label = { Text("Lender") }, leadingIcon = { Icon(Icons.Default.AccountBalance, null, tint = Blue) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(originalPrincipal, { originalPrincipal = it.filter(Char::isDigit) }, label = { Text("Original principal (₹)") }, leadingIcon = { Icon(Icons.Default.CurrencyRupee, null, tint = Blue) }, singleLine = true, modifier = Modifier.weight(1f), shape = RoundedCornerShape(15.dp))
+                    OutlinedTextField(balance, { balance = it.filter(Char::isDigit) }, label = { Text("Outstanding balance (₹)") }, leadingIcon = { Icon(Icons.Default.AccountBalanceWallet, null, tint = Blue) }, singleLine = true, modifier = Modifier.weight(1f), shape = RoundedCornerShape(15.dp))
+                }
+                OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit) }, label = { Text("EMI payments made (count)") }, leadingIcon = { Icon(Icons.Default.EventAvailable, null, tint = Blue) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp))
+                OutlinedTextField(emi, { emi = it.filter(Char::isDigit) }, label = { Text("Monthly EMI (₹)") }, leadingIcon = { Icon(Icons.Default.CurrencyRupee, null, tint = Blue) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp))
+                OutlinedTextField(rate, { rate = it.filter { ch -> ch.isDigit() || ch == '.' } }, label = { Text("Annual interest (%)") }, leadingIcon = { Icon(Icons.Default.Percent, null, tint = Blue) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp))
                 LoanDateField("Next due date", due, { due = it })
-                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+                Text("Your outstanding balance will be saved as entered; changing the EMI or rate will not silently recalculate it.", color = Color(0xFF526783), fontSize = 11.sp, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFEAF4FF)).padding(12.dp))
+                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
         },
         confirmButton = {
-            TextButton(onClick = {
+            Button(onClick = {
                 val parsedBalance = balance.toLongOrNull()
                 val parsedPrincipal = originalPrincipal.toLongOrNull()
                 val parsedPayments = paymentsMade.toLongOrNull()
@@ -3961,9 +3986,9 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onSave: (Loan) -> 
                 val parsedRate = rate.toDoubleOrNull()
                 if (lender.isBlank() || parsedBalance == null || parsedBalance < 0L || parsedPrincipal == null || parsedPrincipal <= 0L || parsedBalance > parsedPrincipal || parsedPayments == null || parsedPayments < 0L || parsedEmi == null || parsedEmi <= 0L || parsedRate == null || parsedRate < 0.0) error = "Check lender, principal, outstanding balance, payment count, EMI and rate."
                 else onSave(loan.copy(lender = lender.trim(), balance = parsedBalance, originalPrincipal = parsedPrincipal, paymentsMade = parsedPayments, emi = parsedEmi, annualRate = parsedRate, due = due.ifBlank { "Not set" }, startDate = due.takeIf { it.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) } ?: loan.startDate))
-            }) { Text("Save changes") }
+            }, shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Blue), modifier = Modifier.height(48.dp)) { Text("Save changes", fontWeight = FontWeight.SemiBold) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(15.dp), modifier = Modifier.height(48.dp)) { Text("Cancel") } }
     )
 }
 
