@@ -125,6 +125,94 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
 }
 private fun categoryTint(category: String): Color = categoryColor(category).copy(alpha = 0.12f)
 
+private fun financeIconKeyForName(name: String): String {
+    val value = name.trim().lowercase(Locale.ROOT)
+    return when {
+        listOf("food", "restaurant", "dining", "coffee", "cafe").any(value::contains) -> "food"
+        listOf("grocery", "groceries", "supermarket").any(value::contains) -> "groceries"
+        listOf("fuel", "petrol", "diesel", "gas station").any(value::contains) -> "fuel"
+        listOf("transport", "taxi", "cab", "car", "bike", "vehicle").any(value::contains) -> "transport"
+        listOf("health", "medical", "medicine", "hospital", "doctor", "pharmacy").any(value::contains) -> "health"
+        listOf("education", "school", "college", "course", "tuition").any(value::contains) -> "education"
+        listOf("travel", "flight", "hotel", "trip", "vacation").any(value::contains) -> "travel"
+        listOf("home", "household", "rent", "furniture").any(value::contains) -> "home"
+        listOf("salary", "income", "payroll", "wages", "freelance").any(value::contains) -> "income"
+        listOf("bill", "utility", "electricity", "water", "internet", "phone").any(value::contains) -> "bills"
+        listOf("shopping", "clothing", "online", "amazon").any(value::contains) -> "shopping"
+        listOf("credit", "debit", "card").any(value::contains) -> "card"
+        listOf("cash").any(value::contains) -> "cash"
+        listOf("apple pay", "google pay", "paypal", "upi", "wallet").any(value::contains) -> "payments"
+        listOf("bank", "loan", "emi", "repayment").any(value::contains) -> "bank"
+        listOf("work", "business", "office").any(value::contains) -> "work"
+        listOf("subscription", "membership").any(value::contains) -> "subscription"
+        listOf("gift", "donation").any(value::contains) -> "gift"
+        listOf("fitness", "gym", "sport").any(value::contains) -> "fitness"
+        listOf("pet", "vet").any(value::contains) -> "pets"
+        listOf("movie", "music", "entertainment", "game").any(value::contains) -> "entertainment"
+        else -> "other"
+    }
+}
+
+private fun financeIcon(key: String): ImageVector = when (key) {
+    "food" -> Icons.Default.Restaurant
+    "groceries" -> Icons.Default.ShoppingCart
+    "fuel" -> Icons.Default.LocalGasStation
+    "transport" -> Icons.Default.DirectionsCar
+    "health" -> Icons.Default.LocalHospital
+    "education" -> Icons.Default.School
+    "travel" -> Icons.Default.Flight
+    "home" -> Icons.Default.Home
+    "income" -> Icons.Default.Payments
+    "bills" -> Icons.Default.Receipt
+    "shopping" -> Icons.Default.ShoppingCart
+    "card" -> Icons.Default.CreditCard
+    "cash" -> Icons.Default.AccountBalanceWallet
+    "payments" -> Icons.Default.Payments
+    "bank" -> Icons.Default.AccountBalance
+    "work" -> Icons.Default.Work
+    "subscription" -> Icons.Default.Subscriptions
+    "gift" -> Icons.Default.CardGiftcard
+    "fitness" -> Icons.Default.FitnessCenter
+    "pets" -> Icons.Default.Pets
+    "entertainment" -> Icons.Default.Movie
+    else -> Icons.Default.Category
+}
+
+private fun nextLoanScheduledDueDate(
+    context: Context,
+    loan: Loan,
+    today: java.time.LocalDate = java.time.LocalDate.now()
+): java.time.LocalDate? {
+    val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+    val importedDates = runCatching {
+        val raw = prefs.getString("bank_schedule_${loan.lender}", null)
+        if (raw.isNullOrBlank()) emptyList() else {
+            val rows = JSONArray(raw)
+            (0 until rows.length()).map { rows.getJSONObject(it).getString("date") }
+        }
+    }.getOrDefault(emptyList())
+
+    val installmentDates = if (importedDates.isNotEmpty()) {
+        importedDates
+    } else {
+        val firstDate = parseScheduleDate(loan.due)
+            ?: runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull()
+            ?: nextLoanDueDate(loan.due, today)
+        val count = if (loan.totalPayments > 0L) loan.totalPayments.coerceIn(1L, 600L).toInt() else 60
+        (0 until count).mapNotNull { index ->
+            firstDate?.plusMonths(index.toLong())?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+        }
+    }
+
+    return installmentDates.mapIndexedNotNull { index, originalLabel ->
+        val displayLabel = prefs.getString("emi_rescheduled_${loan.lender}_${originalLabel}", originalLabel) ?: originalLabel
+        val installmentDate = parseScheduleDate(displayLabel)
+        val explicitlyPaid = prefs.getString("emi_status_${loan.lender}_${originalLabel}", null) == "Paid"
+        val countedAsPaid = index < loan.paymentsMade && (installmentDate == null || !installmentDate.isAfter(today))
+        if (!explicitlyPaid && !countedAsPaid) installmentDate else null
+    }.firstOrNull()
+}
+
 private fun loanAccent(lender: String): Color = when {
     lender.contains("yes bank", true) -> Color(0xFFEF4444)
     lender.contains("fibe", true) -> Color(0xFFFF7A00)
@@ -1773,6 +1861,7 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
 
 @Composable
 private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Loan) -> Unit, onLoanLongPress: (Loan) -> Unit) {
+    val context = LocalContext.current
     val canvas = Color(0xFFF4F7FC)
     val navy = Color(0xFF0E1C36)
     val slate = Color(0xFF7A869A)
@@ -1847,7 +1936,7 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
             val accent = loanAccent(loan.lender)
             val tint = loanTint(loan.lender)
             val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
-            val dueDate = nextLoanDueDate(loan.due)
+            val dueDate = nextLoanScheduledDueDate(context, loan, today = java.time.LocalDate.now())
             val today = java.time.LocalDate.now()
             val isOverdue = dueDate != null && dueDate.isBefore(today)
             val isUpcoming = dueDate != null && !dueDate.isBefore(today) &&
@@ -1905,7 +1994,7 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.CalendarMonth, null, tint = accent, modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Next due · ${loan.due}", color = slate, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                        Text("Next due · ${dueDate?.format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)) ?: "No unpaid EMI"}", color = slate, fontSize = 11.sp, modifier = Modifier.weight(1f))
                         Text("View details", color = forest, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         Icon(Icons.Default.ChevronRight, null, tint = forest, modifier = Modifier.size(17.dp))
                     }
@@ -2274,7 +2363,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(Modifier.size(40.dp).background(tint.copy(alpha = .12f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Label, null, tint = tint)
+                        Icon(financeIcon(financeIconKeyForName(category)), null, tint = tint)
                     }
                     Spacer(Modifier.width(12.dp))
                     Text(category, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
@@ -2318,7 +2407,20 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
         AlertDialog(
             onDismissRequest = { showAdd = false },
             title = { Text(if (editing == null) "Add Category" else "Edit Category") },
-            text = { OutlinedTextField(draft, { draft = it }, label = { Text("Category name") }, singleLine = true) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(draft, { draft = it }, label = { Text("Category name") }, singleLine = true)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(categoryTint(draft)), contentAlignment = Alignment.Center) {
+                            Icon(financeIcon(financeIconKeyForName(draft)), null, tint = categoryColor(draft))
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Suggested icon", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            Text("Automatically matched to the category name", color = Muted, fontSize = 10.sp)
+                        }
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     val name = draft.trim()
@@ -2393,7 +2495,7 @@ private fun TagManagementScreen() {
             items(tags, key = { it }) { tag ->
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(15.dp)).padding(start = 13.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(40.dp).background(LavenderTint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Label, null, tint = Purple)
+                        Icon(financeIcon(financeIconKeyForName(tag)), null, tint = Purple)
                     }
                     Spacer(Modifier.width(12.dp))
                     Text(tag, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
@@ -2418,7 +2520,20 @@ private fun TagManagementScreen() {
         AlertDialog(
             onDismissRequest = { showAdd = false },
             title = { Text(if (editing == null) "Add Tag" else "Edit Tag") },
-            text = { OutlinedTextField(draft, { draft = it }, label = { Text("Tag name") }, singleLine = true) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(draft, { draft = it }, label = { Text("Tag name") }, singleLine = true)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(LavenderTint), contentAlignment = Alignment.Center) {
+                            Icon(financeIcon(financeIconKeyForName(draft)), null, tint = Purple)
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Suggested icon", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            Text("Automatically matched to the tag name", color = Muted, fontSize = 10.sp)
+                        }
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     val name = draft.trim().removePrefix("#").trim()
