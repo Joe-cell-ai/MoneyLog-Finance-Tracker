@@ -3555,7 +3555,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                         }
                                         val recognizedText = ocrText.toString()
                                         // Preserve selectable text alongside OCR for mixed scanned/text lender PDFs.
-                                        extracted = listOf(extracted, recognizedText).filter { it.isNotBlank() }.joinToString("\\n")
+                                        extracted = listOf(extracted, recognizedText).filter { it.isNotBlank() }.joinToString("\n")
                                     } finally { recognizer.close() }
                                 }
                             }
