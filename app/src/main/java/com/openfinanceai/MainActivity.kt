@@ -363,6 +363,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FinanceApp() {
     val appearanceContext = LocalContext.current
