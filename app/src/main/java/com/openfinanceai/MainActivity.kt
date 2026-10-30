@@ -125,6 +125,148 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
 }
 private fun categoryTint(category: String): Color = categoryColor(category).copy(alpha = 0.12f)
 
+private fun financeIconKeyForName(name: String): String {
+    val value = name.trim().lowercase(Locale.ROOT)
+    return when {
+        listOf("food", "restaurant", "dining", "coffee", "cafe").any { value.contains(it) } -> "food"
+        listOf("grocery", "groceries", "supermarket").any { value.contains(it) } -> "groceries"
+        listOf("fuel", "petrol", "diesel", "gas station").any { value.contains(it) } -> "fuel"
+        listOf("transport", "taxi", "cab", "car", "bike", "vehicle").any { value.contains(it) } -> "transport"
+        listOf("health", "medical", "medicine", "hospital", "doctor", "pharmacy").any { value.contains(it) } -> "health"
+        listOf("education", "school", "college", "course", "tuition").any { value.contains(it) } -> "education"
+        listOf("travel", "flight", "hotel", "trip", "vacation").any { value.contains(it) } -> "travel"
+        listOf("home", "household", "rent", "furniture").any { value.contains(it) } -> "home"
+        listOf("salary", "income", "payroll", "wages", "freelance").any { value.contains(it) } -> "income"
+        listOf("bill", "utility", "electricity", "water", "internet", "phone").any { value.contains(it) } -> "bills"
+        listOf("shopping", "clothing", "online", "amazon", "supplies").any { value.contains(it) } -> "shopping"
+        listOf("credit", "debit", "card").any { value.contains(it) } -> "card"
+        listOf("cash").any { value.contains(it) } -> "cash"
+        listOf("apple pay", "google pay", "paypal", "upi", "wallet").any { value.contains(it) } -> "payments"
+        listOf("bank", "loan", "emi", "repayment").any { value.contains(it) } -> "bank"
+        listOf("work", "business", "office").any { value.contains(it) } -> "work"
+        listOf("subscription", "membership").any { value.contains(it) } -> "subscription"
+        listOf("gift", "donation").any { value.contains(it) } -> "gift"
+        listOf("fitness", "gym", "sport").any { value.contains(it) } -> "fitness"
+        listOf("pet", "vet", "animal").any { value.contains(it) } -> "pets"
+        listOf("movie", "music", "entertainment", "game", "google play").any { value.contains(it) } -> "entertainment"
+        else -> "other"
+    }
+}
+
+private fun financeIcon(key: String): ImageVector = when (key) {
+    "food" -> Icons.Default.Restaurant
+    "groceries" -> Icons.Default.ShoppingCart
+    "fuel" -> Icons.Default.LocalGasStation
+    "transport" -> Icons.Default.DirectionsCar
+    "health" -> Icons.Default.LocalHospital
+    "education" -> Icons.Default.School
+    "travel" -> Icons.Default.Flight
+    "home" -> Icons.Default.Home
+    "income" -> Icons.Default.Payments
+    "bills" -> Icons.Default.Receipt
+    "shopping" -> Icons.Default.ShoppingCart
+    "card" -> Icons.Default.CreditCard
+    "cash" -> Icons.Default.AccountBalanceWallet
+    "payments" -> Icons.Default.Payments
+    "bank" -> Icons.Default.AccountBalance
+    "work" -> Icons.Default.Work
+    "subscription" -> Icons.Default.Subscriptions
+    "gift" -> Icons.Default.CardGiftcard
+    "fitness" -> Icons.Default.FitnessCenter
+    "pets" -> Icons.Default.Pets
+    "entertainment" -> Icons.Default.Movie
+    else -> Icons.Default.Category
+}
+
+private val FINANCE_ICON_OPTIONS = listOf(
+    "food", "groceries", "fuel", "transport", "health", "education",
+    "travel", "home", "income", "bills", "shopping", "card", "cash",
+    "payments", "bank", "work", "subscription", "gift", "fitness",
+    "pets", "entertainment", "other"
+)
+
+private fun savedFinanceIconKey(context: Context, type: String, name: String): String {
+    val key = "${type}_icon_${name.trim().lowercase(Locale.ROOT)}"
+    return context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+        .getString(key, null) ?: financeIconKeyForName(name)
+}
+
+@Composable
+private fun FinanceIconPicker(
+    selectedKey: String,
+    onSelect: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Choose an icon") },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 390.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Choose an icon that best represents this item.", color = Muted, fontSize = 12.sp)
+                FINANCE_ICON_OPTIONS.chunked(4).forEach { rowKeys ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rowKeys.forEach { key ->
+                            val selected = selectedKey == key
+                            Column(
+                                Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
+                                    .background(if (selected) Green.copy(alpha = .13f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f))
+                                    .border(if (selected) 1.5.dp else 1.dp, if (selected) Green else Color.Transparent, RoundedCornerShape(12.dp))
+                                    .clickable { onSelect(key) }.padding(vertical = 10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(financeIcon(key), null, tint = if (selected) Green else Muted, modifier = Modifier.size(23.dp))
+                                Text(key.replaceFirstChar { it.uppercase() }, color = Ink, fontSize = 9.sp, maxLines = 1)
+                            }
+                        }
+                        repeat(4 - rowKeys.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Done") } }
+    )
+}
+
+
+private fun nextLoanScheduledDueDate(
+    context: Context,
+    loan: Loan,
+    today: java.time.LocalDate = java.time.LocalDate.now()
+): java.time.LocalDate? {
+    val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+    val importedDates = runCatching {
+        val raw = prefs.getString("bank_schedule_${loan.lender}", null)
+        if (raw.isNullOrBlank()) emptyList() else {
+            val rows = JSONArray(raw)
+            (0 until rows.length()).map { rows.getJSONObject(it).getString("date") }
+        }
+    }.getOrDefault(emptyList())
+
+    val installmentDates = if (importedDates.isNotEmpty()) {
+        importedDates
+    } else {
+        val firstDate = parseScheduleDate(loan.due)
+            ?: runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull()
+            ?: nextLoanDueDate(loan.due, today)
+        val count = if (loan.totalPayments > 0L) loan.totalPayments.coerceIn(1L, 600L).toInt() else 60
+        (0 until count).mapNotNull { index ->
+            firstDate?.plusMonths(index.toLong())?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+        }
+    }
+
+    return installmentDates.mapIndexedNotNull { index, originalLabel ->
+        val displayLabel = prefs.getString("emi_rescheduled_${loan.lender}_${originalLabel}", originalLabel) ?: originalLabel
+        val installmentDate = parseScheduleDate(displayLabel)
+        val explicitlyPaid = prefs.getString("emi_status_${loan.lender}_${originalLabel}", null) == "Paid"
+        val countedAsPaid = index < loan.paymentsMade && (installmentDate == null || !installmentDate.isAfter(today))
+        if (!explicitlyPaid && !countedAsPaid) installmentDate else null
+    }.firstOrNull()
+}
+
 private fun loanAccent(lender: String): Color = when {
     lender.contains("yes bank", true) -> Color(0xFFEF4444)
     lender.contains("fibe", true) -> Color(0xFFFF7A00)
@@ -221,6 +363,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FinanceApp() {
     val appearanceContext = LocalContext.current
@@ -246,6 +389,7 @@ private fun FinanceApp() {
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
     var transactionTips by remember { mutableStateOf<Transaction?>(null) }
     var loanForActions by remember { mutableStateOf<Loan?>(null) }
+    var loanPendingDelete by remember { mutableStateOf<Loan?>(null) }
     var loanToEdit by remember { mutableStateOf<Loan?>(null) }
     var emiQuickAction by remember { mutableStateOf<EmiQuickAction?>(null) }
     var emiAmountEdit by remember { mutableStateOf<EmiQuickAction?>(null) }
@@ -823,17 +967,101 @@ private fun FinanceApp() {
                 )
             }
             loanForActions?.let { loan ->
-                AlertDialog(
+                ModalBottomSheet(
                     onDismissRequest = { loanForActions = null },
-                    title = { Text(loan.lender) },
-                    text = { Text("Edit this loan or delete it and its EMI tracking entry?") },
-                    confirmButton = { TextButton(onClick = { loanToEdit = loan; loanForActions = null }) { Text("Edit") } },
-                    dismissButton = { Row { TextButton(onClick = {
-                        EmiReminderReceiver.cancelMonthly(context, loan.lender)
-                        loans = loans.toMutableList().also { list -> val index = list.indexOfFirst { it === loan }; if (index >= 0) list.removeAt(index) }
-                        saveLoans(context, loans)
-                        loanForActions = null
-                    }) { Text("Delete", color = ExpenseRed) }; TextButton(onClick = { loanForActions = null }) { Text("Cancel") } } }
+                    containerColor = Color(0xFFFCFDFF),
+                    shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+                    dragHandle = {
+                        Box(Modifier.padding(top = 10.dp, bottom = 4.dp).width(48.dp).height(5.dp)
+                            .clip(CircleShape).background(Color(0xFFDCE5F1)))
+                    }
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 22.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Column(Modifier.padding(start = 2.dp, bottom = 2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(loan.lender, color = Color(0xFF172B4D), fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                            Text("Choose what you want to do with this loan.", color = Color(0xFF64748B), fontSize = 13.sp)
+                        }
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
+                                .background(Color(0xFFEAF3FF)).clickable {
+                                    loanToEdit = loan
+                                    loanForActions = null
+                                }.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Box(Modifier.size(58.dp).clip(RoundedCornerShape(17.dp)).background(Color(0xFF1685F8)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Edit, contentDescription = null, tint = Color.White, modifier = Modifier.size(27.dp))
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Edit this loan", color = Color(0xFF1769D2), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text("Update loan details, amount, rate, tenure etc.", color = Color(0xFF536782), fontSize = 12.sp, lineHeight = 17.sp)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFF1769D2))
+                        }
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
+                                .background(Color(0xFFFFEEF1)).clickable {
+                                    loanPendingDelete = loan
+                                    loanForActions = null
+                                }.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Box(Modifier.size(58.dp).clip(RoundedCornerShape(17.dp)).background(Color(0xFFE92950)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Delete this loan", color = Color(0xFFD92D50), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text("This will also delete all EMI tracking entries and linked transactions.", color = Color(0xFF536782), fontSize = 12.sp, lineHeight = 17.sp)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFFD92D50))
+                        }
+                        OutlinedButton(
+                            onClick = { loanForActions = null },
+                            modifier = Modifier.fillMaxWidth().height(54.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF24344D)),
+                            border = androidx.compose.foundation.BorderStroke(0.dp, Color.Transparent)
+                        ) {
+                            Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+            loanPendingDelete?.let { loan ->
+                AlertDialog(
+                    onDismissRequest = { loanPendingDelete = null },
+                    containerColor = Color(0xFFFFFBFC),
+                    shape = RoundedCornerShape(24.dp),
+                    title = { Text("Delete ${loan.lender}?", color = Color(0xFF172B4D), fontWeight = FontWeight.Bold) },
+                    text = { Text("This permanently removes this loan, its saved EMI schedule and status records, and transactions linked to this loan. This cannot be undone.", color = Color(0xFF536782), fontSize = 13.sp) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            EmiReminderReceiver.cancelMonthly(context, loan.lender)
+                            val lenderKey = loan.lender.trim()
+                            loans = loans.filterNot { it.lender.equals(lenderKey, ignoreCase = true) }
+                            transactions = transactions.filterNot {
+                                it.loanLender.equals(lenderKey, ignoreCase = true)
+                            }
+                            saveLoans(context, loans)
+                            saveTransactions(context, transactions)
+                            val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+                            val editor = prefs.edit()
+                            prefs.all.keys.filter { key ->
+                                key == "bank_schedule_${lenderKey}" ||
+                                    key.startsWith("emi_status_${lenderKey}_") ||
+                                    key.startsWith("emi_amount_${lenderKey}_") ||
+                                    key.startsWith("emi_rescheduled_${lenderKey}_")
+                            }.forEach(editor::remove)
+                            editor.apply()
+                            loanPendingDelete = null
+                        }) { Text("Delete loan", color = ExpenseRed, fontWeight = FontWeight.Bold) }
+                    },
+                    dismissButton = { TextButton(onClick = { loanPendingDelete = null }) { Text("Keep loan") } }
                 )
             }
             loanToEdit?.let { loan ->
@@ -1773,6 +2001,7 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
 
 @Composable
 private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Loan) -> Unit, onLoanLongPress: (Loan) -> Unit) {
+    val context = LocalContext.current
     val canvas = Color(0xFFF4F7FC)
     val navy = Color(0xFF0E1C36)
     val slate = Color(0xFF7A869A)
@@ -1847,7 +2076,7 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
             val accent = loanAccent(loan.lender)
             val tint = loanTint(loan.lender)
             val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
-            val dueDate = nextLoanDueDate(loan.due)
+            val dueDate = nextLoanScheduledDueDate(context, loan, today = java.time.LocalDate.now())
             val today = java.time.LocalDate.now()
             val isOverdue = dueDate != null && dueDate.isBefore(today)
             val isUpcoming = dueDate != null && !dueDate.isBefore(today) &&
@@ -1905,7 +2134,7 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.CalendarMonth, null, tint = accent, modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Next due · ${loan.due}", color = slate, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                        Text("Next due · ${dueDate?.format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)) ?: "No unpaid EMI"}", color = slate, fontSize = 11.sp, modifier = Modifier.weight(1f))
                         Text("View details", color = forest, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         Icon(Icons.Default.ChevronRight, null, tint = forest, modifier = Modifier.size(17.dp))
                     }
@@ -2252,6 +2481,8 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
+    var selectedIconKey by remember { mutableStateOf("other") }
+    var showIconPicker by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     val categoryColors = listOf(Green, ExpenseRed, SavingsBlue, Color(0xFF9B6AD6), Color(0xFFE99B51))
     Column(Modifier.fillMaxSize()) {
@@ -2274,11 +2505,11 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(Modifier.size(40.dp).background(tint.copy(alpha = .12f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Label, null, tint = tint)
+                        Icon(financeIcon(savedFinanceIconKey(context, "category", category)), null, tint = tint)
                     }
                     Spacer(Modifier.width(12.dp))
                     Text(category, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
-                    IconButton(onClick = { draft = category; editing = category; showAdd = true }) {
+                    IconButton(onClick = { draft = category; editing = category; selectedIconKey = savedFinanceIconKey(context, "category", category); showAdd = true }) {
                         Icon(Icons.Default.Edit, "Edit category", tint = Green)
                     }
                     IconButton(onClick = { pendingDelete = category }) {
@@ -2299,7 +2530,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(onClick = { draft = ""; editing = null; showAdd = true }) {
+                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; showAdd = true }) {
                     Icon(Icons.Default.Add, null)
                     Spacer(Modifier.width(6.dp))
                     Text("Add Category")
@@ -2318,7 +2549,21 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
         AlertDialog(
             onDismissRequest = { showAdd = false },
             title = { Text(if (editing == null) "Add Category" else "Edit Category") },
-            text = { OutlinedTextField(draft, { draft = it }, label = { Text("Category name") }, singleLine = true) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(draft, { draft = it; selectedIconKey = financeIconKeyForName(it) }, label = { Text("Category name") }, singleLine = true)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(categoryTint(draft)), contentAlignment = Alignment.Center) {
+                            Icon(financeIcon(selectedIconKey), null, tint = categoryColor(draft))
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Suggested icon", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            Text("Suggested from the name · tap to customize", color = Muted, fontSize = 10.sp)
+                        }
+                        TextButton(onClick = { showIconPicker = true }) { Text("Change icon", fontSize = 11.sp) }
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     val name = draft.trim()
@@ -2329,6 +2574,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                         } else {
                             categories = if (editing == null) categories + name else categories.map { if (it == editing) name else it }
                                 .distinctBy { it.lowercase(Locale.ROOT) }
+                            preferences.edit().putString("category_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).apply()
                             persistCategories(categories)
                             message = ""
                             showAdd = false
@@ -2339,6 +2585,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
             dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Cancel") } }
         )
     }
+    if (showIconPicker) FinanceIconPicker(selectedIconKey, { selectedIconKey = it; showIconPicker = false }, { showIconPicker = false })
     pendingDelete?.let { category ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
@@ -2376,6 +2623,8 @@ private fun TagManagementScreen() {
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
+    var selectedIconKey by remember { mutableStateOf("other") }
+    var showIconPicker by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     fun persistTags(values: List<String>) {
         val array = JSONArray()
@@ -2393,11 +2642,11 @@ private fun TagManagementScreen() {
             items(tags, key = { it }) { tag ->
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(15.dp)).padding(start = 13.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(40.dp).background(LavenderTint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Label, null, tint = Purple)
+                        Icon(financeIcon(savedFinanceIconKey(context, "tag", tag)), null, tint = Purple)
                     }
                     Spacer(Modifier.width(12.dp))
                     Text(tag, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
-                    IconButton(onClick = { draft = tag; editing = tag; showAdd = true }) { Icon(Icons.Default.Edit, "Edit tag", tint = Green) }
+                    IconButton(onClick = { draft = tag; editing = tag; selectedIconKey = savedFinanceIconKey(context, "tag", tag); showAdd = true }) { Icon(Icons.Default.Edit, "Edit tag", tint = Green) }
                     IconButton(onClick = { pendingDelete = tag }) { Icon(Icons.Default.DeleteOutline, "Delete tag", tint = ExpenseRed) }
                 }
             }
@@ -2405,7 +2654,7 @@ private fun TagManagementScreen() {
         }
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { draft = ""; editing = null; showAdd = true }) {
+                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; showAdd = true }) {
                     Icon(Icons.Default.Add, null)
                     Spacer(Modifier.width(6.dp))
                     Text("Add Tag")
@@ -2418,7 +2667,21 @@ private fun TagManagementScreen() {
         AlertDialog(
             onDismissRequest = { showAdd = false },
             title = { Text(if (editing == null) "Add Tag" else "Edit Tag") },
-            text = { OutlinedTextField(draft, { draft = it }, label = { Text("Tag name") }, singleLine = true) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(draft, { draft = it; selectedIconKey = financeIconKeyForName(it) }, label = { Text("Tag name") }, singleLine = true)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(LavenderTint), contentAlignment = Alignment.Center) {
+                            Icon(financeIcon(selectedIconKey), null, tint = Purple)
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Suggested icon", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            Text("Suggested from the name · tap to customize", color = Muted, fontSize = 10.sp)
+                        }
+                        TextButton(onClick = { showIconPicker = true }) { Text("Change icon", fontSize = 11.sp) }
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     val name = draft.trim().removePrefix("#").trim()
@@ -2427,6 +2690,7 @@ private fun TagManagementScreen() {
                         if (duplicate) message = "That tag already exists."
                         else {
                             tags = if (editing == null) tags + name else tags.map { if (it == editing) name else it }.distinctBy { it.lowercase(Locale.ROOT) }
+                            preferences.edit().putString("tag_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).apply()
                             persistTags(tags)
                             message = ""
                             showAdd = false
@@ -2437,6 +2701,7 @@ private fun TagManagementScreen() {
             dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Cancel") } }
         )
     }
+    if (showIconPicker) FinanceIconPicker(selectedIconKey, { selectedIconKey = it; showIconPicker = false }, { showIconPicker = false })
     pendingDelete?.let { tag ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
@@ -4476,6 +4741,7 @@ private fun AddTransactionDialog(
                 OutlinedTextField(
                     value = date, onValueChange = {}, readOnly = true,
                     label = { Text("Transaction date") },
+                    supportingText = { Text("Tap to open calendar and select a date") },
                     trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date") } },
                     modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }, singleLine = true
                 )
@@ -4487,7 +4753,7 @@ private fun AddTransactionDialog(
                         confirmButton = { TextButton(onClick = {
                             pickerState.selectedDateMillis?.let { millis -> date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString() }
                             showDatePicker = false
-                        }) { Text("Select") } },
+                        }) { Text("Apply date") } },
                         dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
                     ) { DatePicker(state = pickerState) }
                 }
