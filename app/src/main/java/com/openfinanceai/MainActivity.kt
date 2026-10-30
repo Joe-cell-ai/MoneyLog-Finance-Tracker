@@ -1047,13 +1047,17 @@ private fun TransactionRow(transaction: Transaction, onLongPress: () -> Unit = {
             Icon(
                 when {
                     transaction.income -> Icons.Default.AccountBalanceWallet
+                    transaction.transactionKind.contains("repayment", true) || transaction.category.contains("loan repayment", true) || transaction.category.contains("emi", true) -> Icons.Default.AccountBalance
+                    transaction.transactionKind.contains("loan", true) || transaction.category.equals("loan", true) || transaction.category.contains("loan received", true) -> Icons.Default.AccountBalance
+                    transaction.category.contains("credit card", true) || transaction.paymentMethod.contains("card", true) -> Icons.Default.CreditCard
                     transaction.category.contains("food", true) || transaction.category.contains("grocer", true) -> Icons.Default.Restaurant
                     transaction.category.contains("transport", true) || transaction.category.contains("travel", true) -> Icons.Default.DirectionsCar
                     transaction.category.contains("bill", true) || transaction.category.contains("utilit", true) || transaction.category.contains("home", true) -> Icons.Default.Home
                     transaction.category.contains("shop", true) -> Icons.Default.ShoppingBag
                     transaction.category.contains("entertain", true) -> Icons.Default.ConfirmationNumber
                     transaction.category.contains("health", true) || transaction.category.contains("fitness", true) -> Icons.Default.Favorite
-                    else -> Icons.Default.MoreHoriz
+                    transaction.category.contains("salary", true) || transaction.category.contains("income", true) -> Icons.Default.Payments
+                    else -> Icons.Default.ReceiptLong
                 },
                 contentDescription = transaction.category,
                 tint = Color.White,
