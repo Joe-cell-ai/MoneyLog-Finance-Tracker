@@ -661,9 +661,43 @@ private fun FinanceApp() {
                                     Spacer(Modifier.weight(1f))
                                     Text("Choose an action", color = dialogMuted, fontSize = 11.sp)
                                 }
-                                EmiQuickActionRow(Icons.Default.CheckCircle, "Mark as paid", "Set this EMI as paid", Color(0xFF10B981), Color(0xFF10B981), AppDarkTheme, dialogText, dialogMuted) {
-                                    context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
-                                        .putString("emi_status_${action.lender}_${action.originalDate}", "Paid").apply()
+                                EmiQuickActionRow(Icons.Default.CheckCircle, "Mark as paid", "Record this installment and update loan balance", Color(0xFF10B981), Color(0xFF10B981), AppDarkTheme, dialogText, dialogMuted) {
+                                    val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+                                    val alreadyRecorded = transactions.any {
+                                        it.loanLender.equals(action.lender, true) &&
+                                            it.emiInstallmentDate.equals(action.originalDate, true) &&
+                                            it.transactionKind.contains("repayment", true)
+                                    }
+                                    if (!alreadyRecorded) {
+                                        val paymentDate = java.time.LocalDate.now().toString()
+                                        val payment = Transaction(
+                                            title = "Loan EMI payment",
+                                            category = "Loan repayment",
+                                            date = paymentDate,
+                                            amount = action.amount,
+                                            income = false,
+                                            paymentMethod = "Bank transfer",
+                                            notes = "EMI installment marked paid",
+                                            loanLender = action.lender,
+                                            emiInstallmentDate = action.originalDate,
+                                            transactionKind = "Loan repayment / EMI"
+                                        )
+                                        transactions = listOf(payment) + transactions
+                                        saveTransactions(context, transactions)
+                                        val loan = loans.firstOrNull { it.lender.equals(action.lender, true) }
+                                        if (loan != null) {
+                                            val monthlyInterest = kotlin.math.round(loan.balance.toDouble() * loan.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
+                                            val principalReduction = (action.amount - monthlyInterest).coerceAtLeast(0L).coerceAtMost(loan.balance)
+                                            loans = loans.map { existing ->
+                                                if (existing.lender.equals(action.lender, true)) existing.copy(
+                                                    balance = (existing.balance - principalReduction).coerceAtLeast(0L),
+                                                    paymentsMade = existing.paymentsMade + 1
+                                                ) else existing
+                                            }
+                                            saveLoans(context, loans)
+                                        }
+                                    }
+                                    prefs.edit().putString("emi_status_${action.lender}_${action.originalDate}", "Paid").apply()
                                     emiQuickAction = null
                                 }
                                 EmiQuickActionRow(Icons.Default.Edit, "Edit Amount", "Change only this installment", accent, accent, AppDarkTheme, dialogText, dialogMuted) {
@@ -800,7 +834,12 @@ private fun FinanceApp() {
                             saveLoans(context, loans)
                         }
                         val displayCategory = when (kind) { "Loan received" -> "Loan received"; "Loan repayment / EMI" -> "Loan repayment"; else -> category }
-                        transactions = listOf(Transaction(title, displayCategory, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes, tag = tag, loanLender = loanLender, emiInstallmentDate = emiDate, transactionKind = kind)) + transactions
+                        val newTransaction = Transaction(title, displayCategory, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes, tag = tag, loanLender = loanLender, emiInstallmentDate = emiDate, transactionKind = kind)
+                        val existingEmiIndex = if (isLoanRepayment && loanLender.isNotBlank() && emiDate.isNotBlank()) transactions.indexOfFirst {
+                            it.loanLender.equals(loanLender, true) && it.emiInstallmentDate.equals(emiDate, true) && it.transactionKind.contains("repayment", true)
+                        } else -1
+                        transactions = if (existingEmiIndex >= 0) transactions.toMutableList().also { it[existingEmiIndex] = newTransaction }
+                            else listOf(newTransaction) + transactions
                         saveTransactions(context, transactions)
                         showAdd = false
                     }
