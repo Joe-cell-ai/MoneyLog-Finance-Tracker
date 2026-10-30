@@ -2465,7 +2465,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
             title = { Text(if (editing == null) "Add Category" else "Edit Category") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(draft, { draft = it }, label = { Text("Category name") }, singleLine = true)
+                    OutlinedTextField(draft, { draft = it; selectedIconKey = financeIconKeyForName(it) }, label = { Text("Category name") }, singleLine = true)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(categoryTint(draft)), contentAlignment = Alignment.Center) {
                             Icon(financeIcon(selectedIconKey), null, tint = categoryColor(draft))
@@ -2583,7 +2583,7 @@ private fun TagManagementScreen() {
             title = { Text(if (editing == null) "Add Tag" else "Edit Tag") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(draft, { draft = it }, label = { Text("Tag name") }, singleLine = true)
+                    OutlinedTextField(draft, { draft = it; selectedIconKey = financeIconKeyForName(it) }, label = { Text("Tag name") }, singleLine = true)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(LavenderTint), contentAlignment = Alignment.Center) {
                             Icon(financeIcon(selectedIconKey), null, tint = Purple)
