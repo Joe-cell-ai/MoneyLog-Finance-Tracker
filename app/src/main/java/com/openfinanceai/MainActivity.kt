@@ -2754,33 +2754,6 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
 }
 
 
-    LazyColumn(modifier = Modifier.fillMaxSize().background(Page), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
-        item { Text("Privacy & Security", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold); Text("Understand how your data is handled", color = Muted, fontSize = 13.sp) }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(19.dp)) {
-                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(42.dp).clip(CircleShape).background(IncomeTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.Lock, null, tint = IncomeGreen) }
-                        Spacer(Modifier.width(11.dp))
-                        Column { Text("Local data storage", color = Ink, fontWeight = FontWeight.Bold); Text("Transactions and loans stay on this device", color = Muted, fontSize = 11.sp) }
-                    }
-                    HorizontalDivider(color = Color(0xFFEDEFF4))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(42.dp).clip(CircleShape).background(SkyTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.NotificationsActive, null, tint = Blue) }
-                        Spacer(Modifier.width(11.dp))
-                        Column(Modifier.weight(1f)) { Text("Notification access", color = Ink, fontWeight = FontWeight.SemiBold); Text("Manage whether MoneyLog may show notifications in Android settings", color = Muted, fontSize = 11.sp) }
-                        Icon(Icons.Default.ChevronRight, null, tint = Muted)
-                    }
-                    OutlinedButton(onClick = onOpenPaymentSettings, modifier = Modifier.fillMaxWidth()) { Text( "Open Android notification settings") }
-                }
-            }
-        }
-        item { InfoCard("App lock", "PIN and biometric app-lock protection are not implemented in this build. Do not treat the app as locked; protect your device with Android screen lock.", Icons.Default.Fingerprint) }
-        item { InfoCard("Backups contain sensitive information", "Local JSON/CSV exports stay on your device until you share them. If you connect a Google Drive folder in Backup & Export, MoneyLog can write dated backups there. Store exported files in a trusted private location.", Icons.Default.PrivacyTip) }
-        item { InfoCard("Clear app data", "Clearing Android app storage or uninstalling may remove locally saved records. Export a backup first if you need to keep them.", Icons.Default.DeleteOutline) }
-    }
-}
-
 @Composable
 private fun NotificationsSettingsScreen(onOpenPaymentSettings: () -> Unit, onPreferenceChanged: () -> Unit) {
     val context = LocalContext.current
