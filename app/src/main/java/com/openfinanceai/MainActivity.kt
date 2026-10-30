@@ -4153,14 +4153,27 @@ private fun AddTransactionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(28.dp),
-        containerColor = Page,
-        titleContentColor = Ink,
-        textContentColor = Ink,
+        shape = RoundedCornerShape(30.dp),
+        containerColor = Color(0xFFFCFBFF),
+        titleContentColor = Color(0xFF151B3D),
+        textContentColor = Color(0xFF151B3D),
         title = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Add transaction", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Ink)
-                Text("Record income or an expense", fontSize = 12.sp, color = Muted)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Box(Modifier.width(54.dp).height(5.dp).clip(CircleShape).background(Color(0xFFD8D7E8)))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.size(54.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF5948F5)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(25.dp))
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("Add Transaction", color = Color(0xFF151B3D), fontWeight = FontWeight.Bold, fontSize = 21.sp)
+                        Text("Record income, expenses or loan payments", color = Color(0xFF66718F), fontSize = 12.sp)
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFFF0EFF8))) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF47516E))
+                    }
+                }
             }
         },
         text = {
@@ -4305,7 +4318,7 @@ private fun AddTransactionDialog(
                     else if (transactionKind == "Loan repayment / EMI" && selectedEmiDate.isBlank()) error = "Select the EMI installment to match this repayment."
                     else onSave(title.trim(), parsed, transactionKind, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTag, selectedLoanLender, selectedEmiDate)
                 }
-            }, colors = ButtonDefaults.buttonColors(containerColor = if (isIncome) IncomeGreen else Green), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save transaction", fontWeight = FontWeight.Bold) }
+            }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5), contentColor = Color.White), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save transaction", fontWeight = FontWeight.Bold) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
