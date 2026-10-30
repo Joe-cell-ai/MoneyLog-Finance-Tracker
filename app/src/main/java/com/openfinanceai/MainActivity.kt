@@ -579,7 +579,7 @@ private fun FinanceApp() {
                     onDismiss = { transactionForActions = null },
                     onEdit = { transactionToEdit = transaction; transactionForActions = null },
                     onDelete = {
-                        val remainingTransactions = transactions.filterNot { it === transaction }
+                        var remainingTransactions = transactions.filterNot { it === transaction }
                         val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
                         if (transaction.transactionKind == "Loan repayment / EMI") {
                             val loan = loans.firstOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
@@ -612,9 +612,8 @@ private fun FinanceApp() {
                                     if (transaction.loanPaymentCounted && sameInstallment.none { it.loanPaymentCounted } && sameInstallment.isNotEmpty()) {
                                         val replacement = sameInstallment.first()
                                         val replacementIndex = remainingTransactions.indexOfFirst { it === replacement }
-                                        if (replacementIndex >= 0) remainingTransactions.toMutableList().also { list ->
+                                        if (replacementIndex >= 0) remainingTransactions = remainingTransactions.toMutableList().also { list ->
                                             list[replacementIndex] = replacement.copy(loanPaymentCounted = true)
-                                            transactions = list
                                         }
                                     }
                                 }
@@ -640,11 +639,7 @@ private fun FinanceApp() {
                                 saveLoans(context, loans)
                             }
                         }
-                        if (transactions === remainingTransactions) {
-                            // The counted-payment transfer above already replaced the list.
-                        } else {
-                            transactions = remainingTransactions
-                        }
+                        transactions = remainingTransactions
                         saveTransactions(context, transactions)
                         transactionForActions = null
                     },
