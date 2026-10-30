@@ -287,6 +287,14 @@ private fun FinanceApp() {
         tabHistory = tabHistory.dropLast(1).ifEmpty { listOf("Home") } + destination
         tab = destination
     }
+    fun navigateBack() {
+        if (tab != "Home") {
+            val leavingLoanDetails = tab == "Loan details"
+            tabHistory = tabHistory.dropLast(1).ifEmpty { listOf("Home") }
+            tab = tabHistory.last()
+            if (leavingLoanDetails) selectedLoan = null
+        }
+    }
     BackHandler(
         enabled = tab != "Home" || showAdd || showAddAsIncome || transactionForActions != null ||
             transactionToEdit != null || transactionTips != null || loanForActions != null || loanToEdit != null || emiAmountEdit != null ||
@@ -303,12 +311,7 @@ private fun FinanceApp() {
             transactionForActions != null -> transactionForActions = null
             showAddAsIncome -> showAddAsIncome = false
             showAdd -> showAdd = false
-            tab != "Home" -> {
-                val leavingLoanDetails = tab == "Loan details"
-                tabHistory = tabHistory.dropLast(1).ifEmpty { listOf("Home") }
-                tab = tabHistory.last()
-                if (leavingLoanDetails) selectedLoan = null
-            }
+            tab != "Home" -> navigateBack()
         }
     }
 
@@ -531,7 +534,7 @@ private fun FinanceApp() {
                 when (tab) {
                     "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { navigateTo("Activity") }, { isIncome -> showAddAsIncome = isIncome; showAdd = true }, { navigateTo(it) }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
-                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { navigateTo(it) }, { transaction ->
+                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { navigateBack() }, { navigateTo(it) }, { transaction ->
                         navigateTo("Activity")
                         transactionForActions = transaction
                     })
@@ -1223,6 +1226,7 @@ private fun ReportsScreen(
     transactions: List<Transaction>,
     selectedMonth: YearMonth,
     onMonthChange: (YearMonth) -> Unit,
+    onBack: () -> Unit,
     onOpen: (String) -> Unit,
     onTransactionClick: (Transaction) -> Unit
 ) {
@@ -1247,7 +1251,7 @@ private fun ReportsScreen(
     ) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink, modifier = Modifier.size(24.dp))
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink, modifier = Modifier.size(24.dp).clip(CircleShape).clickable(onClick = onBack).padding(2.dp))
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Monthly Report", fontSize = 23.sp, color = Ink, fontWeight = FontWeight.Bold)
