@@ -137,7 +137,7 @@ private fun loanAccent(lender: String): Color = when {
 private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
 
 
-private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false)
+private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L)
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
@@ -653,7 +653,8 @@ private fun FinanceApp() {
                             loanPrincipalReduction = 0L,
                             loanInterestPortion = 0L,
                             loanPaymentCounted = false,
-                            loanAllocationRecorded = false
+                            loanAllocationRecorded = false,
+                            loanReceiptPrincipalAdded = 0L
                         )
                         transactions = listOf(copy) + transactions
                         saveTransactions(context, transactions)
@@ -898,6 +899,7 @@ private fun FinanceApp() {
                         var principalReductionForTransaction = 0L
                         var interestPortionForTransaction = 0L
                         var paymentCountedForTransaction = false
+                        var loanReceiptPrincipalAddedForTransaction = 0L
                         if (isLoanRepayment && loan != null) {
                             val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
                             val recorded = transactions.filter {
@@ -942,8 +944,9 @@ private fun FinanceApp() {
                         } else if (isLoanReceipt && loan != null) {
                             loans = loans.map { existing ->
                                 if (existing.lender.equals(loan.lender, true)) {
-                                    if (existing.balance == 0L) existing.copy(balance = amount, originalPrincipal = maxOf(existing.originalPrincipal, amount))
-                                    else existing.copy(balance = existing.balance + amount, originalPrincipal = existing.originalPrincipal + amount)
+                                    val updatedPrincipal = if (existing.balance == 0L) maxOf(existing.originalPrincipal, amount) else existing.originalPrincipal + amount
+                                    loanReceiptPrincipalAddedForTransaction = (updatedPrincipal - existing.originalPrincipal).coerceAtLeast(0L)
+                                    existing.copy(balance = existing.balance + amount, originalPrincipal = updatedPrincipal)
                                 } else existing
                             }
                             saveLoans(context, loans)
@@ -957,7 +960,8 @@ private fun FinanceApp() {
                                 loanPrincipalReduction = principalReductionForTransaction,
                                 loanInterestPortion = interestPortionForTransaction,
                                 loanPaymentCounted = paymentCountedForTransaction,
-                                loanAllocationRecorded = isLoanRepayment && loan != null
+                                loanAllocationRecorded = isLoanRepayment && loan != null,
+                                loanReceiptPrincipalAdded = loanReceiptPrincipalAddedForTransaction
                             )
                         ) + transactions
                         saveTransactions(context, transactions)
@@ -4622,6 +4626,7 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("loanInterestPortion", transaction.loanInterestPortion)
             put("loanPaymentCounted", transaction.loanPaymentCounted)
             put("loanAllocationRecorded", transaction.loanAllocationRecorded)
+            put("loanReceiptPrincipalAdded", transaction.loanReceiptPrincipalAdded)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -4652,7 +4657,8 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optLong("loanPrincipalReduction", 0L),
             item.optLong("loanInterestPortion", 0L),
             item.optBoolean("loanPaymentCounted", false),
-            item.optBoolean("loanAllocationRecorded", false)
+            item.optBoolean("loanAllocationRecorded", false),
+            item.optLong("loanReceiptPrincipalAdded", 0L)
         )
     }
 }.getOrNull()
