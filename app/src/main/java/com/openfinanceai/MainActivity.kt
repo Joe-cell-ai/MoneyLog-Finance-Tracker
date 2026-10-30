@@ -827,16 +827,26 @@ private fun FinanceApp() {
                         val isLoanRepayment = kind == "Loan repayment / EMI"
                         val isIncome = kind == "Income" || isLoanReceipt
                         val loan = loans.firstOrNull { it.lender.equals(loanLender, ignoreCase = true) }
+                        var principalReductionForTransaction = 0L
+                        var interestPortionForTransaction = 0L
+                        var paymentCountedForTransaction = false
                         if (isLoanRepayment && loan != null) {
                             val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+                            val recorded = transactions.filter {
+                                it.transactionKind == "Loan repayment / EMI" &&
+                                    it.loanLender.equals(loan.lender, ignoreCase = true) &&
+                                    it.emiInstallmentDate == emiDate
+                            }
+                            val recordedAmount = recorded.sumOf { it.amount }
+                            val recordedInterest = recorded.sumOf { it.loanInterestPortion }
+                            val recordedPrincipal = recorded.sumOf { it.loanPrincipalReduction }
                             val importedAmount = runCatching {
                                 val raw = prefs.getString("bank_schedule_${loan.lender}", null) ?: return@runCatching loan.emi
                                 val rows = JSONArray(raw)
                                 (0 until rows.length()).firstNotNullOfOrNull { i -> rows.getJSONObject(i).takeIf { it.optString("date") == emiDate }?.optLong("amount") } ?: loan.emi
                             }.getOrDefault(loan.emi)
                             val scheduledAmount = prefs.getLong("emi_amount_${loan.lender}_${emiDate}", importedAmount)
-                            val fullPayment = amount >= scheduledAmount
-                            if (fullPayment) prefs.edit().putString("emi_status_${loan.lender}_${emiDate}", "Paid").apply()
+                            val fullPayment = recordedAmount + amount >= scheduledAmount
                             val firstUnpaidDate = runCatching {
                                 val raw = prefs.getString("bank_schedule_${loan.lender}", null)
                                 val installmentDates = if (!raw.isNullOrBlank()) {
@@ -849,17 +859,38 @@ private fun FinanceApp() {
                                 }
                                 installmentDates.firstOrNull { prefs.getString("emi_status_${loan.lender}_${it}", null) != "Paid" }
                             }.getOrNull()
-                            val sequentialPayment = fullPayment && firstUnpaidDate == emiDate
-                            val monthlyInterest = kotlin.math.round(loan.balance.toDouble() * loan.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
-                            val principalReduction = (amount - monthlyInterest).coerceAtLeast(0L).coerceAtMost(loan.balance)
-                            loans = loans.map { existing -> if (existing.lender.equals(loan.lender, true)) existing.copy(balance = (existing.balance - principalReduction).coerceAtLeast(0L), paymentsMade = if (sequentialPayment) existing.paymentsMade + 1 else existing.paymentsMade) else existing }
+                            paymentCountedForTransaction = fullPayment && firstUnpaidDate == emiDate
+                            val monthlyInterest = kotlin.math.round((loan.balance + recordedPrincipal).toDouble() * loan.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
+                            interestPortionForTransaction = (monthlyInterest - recordedInterest).coerceAtLeast(0L).coerceAtMost(amount)
+                            principalReductionForTransaction = (amount - interestPortionForTransaction).coerceAtLeast(0L).coerceAtMost(loan.balance)
+                            if (fullPayment) prefs.edit().putString("emi_status_${loan.lender}_${emiDate}", "Paid").apply()
+                            loans = loans.map { existing ->
+                                if (existing.lender.equals(loan.lender, true)) existing.copy(
+                                    balance = (existing.balance - principalReductionForTransaction).coerceAtLeast(0L),
+                                    paymentsMade = if (paymentCountedForTransaction) existing.paymentsMade + 1L else existing.paymentsMade
+                                ) else existing
+                            }
                             saveLoans(context, loans)
                         } else if (isLoanReceipt && loan != null) {
-                            loans = loans.map { existing -> if (existing.lender.equals(loan.lender, true)) { if (existing.balance == 0L) existing.copy(balance = amount, originalPrincipal = maxOf(existing.originalPrincipal, amount)) else existing.copy(balance = existing.balance + amount, originalPrincipal = existing.originalPrincipal + amount) } else existing }
+                            loans = loans.map { existing ->
+                                if (existing.lender.equals(loan.lender, true)) {
+                                    if (existing.balance == 0L) existing.copy(balance = amount, originalPrincipal = maxOf(existing.originalPrincipal, amount))
+                                    else existing.copy(balance = existing.balance + amount, originalPrincipal = existing.originalPrincipal + amount)
+                                } else existing
+                            }
                             saveLoans(context, loans)
                         }
                         val displayCategory = when (kind) { "Loan received" -> "Loan received"; "Loan repayment / EMI" -> "Loan repayment"; else -> category }
-                        transactions = listOf(Transaction(title, displayCategory, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes, tag = tag, loanLender = loanLender, emiInstallmentDate = emiDate, transactionKind = kind)) + transactions
+                        transactions = listOf(
+                            Transaction(
+                                title, displayCategory, date, amount, isIncome,
+                                paymentMethod = paymentMethod, notes = notes, tag = tag,
+                                loanLender = loanLender, emiInstallmentDate = emiDate, transactionKind = kind,
+                                loanPrincipalReduction = principalReductionForTransaction,
+                                loanInterestPortion = interestPortionForTransaction,
+                                loanPaymentCounted = paymentCountedForTransaction
+                            )
+                        ) + transactions
                         saveTransactions(context, transactions)
                         showAdd = false
                     }
