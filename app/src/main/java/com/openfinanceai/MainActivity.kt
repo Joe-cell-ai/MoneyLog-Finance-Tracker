@@ -3908,6 +3908,7 @@ private fun TransactionDetailsDialog(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val categoryTotal = allTransactions.filter { it.category.equals(transaction.category, ignoreCase = true) && it.income == transaction.income }.sumOf { it.amount }
     val currency = Money
+    val isLinkedLoanTransaction = transaction.transactionKind == "Loan repayment / EMI" || transaction.transactionKind == "Loan received"
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier.fillMaxWidth().fillMaxHeight(0.92f),
@@ -3952,11 +3953,20 @@ private fun TransactionDetailsDialog(
                         }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        DetailQuickAction("Edit", Icons.Default.Edit, LavenderTint, Purple, onEdit)
+                        if (!isLinkedLoanTransaction) DetailQuickAction("Edit", Icons.Default.Edit, LavenderTint, Purple, onEdit)
                         DetailQuickAction("Delete", Icons.Default.Delete, ExpenseTint, ExpenseRed) { showDeleteConfirm = true }
                         DetailQuickAction("Duplicate", Icons.Default.ContentCopy, SkyTint, Blue, onDuplicate)
-                        DetailQuickAction("Add Note", Icons.Default.Notes, SkyTint, Blue, onEdit)
-                        DetailQuickAction("Add Tag", Icons.Default.LocalOffer, LavenderTint, Purple, onEdit)
+                        if (!isLinkedLoanTransaction) {
+                            DetailQuickAction("Add Note", Icons.Default.Notes, SkyTint, Blue, onEdit)
+                            DetailQuickAction("Add Tag", Icons.Default.LocalOffer, LavenderTint, Purple, onEdit)
+                        }
+                    }
+                    if (isLinkedLoanTransaction) {
+                        Text(
+                            if (transaction.transactionKind == "Loan repayment / EMI") "This payment is linked to the loan balance. Change its amount from Loans → EMI Quick Actions to keep the installment and balance synchronized." else "This loan receipt is linked to the loan balance. Delete it to reverse the recorded loan amount.",
+                            color = Muted,
+                            fontSize = 11.sp
+                        )
                     }
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE1E6F1)), shape = RoundedCornerShape(18.dp)) {
                         Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 4.dp)) {
@@ -3981,10 +3991,12 @@ private fun TransactionDetailsDialog(
                         }
                     }
                 }
-                Button(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0BAA83), contentColor = Color.White)) {
-                    Icon(Icons.Default.Edit, null)
-                    Spacer(Modifier.width(9.dp))
-                    Text("Edit Transaction", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                if (!isLinkedLoanTransaction) {
+                    Button(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0BAA83), contentColor = Color.White)) {
+                        Icon(Icons.Default.Edit, null)
+                        Spacer(Modifier.width(9.dp))
+                        Text("Edit Transaction", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
                 }
             }
         }
@@ -3993,7 +4005,7 @@ private fun TransactionDetailsDialog(
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Delete transaction?") },
-            text = { Text("This will permanently remove this transaction from MoneyLog on this device.") },
+            text = { Text(if (isLinkedLoanTransaction) "This will permanently remove the linked loan transaction and reverse its saved loan balance adjustment and installment status." else "This will permanently remove this transaction from MoneyLog on this device.") },
             confirmButton = { TextButton(onClick = { showDeleteConfirm = false; onDelete() }) { Text("Delete", color = ExpenseRed) } },
             dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
         )
