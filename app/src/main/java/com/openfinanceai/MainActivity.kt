@@ -165,6 +165,45 @@ private fun EmiQuickActionRow(
 }
 
 
+private object AppLockRuntime {
+    var isLocked by mutableStateOf(false)
+
+    fun isConfigured(context: Context): Boolean {
+        val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+        return prefs.getBoolean("app_lock_enabled", false) &&
+            !prefs.getString("app_lock_pin_hash", null).isNullOrBlank() &&
+            !prefs.getString("app_lock_pin_salt", null).isNullOrBlank()
+    }
+
+    fun lockIfEnabled(context: Context) {
+        if (isConfigured(context)) isLocked = true
+    }
+
+    fun savePin(context: Context, pin: String) {
+        val salt = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+        val spec = javax.crypto.spec.PBEKeySpec(pin.toCharArray(), salt, 120_000, 256)
+        val hash = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            .generateSecret(spec).encoded
+        spec.clearPassword()
+        context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
+            .putString("app_lock_pin_salt", android.util.Base64.encodeToString(salt, android.util.Base64.NO_WRAP))
+            .putString("app_lock_pin_hash", android.util.Base64.encodeToString(hash, android.util.Base64.NO_WRAP))
+            .putBoolean("app_lock_enabled", true)
+            .apply()
+    }
+
+    fun verifyPin(context: Context, pin: String): Boolean = runCatching {
+        val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+        val salt = android.util.Base64.decode(prefs.getString("app_lock_pin_salt", null), android.util.Base64.NO_WRAP)
+        val expected = android.util.Base64.decode(prefs.getString("app_lock_pin_hash", null), android.util.Base64.NO_WRAP)
+        val spec = javax.crypto.spec.PBEKeySpec(pin.toCharArray(), salt, 120_000, 256)
+        val actual = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            .generateSecret(spec).encoded
+        spec.clearPassword()
+        java.security.MessageDigest.isEqual(expected, actual)
+    }.getOrDefault(false)
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -172,7 +211,13 @@ class MainActivity : ComponentActivity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9001)
         }
         listOf(1005, 1008, 1010).forEach { EmiReminderReceiver.cancelReminder(this, it) }
+        AppLockRuntime.isLocked = AppLockRuntime.isConfigured(this)
         setContent { FinanceApp() }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        AppLockRuntime.lockIfEnabled(this)
     }
 }
 
@@ -853,6 +898,7 @@ private fun FinanceApp() {
                 )
             }
         }
+        if (AppLockRuntime.isLocked) AppLockOverlay(context)
         }
     }
 }
@@ -2528,7 +2574,186 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
 }
 
 @Composable
+private fun AppLockOverlay(context: Context) {
+    var pin by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    val dark = AppDarkTheme
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = {},
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = if (dark) Color(0xFF101827) else Color(0xFFF7F6FF)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(Modifier.size(76.dp).clip(RoundedCornerShape(25.dp)).background(Color(0xFF5948F5)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
+                }
+                Spacer(Modifier.height(22.dp))
+                Text("MoneyLog is locked", color = if (dark) Color.White else Color(0xFF171A35), fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(7.dp))
+                Text("Enter your PIN to view your financial records", color = if (dark) Color(0xFFB7C0D2) else Color(0xFF68708A), fontSize = 13.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(24.dp))
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = { value -> if (value.length <= 6 && value.all(Char::isDigit)) { pin = value; error = "" } },
+                    label = { Text("4–6 digit PIN") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                if (error.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error, color = Color(0xFFDC4563), fontSize = 12.sp)
+                }
+                Spacer(Modifier.height(18.dp))
+                Button(
+                    onClick = {
+                        if (AppLockRuntime.verifyPin(context, pin)) {
+                            AppLockRuntime.isLocked = false
+                            pin = ""
+                            error = ""
+                        } else {
+                            pin = ""
+                            error = "Incorrect PIN. Please try again."
+                        }
+                    },
+                    enabled = pin.length in 4..6,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))
+                ) { Text("Unlock MoneyLog", fontWeight = FontWeight.Bold) }
+            }
+        }
+    }
+}
+
+@Composable
 private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
+    var lockEnabled by remember { mutableStateOf(AppLockRuntime.isConfigured(context)) }
+    var showPinSetup by remember { mutableStateOf(false) }
+    var newPin by remember { mutableStateOf("") }
+    var confirmPin by remember { mutableStateOf("") }
+    var pinError by remember { mutableStateOf("") }
+    LazyColumn(modifier = Modifier.fillMaxSize().background(Page), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        item { Text("Privacy & Security", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold); Text("Understand how your data is handled", color = Muted, fontSize = 13.sp) }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(19.dp)) {
+                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(42.dp).clip(CircleShape).background(IncomeTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.Lock, null, tint = IncomeGreen) }
+                        Spacer(Modifier.width(11.dp))
+                        Column { Text("Local data storage", color = Ink, fontWeight = FontWeight.Bold); Text("Transactions and loans stay on this device", color = Muted, fontSize = 11.sp) }
+                    }
+                    HorizontalDivider(color = Color(0xFFEDEFF4))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(42.dp).clip(CircleShape).background(SkyTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.NotificationsActive, null, tint = Blue) }
+                        Spacer(Modifier.width(11.dp))
+                        Column(Modifier.weight(1f)) { Text("Notification access", color = Ink, fontWeight = FontWeight.SemiBold); Text("Manage whether MoneyLog may show notifications in Android settings", color = Muted, fontSize = 11.sp) }
+                        Icon(Icons.Default.ChevronRight, null, tint = Muted)
+                    }
+                    OutlinedButton(onClick = onOpenPaymentSettings, modifier = Modifier.fillMaxWidth()) { Text("Open Android notification settings") }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(19.dp)) {
+                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(42.dp).clip(CircleShape).background(LavenderTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.Fingerprint, null, tint = Purple) }
+                        Spacer(Modifier.width(11.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("App lock", color = Ink, fontWeight = FontWeight.Bold)
+                            Text(if (lockEnabled) "PIN protection is enabled" else "Protect MoneyLog when you leave the app", color = Muted, fontSize = 11.sp)
+                        }
+                        Switch(
+                            checked = lockEnabled,
+                            onCheckedChange = { enabled ->
+                                if (enabled) {
+                                    newPin = ""
+                                    confirmPin = ""
+                                    pinError = ""
+                                    showPinSetup = true
+                                } else {
+                                    prefs.edit().remove("app_lock_enabled").remove("app_lock_pin_hash").remove("app_lock_pin_salt").apply()
+                                    lockEnabled = false
+                                    AppLockRuntime.isLocked = false
+                                }
+                            }
+                        )
+                    }
+                    Text(
+                        "PIN is stored as a salted PBKDF2 hash on this device. MoneyLog locks when it is sent to the background and asks for the PIN when reopened.",
+                        color = Muted,
+                        fontSize = 11.sp
+                    )
+                    if (lockEnabled) {
+                        OutlinedButton(onClick = { newPin = ""; confirmPin = ""; pinError = ""; showPinSetup = true }, modifier = Modifier.fillMaxWidth()) { Text("Change PIN") }
+                    }
+                }
+            }
+        }
+        item { InfoCard("Backups contain sensitive information", "Local JSON/CSV exports stay on your device until you share them. If you connect a Google Drive folder in Backup & Export, MoneyLog can write dated backups there. Store exported files in a trusted private location.", Icons.Default.PrivacyTip) }
+        item { InfoCard("Clear app data", "Clearing Android app storage or uninstalling may remove locally saved records. Export a backup first if you need to keep them.", Icons.Default.DeleteOutline) }
+    }
+    if (showPinSetup) {
+        AlertDialog(
+            onDismissRequest = { showPinSetup = false },
+            title = { Text(if (lockEnabled) "Change app PIN" else "Set app PIN", color = Ink, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = newPin,
+                        onValueChange = { value -> if (value.length <= 6 && value.all(Char::isDigit)) { newPin = value; pinError = "" } },
+                        label = { Text("New PIN (4–6 digits)") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                    )
+                    OutlinedTextField(
+                        value = confirmPin,
+                        onValueChange = { value -> if (value.length <= 6 && value.all(Char::isDigit)) { confirmPin = value; pinError = "" } },
+                        label = { Text("Confirm PIN") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                    )
+                    if (pinError.isNotBlank()) Text(pinError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    when {
+                        newPin.length !in 4..6 -> pinError = "Choose a PIN with 4 to 6 digits."
+                        newPin != confirmPin -> pinError = "The PINs do not match."
+                        else -> {
+                            AppLockRuntime.savePin(context, newPin)
+                            lockEnabled = true
+                            AppLockRuntime.isLocked = false
+                            showPinSetup = false
+                        }
+                    }
+                }) { Text("Save PIN", color = Purple) }
+            },
+            dismissButton = { TextButton(onClick = { showPinSetup = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+
     LazyColumn(modifier = Modifier.fillMaxSize().background(Page), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { Text("Privacy & Security", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold); Text("Understand how your data is handled", color = Muted, fontSize = 13.sp) }
         item {
