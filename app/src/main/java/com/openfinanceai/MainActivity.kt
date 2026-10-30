@@ -661,9 +661,55 @@ private fun FinanceApp() {
                                     Spacer(Modifier.weight(1f))
                                     Text("Choose an action", color = dialogMuted, fontSize = 11.sp)
                                 }
-                                EmiQuickActionRow(Icons.Default.CheckCircle, "Mark as paid", "Set this EMI as paid", Color(0xFF10B981), Color(0xFF10B981), AppDarkTheme, dialogText, dialogMuted) {
-                                    context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
-                                        .putString("emi_status_${action.lender}_${action.originalDate}", "Paid").apply()
+                                EmiQuickActionRow(Icons.Default.CheckCircle, "Mark as paid", "Record this installment and update the loan balance", Color(0xFF10B981), Color(0xFF10B981), AppDarkTheme, dialogText, dialogMuted) {
+                                    val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+                                    val loan = loans.firstOrNull { it.lender.equals(action.lender, ignoreCase = true) }
+                                    val recordedForInstallment = transactions
+                                        .filter { it.transactionKind == "Loan repayment / EMI" && it.loanLender.equals(action.lender, ignoreCase = true) && it.emiInstallmentDate == action.originalDate }
+                                        .sumOf { it.amount }
+                                    val remainingAmount = (action.amount - recordedForInstallment).coerceAtLeast(0L)
+                                    if (remainingAmount > 0L) {
+                                        val paidDate = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+                                        transactions = listOf(
+                                            Transaction(
+                                                title = "EMI payment - ${action.lender}",
+                                                category = "Loan repayment",
+                                                date = paidDate,
+                                                amount = remainingAmount,
+                                                income = false,
+                                                paymentMethod = "Not set",
+                                                loanLender = action.lender,
+                                                emiInstallmentDate = action.originalDate,
+                                                transactionKind = "Loan repayment / EMI"
+                                            )
+                                        ) + transactions
+                                        saveTransactions(context, transactions)
+                                        if (loan != null) {
+                                            val monthlyInterest = kotlin.math.round(loan.balance.toDouble() * loan.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
+                                            val principalReduction = (remainingAmount - monthlyInterest).coerceAtLeast(0L).coerceAtMost(loan.balance)
+                                            val firstUnpaidDate = runCatching {
+                                                val raw = prefs.getString("bank_schedule_${loan.lender}", null)
+                                                val dates = if (!raw.isNullOrBlank()) {
+                                                    val rows = JSONArray(raw)
+                                                    (0 until rows.length()).map { rows.getJSONObject(it).getString("date") }
+                                                } else {
+                                                    val first = parseScheduleDate(loan.due) ?: nextLoanDueDate(loan.due)
+                                                    val count = if (loan.totalPayments > 0L) loan.totalPayments.coerceIn(1L, 600L).toInt() else 60
+                                                    (0 until count).mapNotNull { i -> first?.plusMonths(i.toLong())?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)) }
+                                                }
+                                                dates.firstOrNull { prefs.getString("emi_status_${loan.lender}_${it}", null) != "Paid" }
+                                            }.getOrNull()
+                                            val sequentialPayment = firstUnpaidDate == action.originalDate
+                                            loans = loans.map { existing ->
+                                                if (existing.lender.equals(loan.lender, true)) existing.copy(
+                                                    balance = (existing.balance - principalReduction).coerceAtLeast(0L),
+                                                    paymentsMade = if (sequentialPayment) existing.paymentsMade + 1L else existing.paymentsMade
+                                                ) else existing
+                                            }
+                                            saveLoans(context, loans)
+                                        }
+                                    }
+                                    prefs.edit().putString("emi_status_${action.lender}_${action.originalDate}", "Paid").apply()
                                     emiQuickAction = null
                                 }
                                 EmiQuickActionRow(Icons.Default.Edit, "Edit Amount", "Change only this installment", accent, accent, AppDarkTheme, dialogText, dialogMuted) {
@@ -1008,12 +1054,18 @@ private fun TransactionRow(transaction: Transaction, onLongPress: () -> Unit = {
             Icon(
                 when {
                     transaction.income -> Icons.Default.AccountBalanceWallet
+                    transaction.transactionKind == "Loan repayment / EMI" || transaction.category.contains("loan", true) || transaction.category.contains("emi", true) -> Icons.Default.AccountBalance
+                    transaction.paymentMethod.contains("cash", true) -> Icons.Default.Payments
+                    transaction.paymentMethod.contains("card", true) -> Icons.Default.CreditCard
+                    transaction.paymentMethod.contains("upi", true) || transaction.paymentMethod.contains("google pay", true) || transaction.paymentMethod.contains("phonepe", true) || transaction.paymentMethod.contains("paytm", true) -> Icons.Default.QrCode
                     transaction.category.contains("food", true) || transaction.category.contains("grocer", true) -> Icons.Default.Restaurant
-                    transaction.category.contains("transport", true) || transaction.category.contains("travel", true) -> Icons.Default.DirectionsCar
-                    transaction.category.contains("bill", true) || transaction.category.contains("utilit", true) || transaction.category.contains("home", true) -> Icons.Default.Home
-                    transaction.category.contains("shop", true) -> Icons.Default.ShoppingBag
-                    transaction.category.contains("entertain", true) -> Icons.Default.ConfirmationNumber
-                    transaction.category.contains("health", true) || transaction.category.contains("fitness", true) -> Icons.Default.Favorite
+                    transaction.category.contains("transport", true) || transaction.category.contains("travel", true) || transaction.category.contains("fuel", true) -> Icons.Default.DirectionsCar
+                    transaction.category.contains("bill", true) || transaction.category.contains("utilit", true) || transaction.category.contains("home", true) || transaction.category.contains("rent", true) -> Icons.Default.Home
+                    transaction.category.contains("shop", true) || transaction.category.contains("cloth", true) -> Icons.Default.ShoppingBag
+                    transaction.category.contains("entertain", true) || transaction.category.contains("movie", true) -> Icons.Default.ConfirmationNumber
+                    transaction.category.contains("health", true) || transaction.category.contains("fitness", true) || transaction.category.contains("medical", true) -> Icons.Default.Favorite
+                    transaction.category.contains("education", true) -> Icons.Default.School
+                    transaction.category.contains("travel", true) -> Icons.Default.Flight
                     else -> Icons.Default.MoreHoriz
                 },
                 contentDescription = transaction.category,
@@ -4101,14 +4153,27 @@ private fun AddTransactionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(28.dp),
-        containerColor = Page,
-        titleContentColor = Ink,
-        textContentColor = Ink,
+        shape = RoundedCornerShape(30.dp),
+        containerColor = Color(0xFFFCFBFF),
+        titleContentColor = Color(0xFF151B3D),
+        textContentColor = Color(0xFF151B3D),
         title = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Add transaction", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Ink)
-                Text("Record income or an expense", fontSize = 12.sp, color = Muted)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Box(Modifier.width(54.dp).height(5.dp).clip(CircleShape).background(Color(0xFFD8D7E8)))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.size(54.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF5948F5)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(25.dp))
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("Add Transaction", color = Color(0xFF151B3D), fontWeight = FontWeight.Bold, fontSize = 21.sp)
+                        Text("Record income, expenses or loan payments", color = Color(0xFF66718F), fontSize = 12.sp)
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFFF0EFF8))) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF47516E))
+                    }
+                }
             }
         },
         text = {
@@ -4253,7 +4318,7 @@ private fun AddTransactionDialog(
                     else if (transactionKind == "Loan repayment / EMI" && selectedEmiDate.isBlank()) error = "Select the EMI installment to match this repayment."
                     else onSave(title.trim(), parsed, transactionKind, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTag, selectedLoanLender, selectedEmiDate)
                 }
-            }, colors = ButtonDefaults.buttonColors(containerColor = if (isIncome) IncomeGreen else Green), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save transaction", fontWeight = FontWeight.Bold) }
+            }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5), contentColor = Color.White), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save transaction", fontWeight = FontWeight.Bold) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
