@@ -174,9 +174,11 @@ private fun scheduleAutomaticBackup(context: Context): String {
         return "Automatic backup is off."
     }
     val destination = prefs.getString("automatic_backup_destination", "device") ?: "device"
-    if (destination == "drive" && prefs.getString("drive_backup_tree_uri", null).isNullOrBlank()) {
+    val folderKey = if (destination == "drive") "drive_backup_tree_uri" else "device_backup_tree_uri"
+    if (prefs.getString(folderKey, null).isNullOrBlank()) {
         workManager.cancelUniqueWork(workName)
-        return "Connect a Google Drive folder to start the selected automatic backup schedule."
+        return if (destination == "drive") "Connect a Google Drive folder to start automatic backup."
+            else "Choose a device folder to start automatic backup."
     }
     val frequency = prefs.getString("automatic_backup_frequency", "daily") ?: "daily"
     val interval = when (frequency) {
@@ -244,6 +246,16 @@ private fun FinanceApp() {
             driveStatus = "Google Drive folder connected. $scheduleMessage"
             drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
         }.onFailure { error -> driveStatus = "Could not connect folder: " + (error.message ?: "permission error") }
+    }
+    val deviceFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) runCatching {
+            val flags = Intent.FLAG_READ_URI_PERMISSION or Intent.FLAG_WRITE_URI_PERMISSION
+            context.contentResolver.takePersistableUriPermission(uri, flags)
+            drivePrefs.edit().putString("device_backup_tree_uri", uri.toString()).apply()
+            val scheduleMessage = scheduleAutomaticBackup(context)
+            driveStatus = "Device backup folder connected. $scheduleMessage"
+            drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
+        }.onFailure { error -> driveStatus = "Could not connect device folder: " + (error.message ?: "permission error") }
     }
     // Open the actual Google Drive app first so users can sign in there. When they
     // return to MoneyLog, continue with Android's folder picker to grant folder access.
@@ -560,10 +572,12 @@ private fun FinanceApp() {
                     "Backup & Export" -> BackupSecurityScreen(
                         onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
                         onConnectDrive = { openGoogleDriveForConnection() },
+                        onChooseDeviceFolder = { deviceFolderPicker.launch(null) },
                         onBackupNow = {
                             val destination = drivePrefs.getString("automatic_backup_destination", "device") ?: "device"
-                            if (destination == "drive" && drivePrefs.getString("drive_backup_tree_uri", null).isNullOrBlank()) {
-                                driveStatus = "Connect a Google Drive folder first."
+                            val folderKey = if (destination == "drive") "drive_backup_tree_uri" else "device_backup_tree_uri"
+                            if (drivePrefs.getString(folderKey, null).isNullOrBlank()) {
+                                driveStatus = if (destination == "drive") "Connect a Google Drive folder first." else "Choose a device backup folder first."
                             } else {
                                 androidx.work.WorkManager.getInstance(context).enqueue(androidx.work.OneTimeWorkRequestBuilder<GoogleDriveBackupWorker>().build())
                                 driveStatus = "Backup queued. Check status again shortly."
@@ -2767,6 +2781,7 @@ private fun CreditHealthScreen() {
 private fun BackupSecurityScreen(
     onExportBackup: () -> Unit,
     onConnectDrive: () -> Unit,
+    onChooseDeviceFolder: () -> Unit,
     onBackupNow: () -> Unit,
     driveStatus: String,
     onRestoreBackup: () -> Unit,
@@ -2862,7 +2877,11 @@ private fun BackupSecurityScreen(
                         }
                     }
                     Text("Choose a private Google Drive folder for cloud backups. The frequency selected above controls the schedule; retention keeps only the selected number of recent files. You can also run a backup manually.", color = Muted, fontSize = 12.sp)
-                    OutlinedButton(onClick = onConnectDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Connect Google Drive folder") }
+                    if (backupDestination == "device") {
+                        OutlinedButton(onClick = onChooseDeviceFolder, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Choose device backup folder") }
+                    } else {
+                        OutlinedButton(onClick = onConnectDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Connect Google Drive folder") }
+                    }
                     Button(onClick = onBackupNow, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Icon(Icons.Default.CloudUpload, null); Spacer(Modifier.width(8.dp)); Text("Back up now") }
                 }
             }
