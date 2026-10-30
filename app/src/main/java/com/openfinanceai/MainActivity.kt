@@ -274,9 +274,18 @@ private fun FinanceApp() {
         ).also { saveLoans(context, it) })
     }
 
+    // Update the stack in the same event as navigation. LaunchedEffect-based
+    // history can lag behind a fast Back press and send the user to Home.
     var tabHistory by remember { mutableStateOf(listOf("Home")) }
-    LaunchedEffect(tab) {
-        if (tabHistory.lastOrNull() != tab) tabHistory = tabHistory + tab
+    fun navigateTo(destination: String) {
+        if (tab != destination) {
+            tabHistory = tabHistory + destination
+            tab = destination
+        }
+    }
+    fun replaceCurrentScreen(destination: String) {
+        tabHistory = tabHistory.dropLast(1).ifEmpty { listOf("Home") } + destination
+        tab = destination
     }
     BackHandler(
         enabled = tab != "Home" || showAdd || showAddAsIncome || transactionForActions != null ||
@@ -502,7 +511,7 @@ private fun FinanceApp() {
                         }
                         NavigationBarItem(
                             selected = tab == name,
-                            onClick = { tab = name },
+                            onClick = { navigateTo(name) },
                             icon = { Icon(icon, name) },
                             label = { Text(name, fontSize = 10.sp) },
                             colors = NavigationBarItemDefaults.colors(selectedIconColor = Green, selectedTextColor = Green, unselectedIconColor = Muted, unselectedTextColor = Muted, indicatorColor = Mint)
@@ -520,14 +529,14 @@ private fun FinanceApp() {
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding).padding(top = 20.dp).offset { androidx.compose.ui.unit.IntOffset(0, -50) }) {
                 when (tab) {
-                    "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = "Activity" }, { isIncome -> showAddAsIncome = isIncome; showAdd = true }, { tab = it }, { transactionForActions = it })
+                    "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { navigateTo("Activity") }, { isIncome -> showAddAsIncome = isIncome; showAdd = true }, { navigateTo(it) }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
-                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = it }, { transaction ->
-                        tab = "Activity"
+                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { navigateTo(it) }, { transaction ->
+                        navigateTo("Activity")
                         transactionForActions = transaction
                     })
-                    "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" }, { loanForActions = it })
-                    "Settings" -> SettingsScreen { tab = it }
+                    "Loans" -> LoansScreen(loans, { navigateTo("Add loan") }, { loan -> selectedLoan = loan; navigateTo("Loan details") }, { loanForActions = it })
+                    "Settings" -> SettingsScreen { navigateTo(it) }
                     "Calendar" -> CalendarScreen(loans, transactions)
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance }, transactions)
                     "Budgets" -> BudgetsScreen(transactions)
@@ -562,14 +571,14 @@ private fun FinanceApp() {
                         onPreferenceChanged = { settingsRevision++ }
                     )
                     "About" -> AboutSettingsScreen()
-                    "Loan details" -> selectedLoan?.let { selected -> val loan = loans.firstOrNull { it.lender.equals(selected.lender, true) } ?: selected; LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: EmptyLoansScreen { tab = "Add loan" }
+                    "Loan details" -> selectedLoan?.let { selected -> val loan = loans.firstOrNull { it.lender.equals(selected.lender, true) } ?: selected; LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: EmptyLoansScreen { navigateTo("Add loan") }
                     "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi, totalPayments, borrowerName, agreementNumber, ignoredLoanNumber, startDate ->
                         val newLoan = Loan(lender, balance, emi, startDate.ifBlank { "Set due date" }, rate, originalPrincipal, paymentsMade, totalPayments, borrowerName, agreementNumber, "", startDate)
                         loans = listOf(newLoan) + loans
                         saveLoans(context, loans)
                         tab = "Loans"
                     }
-                    else -> SettingsScreen { tab = it }
+                    else -> SettingsScreen { navigateTo(it) }
                 }
             }
             transactionForActions?.let { transaction ->
