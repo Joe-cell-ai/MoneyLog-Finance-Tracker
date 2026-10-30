@@ -4591,6 +4591,7 @@ private fun AddTransactionDialog(
                 OutlinedTextField(
                     value = date, onValueChange = {}, readOnly = true,
                     label = { Text("Transaction date") },
+                    supportingText = { Text("Tap to open calendar and select a date") },
                     trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date") } },
                     modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }, singleLine = true
                 )
@@ -4602,7 +4603,7 @@ private fun AddTransactionDialog(
                         confirmButton = { TextButton(onClick = {
                             pickerState.selectedDateMillis?.let { millis -> date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString() }
                             showDatePicker = false
-                        }) { Text("Select") } },
+                        }) { Text("Apply date") } },
                         dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
                     ) { DatePicker(state = pickerState) }
                 }
