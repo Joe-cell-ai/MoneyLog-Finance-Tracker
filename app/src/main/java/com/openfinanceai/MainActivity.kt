@@ -137,7 +137,7 @@ private fun loanAccent(lender: String): Color = when {
 private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
 
 
-private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false)
+private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, loanAllocationRecorded: Boolean = false)
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
@@ -587,8 +587,9 @@ private fun FinanceApp() {
                                 val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
                                 val estimatedLegacyReduction = if (monthlyRate <= 0.0) transaction.amount else
                                     kotlin.math.round((transaction.amount - monthlyRate * loan.balance) / (1.0 + monthlyRate)).toLong()
-                                val principalReduction = (transaction.loanPrincipalReduction.takeIf { it > 0L } ?: estimatedLegacyReduction)
-                                    .coerceAtLeast(0L).coerceAtMost(loan.balance + transaction.loanPrincipalReduction)
+                                val storedOrEstimatedReduction = if (transaction.loanAllocationRecorded) transaction.loanPrincipalReduction else estimatedLegacyReduction
+                                val principalReduction = storedOrEstimatedReduction.coerceAtLeast(0L)
+                                    .coerceAtMost(loan.balance + transaction.loanPrincipalReduction)
                                 val sameInstallment = remainingTransactions.filter {
                                     it.transactionKind == "Loan repayment / EMI" &&
                                         it.loanLender.equals(transaction.loanLender, ignoreCase = true) &&
@@ -651,7 +652,8 @@ private fun FinanceApp() {
                             transactionKind = "",
                             loanPrincipalReduction = 0L,
                             loanInterestPortion = 0L,
-                            loanPaymentCounted = false
+                            loanPaymentCounted = false,
+                            loanAllocationRecorded = false
                         )
                         transactions = listOf(copy) + transactions
                         saveTransactions(context, transactions)
@@ -771,7 +773,8 @@ private fun FinanceApp() {
                                             transactionKind = "Loan repayment / EMI",
                                             loanPrincipalReduction = principalReduction,
                                             loanInterestPortion = interestPortion,
-                                            loanPaymentCounted = sequentialPayment
+                                            loanPaymentCounted = sequentialPayment,
+                                            loanAllocationRecorded = loan != null
                                         )
                                         transactions = listOf(payment) + transactions
                                         saveTransactions(context, transactions)
@@ -953,7 +956,8 @@ private fun FinanceApp() {
                                 loanLender = loanLender, emiInstallmentDate = emiDate, transactionKind = kind,
                                 loanPrincipalReduction = principalReductionForTransaction,
                                 loanInterestPortion = interestPortionForTransaction,
-                                loanPaymentCounted = paymentCountedForTransaction
+                                loanPaymentCounted = paymentCountedForTransaction,
+                                loanAllocationRecorded = isLoanRepayment && loan != null
                             )
                         ) + transactions
                         saveTransactions(context, transactions)
@@ -4617,6 +4621,7 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("loanPrincipalReduction", transaction.loanPrincipalReduction)
             put("loanInterestPortion", transaction.loanInterestPortion)
             put("loanPaymentCounted", transaction.loanPaymentCounted)
+            put("loanAllocationRecorded", transaction.loanAllocationRecorded)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -4646,7 +4651,8 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optString("transactionKind", ""),
             item.optLong("loanPrincipalReduction", 0L),
             item.optLong("loanInterestPortion", 0L),
-            item.optBoolean("loanPaymentCounted", false)
+            item.optBoolean("loanPaymentCounted", false),
+            item.optBoolean("loanAllocationRecorded", false)
         )
     }
 }.getOrNull()
