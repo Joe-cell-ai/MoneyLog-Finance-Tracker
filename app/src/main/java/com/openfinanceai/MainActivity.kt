@@ -2844,7 +2844,7 @@ private fun BackupSecurityScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("device" to "Device", "drive" to "Google Drive").forEach { (value, label) ->
                             val selected = backupDestination == value
-                            Surface(onClick = { backupDestination = value; backupPreferences.edit().putString("automatic_backup_destination", value).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext) },
+                            Surface(onClick = { backupDestination = value; backupPreferences.edit().putString("automatic_backup_destination", value).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext, updateExisting = true) },
                                 color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
                                 border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
                                 Text(label, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
