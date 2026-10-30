@@ -633,7 +633,7 @@ private fun FinanceApp() {
                             val loan = loans.firstOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
                             if (loan != null) {
                                 val newBalance = (loan.balance - transaction.amount).coerceAtLeast(0L)
-                                val newPrincipal = (loan.originalPrincipal - transaction.amount).coerceAtLeast(newBalance)
+                                val newPrincipal = (loan.originalPrincipal - transaction.loanReceiptPrincipalAdded).coerceAtLeast(newBalance)
                                 loans = loans.map { existing ->
                                     if (existing.lender.equals(loan.lender, true)) existing.copy(balance = newBalance, originalPrincipal = newPrincipal) else existing
                                 }
