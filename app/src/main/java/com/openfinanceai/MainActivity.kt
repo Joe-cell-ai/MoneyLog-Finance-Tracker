@@ -303,11 +303,11 @@ private fun FinanceApp() {
             transactionForActions != null -> transactionForActions = null
             showAddAsIncome -> showAddAsIncome = false
             showAdd -> showAdd = false
-            tab == "Loan details" -> { tab = "Loans"; selectedLoan = null }
             tab != "Home" -> {
-                val previous = tabHistory.dropLast(1).lastOrNull() ?: "Home"
+                val leavingLoanDetails = tab == "Loan details"
                 tabHistory = tabHistory.dropLast(1).ifEmpty { listOf("Home") }
-                tab = previous
+                tab = tabHistory.last()
+                if (leavingLoanDetails) selectedLoan = null
             }
         }
     }
@@ -576,7 +576,7 @@ private fun FinanceApp() {
                         val newLoan = Loan(lender, balance, emi, startDate.ifBlank { "Set due date" }, rate, originalPrincipal, paymentsMade, totalPayments, borrowerName, agreementNumber, "", startDate)
                         loans = listOf(newLoan) + loans
                         saveLoans(context, loans)
-                        tab = "Loans"
+                        replaceCurrentScreen("Loans")
                     }
                     else -> SettingsScreen { navigateTo(it) }
                 }
