@@ -137,7 +137,7 @@ private fun loanAccent(lender: String): Color = when {
 private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
 
 
-private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "")
+private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L)
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
@@ -579,15 +579,83 @@ private fun FinanceApp() {
                     onDismiss = { transactionForActions = null },
                     onEdit = { transactionToEdit = transaction; transactionForActions = null },
                     onDelete = {
-                        val index = transactions.indexOfFirst { it === transaction }
-                        if (index >= 0) {
-                            transactions = transactions.toMutableList().also { it.removeAt(index) }
-                            saveTransactions(context, transactions)
+                        var remainingTransactions = transactions.filterNot { it === transaction }
+                        val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+                        if (transaction.transactionKind == "Loan repayment / EMI") {
+                            val loan = loans.firstOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
+                            if (loan != null) {
+                                val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
+                                val estimatedLegacyReduction = if (monthlyRate <= 0.0) transaction.amount else
+                                    kotlin.math.round((transaction.amount - monthlyRate * loan.balance) / (1.0 + monthlyRate)).toLong()
+                                val storedOrEstimatedReduction = if (transaction.loanAllocationRecorded) transaction.loanPrincipalReduction else estimatedLegacyReduction
+                                val principalReduction = storedOrEstimatedReduction.coerceAtLeast(0L)
+                                    .coerceAtMost(loan.originalPrincipal.coerceAtLeast(loan.balance))
+                                val sameInstallment = remainingTransactions.filter {
+                                    it.transactionKind == "Loan repayment / EMI" &&
+                                        it.loanLender.equals(transaction.loanLender, ignoreCase = true) &&
+                                        it.emiInstallmentDate == transaction.emiInstallmentDate
+                                }
+                                val remainingAmount = sameInstallment.sumOf { it.amount }
+                                val scheduledAmount = prefs.getLong("emi_amount_${transaction.loanLender}_${transaction.emiInstallmentDate}", loan.emi)
+                                val installmentStillPaid = remainingAmount >= scheduledAmount
+                                val hadCountedPayment = transaction.loanPaymentCounted || sameInstallment.any { it.loanPaymentCounted }
+                                val shouldKeepCountedPayment = installmentStillPaid && hadCountedPayment
+                                loans = loans.map { existing ->
+                                    if (existing.lender.equals(loan.lender, true)) existing.copy(
+                                        balance = existing.balance + principalReduction,
+                                        paymentsMade = if (hadCountedPayment && !shouldKeepCountedPayment) (existing.paymentsMade - 1L).coerceAtLeast(0L) else existing.paymentsMade
+                                    ) else existing
+                                }
+                                if (!installmentStillPaid) {
+                                    prefs.edit().remove("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}").apply()
+                                } else {
+                                    prefs.edit().putString("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}", "Paid").apply()
+                                    if (transaction.loanPaymentCounted && sameInstallment.none { it.loanPaymentCounted } && sameInstallment.isNotEmpty()) {
+                                        val replacement = sameInstallment.first()
+                                        val replacementIndex = remainingTransactions.indexOfFirst { it === replacement }
+                                        if (replacementIndex >= 0) remainingTransactions = remainingTransactions.toMutableList().also { list ->
+                                            list[replacementIndex] = replacement.copy(loanPaymentCounted = true)
+                                        }
+                                    }
+                                }
+                                saveLoans(context, loans)
+                            } else {
+                                val remainingAmount = remainingTransactions.filter {
+                                    it.transactionKind == "Loan repayment / EMI" &&
+                                        it.loanLender.equals(transaction.loanLender, ignoreCase = true) &&
+                                        it.emiInstallmentDate == transaction.emiInstallmentDate
+                                }.sumOf { it.amount }
+                                val scheduledAmount = prefs.getLong("emi_amount_${transaction.loanLender}_${transaction.emiInstallmentDate}", transaction.amount)
+                                if (remainingAmount >= scheduledAmount) prefs.edit().putString("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}", "Paid").apply()
+                                else prefs.edit().remove("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}").apply()
+                            }
+                        } else if (transaction.transactionKind == "Loan received") {
+                            val loan = loans.firstOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
+                            if (loan != null) {
+                                val newBalance = (loan.balance - transaction.amount).coerceAtLeast(0L)
+                                val newPrincipal = (loan.originalPrincipal - transaction.loanReceiptPrincipalAdded).coerceAtLeast(newBalance)
+                                loans = loans.map { existing ->
+                                    if (existing.lender.equals(loan.lender, true)) existing.copy(balance = newBalance, originalPrincipal = newPrincipal) else existing
+                                }
+                                saveLoans(context, loans)
+                            }
                         }
+                        transactions = remainingTransactions
+                        saveTransactions(context, transactions)
                         transactionForActions = null
                     },
                     onDuplicate = {
-                        val copy = transaction.copy(title = if (transaction.title.endsWith(" (copy)")) transaction.title else "${transaction.title} (copy)")
+                        val copy = transaction.copy(
+                            title = if (transaction.title.endsWith(" (copy)")) transaction.title else "${transaction.title} (copy)",
+                            loanLender = "",
+                            emiInstallmentDate = "",
+                            transactionKind = "",
+                            loanPrincipalReduction = 0L,
+                            loanInterestPortion = 0L,
+                            loanPaymentCounted = false,
+                            loanAllocationRecorded = false,
+                            loanReceiptPrincipalAdded = 0L
+                        )
                         transactions = listOf(copy) + transactions
                         saveTransactions(context, transactions)
                         transactionForActions = null
@@ -664,30 +732,23 @@ private fun FinanceApp() {
                                 EmiQuickActionRow(Icons.Default.CheckCircle, "Mark as paid", "Record this installment and update the loan balance", Color(0xFF10B981), Color(0xFF10B981), AppDarkTheme, dialogText, dialogMuted) {
                                     val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
                                     val loan = loans.firstOrNull { it.lender.equals(action.lender, ignoreCase = true) }
-                                    val recordedForInstallment = transactions
-                                        .filter { it.transactionKind == "Loan repayment / EMI" && it.loanLender.equals(action.lender, ignoreCase = true) && it.emiInstallmentDate == action.originalDate }
-                                        .sumOf { it.amount }
-                                    val remainingAmount = (action.amount - recordedForInstallment).coerceAtLeast(0L)
+                                    val recorded = transactions.filter {
+                                        it.transactionKind == "Loan repayment / EMI" &&
+                                            it.loanLender.equals(action.lender, ignoreCase = true) &&
+                                            it.emiInstallmentDate == action.originalDate
+                                    }
+                                    val recordedAmount = recorded.sumOf { it.amount }
+                                    val remainingAmount = (action.amount - recordedAmount).coerceAtLeast(0L)
                                     if (remainingAmount > 0L) {
-                                        val paidDate = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
-                                        transactions = listOf(
-                                            Transaction(
-                                                title = "EMI payment - ${action.lender}",
-                                                category = "Loan repayment",
-                                                date = paidDate,
-                                                amount = remainingAmount,
-                                                income = false,
-                                                paymentMethod = "Not set",
-                                                loanLender = action.lender,
-                                                emiInstallmentDate = action.originalDate,
-                                                transactionKind = "Loan repayment / EMI"
-                                            )
-                                        ) + transactions
-                                        saveTransactions(context, transactions)
-                                        if (loan != null) {
-                                            val monthlyInterest = kotlin.math.round(loan.balance.toDouble() * loan.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
-                                            val principalReduction = (remainingAmount - monthlyInterest).coerceAtLeast(0L).coerceAtMost(loan.balance)
-                                            val firstUnpaidDate = runCatching {
+                                        val recordedInterest = recorded.sumOf { it.loanInterestPortion }
+                                        val recordedPrincipal = recorded.sumOf { it.loanPrincipalReduction }
+                                        val monthlyInterest = loan?.let {
+                                            kotlin.math.round((it.balance + recordedPrincipal).toDouble() * it.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
+                                        } ?: 0L
+                                        val interestPortion = (monthlyInterest - recordedInterest).coerceAtLeast(0L).coerceAtMost(remainingAmount)
+                                        val principalReduction = (remainingAmount - interestPortion).coerceAtLeast(0L).coerceAtMost(loan?.balance ?: 0L)
+                                        val firstUnpaidDate = runCatching {
+                                            if (loan == null) null else {
                                                 val raw = prefs.getString("bank_schedule_${loan.lender}", null)
                                                 val dates = if (!raw.isNullOrBlank()) {
                                                     val rows = JSONArray(raw)
@@ -698,8 +759,27 @@ private fun FinanceApp() {
                                                     (0 until count).mapNotNull { i -> first?.plusMonths(i.toLong())?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)) }
                                                 }
                                                 dates.firstOrNull { prefs.getString("emi_status_${loan.lender}_${it}", null) != "Paid" }
-                                            }.getOrNull()
-                                            val sequentialPayment = firstUnpaidDate == action.originalDate
+                                            }
+                                        }.getOrNull()
+                                        val sequentialPayment = loan != null && firstUnpaidDate == action.originalDate
+                                        val payment = Transaction(
+                                            title = "EMI payment - ${action.lender}",
+                                            category = "Loan repayment",
+                                            date = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)),
+                                            amount = remainingAmount,
+                                            income = false,
+                                            paymentMethod = "Not set",
+                                            loanLender = action.lender,
+                                            emiInstallmentDate = action.originalDate,
+                                            transactionKind = "Loan repayment / EMI",
+                                            loanPrincipalReduction = principalReduction,
+                                            loanInterestPortion = interestPortion,
+                                            loanPaymentCounted = sequentialPayment,
+                                            loanAllocationRecorded = loan != null
+                                        )
+                                        transactions = listOf(payment) + transactions
+                                        saveTransactions(context, transactions)
+                                        if (loan != null) {
                                             loans = loans.map { existing ->
                                                 if (existing.lender.equals(loan.lender, true)) existing.copy(
                                                     balance = (existing.balance - principalReduction).coerceAtLeast(0L),
@@ -709,7 +789,9 @@ private fun FinanceApp() {
                                             saveLoans(context, loans)
                                         }
                                     }
-                                    prefs.edit().putString("emi_status_${action.lender}_${action.originalDate}", "Paid").apply()
+                                    if (recordedAmount + remainingAmount >= action.amount) {
+                                        prefs.edit().putString("emi_status_${action.lender}_${action.originalDate}", "Paid").apply()
+                                    }
                                     emiQuickAction = null
                                 }
                                 EmiQuickActionRow(Icons.Default.Edit, "Edit Amount", "Change only this installment", accent, accent, AppDarkTheme, dialogText, dialogMuted) {
@@ -814,16 +896,27 @@ private fun FinanceApp() {
                         val isLoanRepayment = kind == "Loan repayment / EMI"
                         val isIncome = kind == "Income" || isLoanReceipt
                         val loan = loans.firstOrNull { it.lender.equals(loanLender, ignoreCase = true) }
+                        var principalReductionForTransaction = 0L
+                        var interestPortionForTransaction = 0L
+                        var paymentCountedForTransaction = false
+                        var loanReceiptPrincipalAddedForTransaction = 0L
                         if (isLoanRepayment && loan != null) {
                             val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+                            val recorded = transactions.filter {
+                                it.transactionKind == "Loan repayment / EMI" &&
+                                    it.loanLender.equals(loan.lender, ignoreCase = true) &&
+                                    it.emiInstallmentDate == emiDate
+                            }
+                            val recordedAmount = recorded.sumOf { it.amount }
+                            val recordedInterest = recorded.sumOf { it.loanInterestPortion }
+                            val recordedPrincipal = recorded.sumOf { it.loanPrincipalReduction }
                             val importedAmount = runCatching {
                                 val raw = prefs.getString("bank_schedule_${loan.lender}", null) ?: return@runCatching loan.emi
                                 val rows = JSONArray(raw)
                                 (0 until rows.length()).firstNotNullOfOrNull { i -> rows.getJSONObject(i).takeIf { it.optString("date") == emiDate }?.optLong("amount") } ?: loan.emi
                             }.getOrDefault(loan.emi)
                             val scheduledAmount = prefs.getLong("emi_amount_${loan.lender}_${emiDate}", importedAmount)
-                            val fullPayment = amount >= scheduledAmount
-                            if (fullPayment) prefs.edit().putString("emi_status_${loan.lender}_${emiDate}", "Paid").apply()
+                            val fullPayment = recordedAmount + amount >= scheduledAmount
                             val firstUnpaidDate = runCatching {
                                 val raw = prefs.getString("bank_schedule_${loan.lender}", null)
                                 val installmentDates = if (!raw.isNullOrBlank()) {
@@ -836,17 +929,41 @@ private fun FinanceApp() {
                                 }
                                 installmentDates.firstOrNull { prefs.getString("emi_status_${loan.lender}_${it}", null) != "Paid" }
                             }.getOrNull()
-                            val sequentialPayment = fullPayment && firstUnpaidDate == emiDate
-                            val monthlyInterest = kotlin.math.round(loan.balance.toDouble() * loan.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
-                            val principalReduction = (amount - monthlyInterest).coerceAtLeast(0L).coerceAtMost(loan.balance)
-                            loans = loans.map { existing -> if (existing.lender.equals(loan.lender, true)) existing.copy(balance = (existing.balance - principalReduction).coerceAtLeast(0L), paymentsMade = if (sequentialPayment) existing.paymentsMade + 1 else existing.paymentsMade) else existing }
+                            paymentCountedForTransaction = fullPayment && firstUnpaidDate == emiDate
+                            val monthlyInterest = kotlin.math.round((loan.balance + recordedPrincipal).toDouble() * loan.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
+                            interestPortionForTransaction = (monthlyInterest - recordedInterest).coerceAtLeast(0L).coerceAtMost(amount)
+                            principalReductionForTransaction = (amount - interestPortionForTransaction).coerceAtLeast(0L).coerceAtMost(loan.balance)
+                            if (fullPayment) prefs.edit().putString("emi_status_${loan.lender}_${emiDate}", "Paid").apply()
+                            loans = loans.map { existing ->
+                                if (existing.lender.equals(loan.lender, true)) existing.copy(
+                                    balance = (existing.balance - principalReductionForTransaction).coerceAtLeast(0L),
+                                    paymentsMade = if (paymentCountedForTransaction) existing.paymentsMade + 1L else existing.paymentsMade
+                                ) else existing
+                            }
                             saveLoans(context, loans)
                         } else if (isLoanReceipt && loan != null) {
-                            loans = loans.map { existing -> if (existing.lender.equals(loan.lender, true)) { if (existing.balance == 0L) existing.copy(balance = amount, originalPrincipal = maxOf(existing.originalPrincipal, amount)) else existing.copy(balance = existing.balance + amount, originalPrincipal = existing.originalPrincipal + amount) } else existing }
+                            loans = loans.map { existing ->
+                                if (existing.lender.equals(loan.lender, true)) {
+                                    val updatedPrincipal = if (existing.balance == 0L) maxOf(existing.originalPrincipal, amount) else existing.originalPrincipal + amount
+                                    loanReceiptPrincipalAddedForTransaction = (updatedPrincipal - existing.originalPrincipal).coerceAtLeast(0L)
+                                    existing.copy(balance = existing.balance + amount, originalPrincipal = updatedPrincipal)
+                                } else existing
+                            }
                             saveLoans(context, loans)
                         }
                         val displayCategory = when (kind) { "Loan received" -> "Loan received"; "Loan repayment / EMI" -> "Loan repayment"; else -> category }
-                        transactions = listOf(Transaction(title, displayCategory, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes, tag = tag, loanLender = loanLender, emiInstallmentDate = emiDate, transactionKind = kind)) + transactions
+                        transactions = listOf(
+                            Transaction(
+                                title, displayCategory, date, amount, isIncome,
+                                paymentMethod = paymentMethod, notes = notes, tag = tag,
+                                loanLender = loanLender, emiInstallmentDate = emiDate, transactionKind = kind,
+                                loanPrincipalReduction = principalReductionForTransaction,
+                                loanInterestPortion = interestPortionForTransaction,
+                                loanPaymentCounted = paymentCountedForTransaction,
+                                loanAllocationRecorded = isLoanRepayment && loan != null,
+                                loanReceiptPrincipalAdded = loanReceiptPrincipalAddedForTransaction
+                            )
+                        ) + transactions
                         saveTransactions(context, transactions)
                         showAdd = false
                     }
@@ -3799,6 +3916,7 @@ private fun TransactionDetailsDialog(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val categoryTotal = allTransactions.filter { it.category.equals(transaction.category, ignoreCase = true) && it.income == transaction.income }.sumOf { it.amount }
     val currency = Money
+    val isLinkedLoanTransaction = transaction.transactionKind == "Loan repayment / EMI" || transaction.transactionKind == "Loan received"
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier.fillMaxWidth().fillMaxHeight(0.92f),
@@ -3843,11 +3961,20 @@ private fun TransactionDetailsDialog(
                         }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        DetailQuickAction("Edit", Icons.Default.Edit, LavenderTint, Purple, onEdit)
+                        if (!isLinkedLoanTransaction) DetailQuickAction("Edit", Icons.Default.Edit, LavenderTint, Purple, onEdit)
                         DetailQuickAction("Delete", Icons.Default.Delete, ExpenseTint, ExpenseRed) { showDeleteConfirm = true }
                         DetailQuickAction("Duplicate", Icons.Default.ContentCopy, SkyTint, Blue, onDuplicate)
-                        DetailQuickAction("Add Note", Icons.Default.Notes, SkyTint, Blue, onEdit)
-                        DetailQuickAction("Add Tag", Icons.Default.LocalOffer, LavenderTint, Purple, onEdit)
+                        if (!isLinkedLoanTransaction) {
+                            DetailQuickAction("Add Note", Icons.Default.Notes, SkyTint, Blue, onEdit)
+                            DetailQuickAction("Add Tag", Icons.Default.LocalOffer, LavenderTint, Purple, onEdit)
+                        }
+                    }
+                    if (isLinkedLoanTransaction) {
+                        Text(
+                            if (transaction.transactionKind == "Loan repayment / EMI") "This payment is linked to the loan balance. Change its amount from Loans → EMI Quick Actions to keep the installment and balance synchronized." else "This loan receipt is linked to the loan balance. Delete it to reverse the recorded loan amount.",
+                            color = Muted,
+                            fontSize = 11.sp
+                        )
                     }
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE1E6F1)), shape = RoundedCornerShape(18.dp)) {
                         Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 4.dp)) {
@@ -3872,10 +3999,12 @@ private fun TransactionDetailsDialog(
                         }
                     }
                 }
-                Button(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0BAA83), contentColor = Color.White)) {
-                    Icon(Icons.Default.Edit, null)
-                    Spacer(Modifier.width(9.dp))
-                    Text("Edit Transaction", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                if (!isLinkedLoanTransaction) {
+                    Button(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0BAA83), contentColor = Color.White)) {
+                        Icon(Icons.Default.Edit, null)
+                        Spacer(Modifier.width(9.dp))
+                        Text("Edit Transaction", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
                 }
             }
         }
@@ -3884,7 +4013,7 @@ private fun TransactionDetailsDialog(
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Delete transaction?") },
-            text = { Text("This will permanently remove this transaction from MoneyLog on this device.") },
+            text = { Text(if (isLinkedLoanTransaction) "This will permanently remove the linked loan transaction and reverse its saved loan balance adjustment and installment status." else "This will permanently remove this transaction from MoneyLog on this device.") },
             confirmButton = { TextButton(onClick = { showDeleteConfirm = false; onDelete() }) { Text("Delete", color = ExpenseRed) } },
             dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
         )
@@ -4493,6 +4622,11 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("loanLender", transaction.loanLender)
             put("emiInstallmentDate", transaction.emiInstallmentDate)
             put("transactionKind", transaction.transactionKind)
+            put("loanPrincipalReduction", transaction.loanPrincipalReduction)
+            put("loanInterestPortion", transaction.loanInterestPortion)
+            put("loanPaymentCounted", transaction.loanPaymentCounted)
+            put("loanAllocationRecorded", transaction.loanAllocationRecorded)
+            put("loanReceiptPrincipalAdded", transaction.loanReceiptPrincipalAdded)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -4519,7 +4653,12 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optString("tag", ""),
             item.optString("loanLender", ""),
             item.optString("emiInstallmentDate", ""),
-            item.optString("transactionKind", "")
+            item.optString("transactionKind", ""),
+            item.optLong("loanPrincipalReduction", 0L),
+            item.optLong("loanInterestPortion", 0L),
+            item.optBoolean("loanPaymentCounted", false),
+            item.optBoolean("loanAllocationRecorded", false),
+            item.optLong("loanReceiptPrincipalAdded", 0L)
         )
     }
 }.getOrNull()
