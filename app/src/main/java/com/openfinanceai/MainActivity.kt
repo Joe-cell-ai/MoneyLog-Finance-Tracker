@@ -137,7 +137,7 @@ private fun loanAccent(lender: String): Color = when {
 private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
 
 
-private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "")
+private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false)
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
@@ -4493,6 +4493,9 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("loanLender", transaction.loanLender)
             put("emiInstallmentDate", transaction.emiInstallmentDate)
             put("transactionKind", transaction.transactionKind)
+            put("loanPrincipalReduction", transaction.loanPrincipalReduction)
+            put("loanInterestPortion", transaction.loanInterestPortion)
+            put("loanPaymentCounted", transaction.loanPaymentCounted)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -4519,7 +4522,10 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optString("tag", ""),
             item.optString("loanLender", ""),
             item.optString("emiInstallmentDate", ""),
-            item.optString("transactionKind", "")
+            item.optString("transactionKind", ""),
+            item.optLong("loanPrincipalReduction", 0L),
+            item.optLong("loanInterestPortion", 0L),
+            item.optBoolean("loanPaymentCounted", false)
         )
     }
 }.getOrNull()
