@@ -249,7 +249,7 @@ private fun FinanceApp() {
     }
     val deviceFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) runCatching {
-            val flags = Intent.FLAG_READ_URI_PERMISSION or Intent.FLAG_WRITE_URI_PERMISSION
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             context.contentResolver.takePersistableUriPermission(uri, flags)
             drivePrefs.edit().putString("device_backup_tree_uri", uri.toString()).apply()
             val scheduleMessage = scheduleAutomaticBackup(context)
@@ -2872,11 +2872,11 @@ private fun BackupSecurityScreen(
                         Icon(Icons.Default.CloudSync, null, tint = IncomeGreen, modifier = Modifier.size(26.dp))
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Google Drive automatic backup", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(if (backupDestination == "drive") "Google Drive automatic backup" else "Device automatic backup", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             Text(driveStatus, color = Muted, fontSize = 12.sp)
                         }
                     }
-                    Text("Choose a private Google Drive folder for cloud backups. The frequency selected above controls the schedule; retention keeps only the selected number of recent files. You can also run a backup manually.", color = Muted, fontSize = 12.sp)
+                    Text(if (backupDestination == "drive") "Choose a private Google Drive folder for cloud backups. The frequency selected above controls the schedule; retention keeps only the selected number of recent files." else "Choose a folder on this device. MoneyLog creates dated JSON backups there using your selected schedule and retention limit.", color = Muted, fontSize = 12.sp)
                     if (backupDestination == "device") {
                         OutlinedButton(onClick = onChooseDeviceFolder, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Choose device backup folder") }
                     } else {
