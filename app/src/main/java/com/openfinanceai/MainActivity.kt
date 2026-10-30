@@ -579,15 +579,85 @@ private fun FinanceApp() {
                     onDismiss = { transactionForActions = null },
                     onEdit = { transactionToEdit = transaction; transactionForActions = null },
                     onDelete = {
-                        val index = transactions.indexOfFirst { it === transaction }
-                        if (index >= 0) {
-                            transactions = transactions.toMutableList().also { it.removeAt(index) }
-                            saveTransactions(context, transactions)
+                        val remainingTransactions = transactions.filterNot { it === transaction }
+                        val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+                        if (transaction.transactionKind == "Loan repayment / EMI") {
+                            val loan = loans.firstOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
+                            if (loan != null) {
+                                val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
+                                val estimatedLegacyReduction = if (monthlyRate <= 0.0) transaction.amount else
+                                    kotlin.math.round((transaction.amount - monthlyRate * loan.balance) / (1.0 + monthlyRate)).toLong()
+                                val principalReduction = (transaction.loanPrincipalReduction.takeIf { it > 0L } ?: estimatedLegacyReduction)
+                                    .coerceAtLeast(0L).coerceAtMost(loan.balance + transaction.loanPrincipalReduction)
+                                val sameInstallment = remainingTransactions.filter {
+                                    it.transactionKind == "Loan repayment / EMI" &&
+                                        it.loanLender.equals(transaction.loanLender, ignoreCase = true) &&
+                                        it.emiInstallmentDate == transaction.emiInstallmentDate
+                                }
+                                val remainingAmount = sameInstallment.sumOf { it.amount }
+                                val scheduledAmount = prefs.getLong("emi_amount_${transaction.loanLender}_${transaction.emiInstallmentDate}", loan.emi)
+                                val installmentStillPaid = remainingAmount >= scheduledAmount
+                                val hadCountedPayment = transaction.loanPaymentCounted || sameInstallment.any { it.loanPaymentCounted }
+                                val shouldKeepCountedPayment = installmentStillPaid && hadCountedPayment
+                                loans = loans.map { existing ->
+                                    if (existing.lender.equals(loan.lender, true)) existing.copy(
+                                        balance = existing.balance + principalReduction,
+                                        paymentsMade = if (hadCountedPayment && !shouldKeepCountedPayment) (existing.paymentsMade - 1L).coerceAtLeast(0L) else existing.paymentsMade
+                                    ) else existing
+                                }
+                                if (!installmentStillPaid) {
+                                    prefs.edit().remove("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}").apply()
+                                } else {
+                                    prefs.edit().putString("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}", "Paid").apply()
+                                    if (transaction.loanPaymentCounted && sameInstallment.none { it.loanPaymentCounted } && sameInstallment.isNotEmpty()) {
+                                        val replacement = sameInstallment.first()
+                                        val replacementIndex = remainingTransactions.indexOfFirst { it === replacement }
+                                        if (replacementIndex >= 0) remainingTransactions.toMutableList().also { list ->
+                                            list[replacementIndex] = replacement.copy(loanPaymentCounted = true)
+                                            transactions = list
+                                        }
+                                    }
+                                }
+                                saveLoans(context, loans)
+                            } else {
+                                val remainingAmount = remainingTransactions.filter {
+                                    it.transactionKind == "Loan repayment / EMI" &&
+                                        it.loanLender.equals(transaction.loanLender, ignoreCase = true) &&
+                                        it.emiInstallmentDate == transaction.emiInstallmentDate
+                                }.sumOf { it.amount }
+                                val scheduledAmount = prefs.getLong("emi_amount_${transaction.loanLender}_${transaction.emiInstallmentDate}", transaction.amount)
+                                if (remainingAmount >= scheduledAmount) prefs.edit().putString("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}", "Paid").apply()
+                                else prefs.edit().remove("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}").apply()
+                            }
+                        } else if (transaction.transactionKind == "Loan received") {
+                            val loan = loans.firstOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
+                            if (loan != null) {
+                                val newBalance = (loan.balance - transaction.amount).coerceAtLeast(0L)
+                                val newPrincipal = (loan.originalPrincipal - transaction.amount).coerceAtLeast(newBalance)
+                                loans = loans.map { existing ->
+                                    if (existing.lender.equals(loan.lender, true)) existing.copy(balance = newBalance, originalPrincipal = newPrincipal) else existing
+                                }
+                                saveLoans(context, loans)
+                            }
                         }
+                        if (transactions === remainingTransactions) {
+                            // The counted-payment transfer above already replaced the list.
+                        } else {
+                            transactions = remainingTransactions
+                        }
+                        saveTransactions(context, transactions)
                         transactionForActions = null
                     },
                     onDuplicate = {
-                        val copy = transaction.copy(title = if (transaction.title.endsWith(" (copy)")) transaction.title else "${transaction.title} (copy)")
+                        val copy = transaction.copy(
+                            title = if (transaction.title.endsWith(" (copy)")) transaction.title else "${transaction.title} (copy)",
+                            loanLender = "",
+                            emiInstallmentDate = "",
+                            transactionKind = "",
+                            loanPrincipalReduction = 0L,
+                            loanInterestPortion = 0L,
+                            loanPaymentCounted = false
+                        )
                         transactions = listOf(copy) + transactions
                         saveTransactions(context, transactions)
                         transactionForActions = null
