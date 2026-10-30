@@ -198,7 +198,7 @@ private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, o
     AlertDialog(
         onDismissRequest = onClose, shape = RoundedCornerShape(28.dp), containerColor = Color(0xFFFCFBFF),
         title = { Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text("Choose category icon", color = Color(0xFF151B3D), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Choose an icon", color = Color(0xFF151B3D), fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Text("Pick an icon that makes this item easy to recognize.", color = Color(0xFF66718F), fontSize = 12.sp)
         } },
         text = { Column(Modifier.fillMaxWidth().heightIn(max = 430.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2574,7 +2574,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
 private fun TagManagementScreen() {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
-    val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online")
+    val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online Shopping")
     val initialTags = remember {
         runCatching {
             val raw = preferences.getString("custom_tags", null)
@@ -4552,7 +4552,7 @@ private fun AddTransactionDialog(
         }
     }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
-    val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online")
+    val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online Shopping")
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
     var tags by remember {
         mutableStateOf(runCatching {
@@ -4665,8 +4665,8 @@ private fun AddTransactionDialog(
                         }
                     }
                 }
-                OutlinedTextField(title, { title = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp), textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
+                OutlinedTextField(title, { title = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, leadingIcon = { Icon(Icons.Default.ReceiptLong, null, tint = Color(0xFF5948F5)) }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount (₹)") }, leadingIcon = { Icon(Icons.Default.CurrencyRupee, null, tint = Color(0xFF5948F5)) }, singleLine = true, shape = RoundedCornerShape(14.dp), textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
                 ExposedDropdownMenuBox(
                     expanded = categoryMenuExpanded,
                     onExpandedChange = { categoryMenuExpanded = it }
@@ -4676,6 +4676,7 @@ private fun AddTransactionDialog(
                         onValueChange = { category = it },
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                         label = { Text("Category") },
+                        leadingIcon = { Icon(financeIcon(savedFinanceIconKey(context, "category", category)), null, tint = categoryColor(category)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryMenuExpanded) },
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp)
@@ -4686,7 +4687,10 @@ private fun AddTransactionDialog(
                     ) {
                         transactionCategoryOptions.forEach { option ->
                             DropdownMenuItem(
-                                text = { Text(option) },
+                                text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                    Icon(financeIcon(savedFinanceIconKey(context, "category", option)), null, tint = categoryColor(option), modifier = Modifier.size(19.dp))
+                                    Text(option)
+                                } },
                                 onClick = { category = option; categoryMenuExpanded = false }
                             )
                         }
@@ -4697,12 +4701,16 @@ private fun AddTransactionDialog(
                         value = selectedTag, onValueChange = {}, readOnly = true,
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                         label = { Text("Tag (optional)") }, placeholder = { Text("Choose a tag") },
+                        leadingIcon = { Icon(Icons.Default.Tag, null, tint = Color(0xFF8953D8)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagMenuExpanded) },
                         singleLine = true, shape = RoundedCornerShape(14.dp)
                     )
                     ExposedDropdownMenu(expanded = tagMenuExpanded, onDismissRequest = { tagMenuExpanded = false }) {
                         DropdownMenuItem(text = { Text("No tag") }, onClick = { selectedTag = ""; tagMenuExpanded = false })
-                        tags.forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { selectedTag = option; tagMenuExpanded = false }) }
+                        tags.forEach { option -> DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                            Icon(financeIcon(savedFinanceIconKey(context, "tag", option)), null, tint = Color(0xFF8953D8), modifier = Modifier.size(19.dp))
+                            Text(option)
+                        } }, onClick = { selectedTag = option; tagMenuExpanded = false }) }
                         DropdownMenuItem(text = { Text("+ Create tag", color = Green, fontWeight = FontWeight.SemiBold) }, onClick = { tagMenuExpanded = false; tagDraft = ""; showCreateTag = true })
                     }
                 }
@@ -4715,6 +4723,7 @@ private fun AddTransactionDialog(
                     value = date, onValueChange = {}, readOnly = true,
                     label = { Text("Transaction date") },
                     supportingText = { Text("Tap to open calendar and select a date") },
+                    leadingIcon = { Icon(Icons.Default.CalendarMonth, null, tint = Color(0xFF5948F5)) },
                     trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date") } },
                     modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }, singleLine = true
                 )
