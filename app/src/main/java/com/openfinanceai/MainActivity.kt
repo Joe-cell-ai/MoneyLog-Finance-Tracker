@@ -388,6 +388,7 @@ private fun FinanceApp() {
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
     var transactionTips by remember { mutableStateOf<Transaction?>(null) }
     var loanForActions by remember { mutableStateOf<Loan?>(null) }
+    var loanPendingDelete by remember { mutableStateOf<Loan?>(null) }
     var loanToEdit by remember { mutableStateOf<Loan?>(null) }
     var emiQuickAction by remember { mutableStateOf<EmiQuickAction?>(null) }
     var emiAmountEdit by remember { mutableStateOf<EmiQuickAction?>(null) }
@@ -965,17 +966,101 @@ private fun FinanceApp() {
                 )
             }
             loanForActions?.let { loan ->
-                AlertDialog(
+                ModalBottomSheet(
                     onDismissRequest = { loanForActions = null },
-                    title = { Text(loan.lender) },
-                    text = { Text("Edit this loan or delete it and its EMI tracking entry?") },
-                    confirmButton = { TextButton(onClick = { loanToEdit = loan; loanForActions = null }) { Text("Edit") } },
-                    dismissButton = { Row { TextButton(onClick = {
-                        EmiReminderReceiver.cancelMonthly(context, loan.lender)
-                        loans = loans.toMutableList().also { list -> val index = list.indexOfFirst { it === loan }; if (index >= 0) list.removeAt(index) }
-                        saveLoans(context, loans)
-                        loanForActions = null
-                    }) { Text("Delete", color = ExpenseRed) }; TextButton(onClick = { loanForActions = null }) { Text("Cancel") } } }
+                    containerColor = Color(0xFFFCFDFF),
+                    shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+                    dragHandle = {
+                        Box(Modifier.padding(top = 10.dp, bottom = 4.dp).width(48.dp).height(5.dp)
+                            .clip(CircleShape).background(Color(0xFFDCE5F1)))
+                    }
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 22.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Column(Modifier.padding(start = 2.dp, bottom = 2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(loan.lender, color = Color(0xFF172B4D), fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                            Text("Choose what you want to do with this loan.", color = Color(0xFF64748B), fontSize = 13.sp)
+                        }
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
+                                .background(Color(0xFFEAF3FF)).clickable {
+                                    loanToEdit = loan
+                                    loanForActions = null
+                                }.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Box(Modifier.size(58.dp).clip(RoundedCornerShape(17.dp)).background(Color(0xFF1685F8)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Edit, contentDescription = null, tint = Color.White, modifier = Modifier.size(27.dp))
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Edit this loan", color = Color(0xFF1769D2), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text("Update loan details, amount, rate, tenure etc.", color = Color(0xFF536782), fontSize = 12.sp, lineHeight = 17.sp)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFF1769D2))
+                        }
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
+                                .background(Color(0xFFFFEEF1)).clickable {
+                                    loanPendingDelete = loan
+                                    loanForActions = null
+                                }.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Box(Modifier.size(58.dp).clip(RoundedCornerShape(17.dp)).background(Color(0xFFE92950)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Delete this loan", color = Color(0xFFD92D50), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text("This will also delete all EMI tracking entries and linked transactions.", color = Color(0xFF536782), fontSize = 12.sp, lineHeight = 17.sp)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFFD92D50))
+                        }
+                        OutlinedButton(
+                            onClick = { loanForActions = null },
+                            modifier = Modifier.fillMaxWidth().height(54.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF24344D)),
+                            border = androidx.compose.foundation.BorderStroke(0.dp, Color.Transparent)
+                        ) {
+                            Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+            loanPendingDelete?.let { loan ->
+                AlertDialog(
+                    onDismissRequest = { loanPendingDelete = null },
+                    containerColor = Color(0xFFFFFBFC),
+                    shape = RoundedCornerShape(24.dp),
+                    title = { Text("Delete ${loan.lender}?", color = Color(0xFF172B4D), fontWeight = FontWeight.Bold) },
+                    text = { Text("This permanently removes this loan, its saved EMI schedule and status records, and transactions linked to this loan. This cannot be undone.", color = Color(0xFF536782), fontSize = 13.sp) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            EmiReminderReceiver.cancelMonthly(context, loan.lender)
+                            val lenderKey = loan.lender.trim()
+                            loans = loans.filterNot { it.lender.equals(lenderKey, ignoreCase = true) }
+                            transactions = transactions.filterNot {
+                                it.loanLender.equals(lenderKey, ignoreCase = true)
+                            }
+                            saveLoans(context, loans)
+                            saveTransactions(context, transactions)
+                            val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+                            val editor = prefs.edit()
+                            prefs.all.keys.filter { key ->
+                                key == "bank_schedule_${lenderKey}" ||
+                                    key.startsWith("emi_status_${lenderKey}_") ||
+                                    key.startsWith("emi_amount_${lenderKey}_") ||
+                                    key.startsWith("emi_rescheduled_${lenderKey}_")
+                            }.forEach(editor::remove)
+                            editor.apply()
+                            loanPendingDelete = null
+                        }) { Text("Delete loan", color = ExpenseRed, fontWeight = FontWeight.Bold) }
+                    },
+                    dismissButton = { TextButton(onClick = { loanPendingDelete = null }) { Text("Keep loan") } }
                 )
             }
             loanToEdit?.let { loan ->
