@@ -165,9 +165,10 @@ private fun EmiQuickActionRow(
 }
 
 
-private fun scheduleAutomaticBackup(context: Context): String {
+private fun scheduleAutomaticBackup(context: Context, updateExisting: Boolean = false): String {
     val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
     val workManager = androidx.work.WorkManager.getInstance(context)
+    workManager.cancelUniqueWork("moneylog_drive_backup_daily")
     val workName = "moneylog_automatic_backup"
     if (!prefs.getBoolean("automatic_backup_enabled", false)) {
         workManager.cancelUniqueWork(workName)
@@ -187,7 +188,8 @@ private fun scheduleAutomaticBackup(context: Context): String {
         else -> 1L
     }
     val request = androidx.work.PeriodicWorkRequestBuilder<GoogleDriveBackupWorker>(interval, java.util.concurrent.TimeUnit.DAYS).build()
-    workManager.enqueueUniquePeriodicWork(workName, androidx.work.ExistingPeriodicWorkPolicy.UPDATE, request)
+    val policy = if (updateExisting) androidx.work.ExistingPeriodicWorkPolicy.UPDATE else androidx.work.ExistingPeriodicWorkPolicy.KEEP
+    workManager.enqueueUniquePeriodicWork(workName, policy, request)
     val destinationLabel = if (destination == "drive") "Google Drive" else "private device storage"
     return "Automatic backup scheduled ${frequency} to $destinationLabel."
 }
@@ -235,6 +237,9 @@ private fun FinanceApp() {
     var emiRescheduleDate by remember { mutableStateOf("") }
     var showEmiReschedule by remember { mutableStateOf<EmiQuickAction?>(null) }
     val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        androidx.work.WorkManager.getInstance(context).cancelUniqueWork("moneylog_drive_backup_daily")
+    }
     val drivePrefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
     var driveStatus by remember { mutableStateOf(drivePrefs.getString("drive_backup_status", "Google Drive backup is not connected") ?: "Google Drive backup is not connected") }
     val driveFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -242,7 +247,7 @@ private fun FinanceApp() {
             val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             context.contentResolver.takePersistableUriPermission(uri, flags)
             drivePrefs.edit().putString("drive_backup_tree_uri", uri.toString()).apply()
-            val scheduleMessage = scheduleAutomaticBackup(context)
+            val scheduleMessage = scheduleAutomaticBackup(context, updateExisting = true)
             driveStatus = "Google Drive folder connected. $scheduleMessage"
             drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
         }.onFailure { error -> driveStatus = "Could not connect folder: " + (error.message ?: "permission error") }
@@ -252,7 +257,7 @@ private fun FinanceApp() {
             val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             context.contentResolver.takePersistableUriPermission(uri, flags)
             drivePrefs.edit().putString("device_backup_tree_uri", uri.toString()).apply()
-            val scheduleMessage = scheduleAutomaticBackup(context)
+            val scheduleMessage = scheduleAutomaticBackup(context, updateExisting = true)
             driveStatus = "Device backup folder connected. $scheduleMessage"
             drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
         }.onFailure { error -> driveStatus = "Could not connect device folder: " + (error.message ?: "permission error") }
@@ -2820,14 +2825,14 @@ private fun BackupSecurityScreen(
                         Switch(checked = automaticBackup, onCheckedChange = {
                             automaticBackup = it
                             backupPreferences.edit().putBoolean("automatic_backup_enabled", it).apply()
-                            backupScheduleMessage = scheduleAutomaticBackup(backupContext)
+                            backupScheduleMessage = scheduleAutomaticBackup(backupContext, updateExisting = true)
                         })
                     }
                     Text("Frequency", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                         listOf("daily" to "Daily", "weekly" to "Weekly", "monthly" to "Monthly").forEach { (value, label) ->
                             val selected = backupFrequency == value
-                            Surface(onClick = { backupFrequency = value; backupPreferences.edit().putString("automatic_backup_frequency", value).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext) },
+                            Surface(onClick = { backupFrequency = value; backupPreferences.edit().putString("automatic_backup_frequency", value).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext, updateExisting = true) },
                                 color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
                                 border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
                                 Text(label, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
