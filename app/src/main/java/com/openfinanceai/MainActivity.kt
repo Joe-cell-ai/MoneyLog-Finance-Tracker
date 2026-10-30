@@ -165,6 +165,35 @@ private fun EmiQuickActionRow(
 }
 
 
+private fun scheduleAutomaticBackup(context: Context, updateExisting: Boolean = false): String {
+    val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+    val workManager = androidx.work.WorkManager.getInstance(context)
+    workManager.cancelUniqueWork("moneylog_drive_backup_daily")
+    val workName = "moneylog_automatic_backup"
+    if (!prefs.getBoolean("automatic_backup_enabled", false)) {
+        workManager.cancelUniqueWork(workName)
+        return "Automatic backup is off."
+    }
+    val destination = prefs.getString("automatic_backup_destination", "device") ?: "device"
+    val folderKey = if (destination == "drive") "drive_backup_tree_uri" else "device_backup_tree_uri"
+    if (prefs.getString(folderKey, null).isNullOrBlank()) {
+        workManager.cancelUniqueWork(workName)
+        return if (destination == "drive") "Connect a Google Drive folder to start automatic backup."
+            else "Choose a device folder to start automatic backup."
+    }
+    val frequency = prefs.getString("automatic_backup_frequency", "daily") ?: "daily"
+    val interval = when (frequency) {
+        "weekly" -> 7L
+        "monthly" -> 30L
+        else -> 1L
+    }
+    val request = androidx.work.PeriodicWorkRequestBuilder<GoogleDriveBackupWorker>(interval, java.util.concurrent.TimeUnit.DAYS).build()
+    val policy = if (updateExisting) androidx.work.ExistingPeriodicWorkPolicy.UPDATE else androidx.work.ExistingPeriodicWorkPolicy.KEEP
+    workManager.enqueueUniquePeriodicWork(workName, policy, request)
+    val destinationLabel = if (destination == "drive") "Google Drive" else "private device storage"
+    return "Automatic backup scheduled ${frequency} to $destinationLabel."
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -208,19 +237,30 @@ private fun FinanceApp() {
     var emiRescheduleDate by remember { mutableStateOf("") }
     var showEmiReschedule by remember { mutableStateOf<EmiQuickAction?>(null) }
     val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        androidx.work.WorkManager.getInstance(context).cancelUniqueWork("moneylog_drive_backup_daily")
+    }
     val drivePrefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
     var driveStatus by remember { mutableStateOf(drivePrefs.getString("drive_backup_status", "Google Drive backup is not connected") ?: "Google Drive backup is not connected") }
     val driveFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) runCatching {
             val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             context.contentResolver.takePersistableUriPermission(uri, flags)
-            drivePrefs.edit().putString("drive_backup_tree_uri", uri.toString()).putString("drive_backup_status", "Google Drive folder connected; daily backup scheduled").apply()
-            driveStatus = "Google Drive folder connected; daily backup scheduled"
-            androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                "moneylog_drive_backup_daily", androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
-                androidx.work.PeriodicWorkRequestBuilder<GoogleDriveBackupWorker>(24, java.util.concurrent.TimeUnit.HOURS).build()
-            )
+            drivePrefs.edit().putString("drive_backup_tree_uri", uri.toString()).apply()
+            val scheduleMessage = scheduleAutomaticBackup(context, updateExisting = true)
+            driveStatus = "Google Drive folder connected. $scheduleMessage"
+            drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
         }.onFailure { error -> driveStatus = "Could not connect folder: " + (error.message ?: "permission error") }
+    }
+    val deviceFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) runCatching {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            context.contentResolver.takePersistableUriPermission(uri, flags)
+            drivePrefs.edit().putString("device_backup_tree_uri", uri.toString()).apply()
+            val scheduleMessage = scheduleAutomaticBackup(context, updateExisting = true)
+            driveStatus = "Device backup folder connected. $scheduleMessage"
+            drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
+        }.onFailure { error -> driveStatus = "Could not connect device folder: " + (error.message ?: "permission error") }
     }
     // Open the actual Google Drive app first so users can sign in there. When they
     // return to MoneyLog, continue with Android's folder picker to grant folder access.
@@ -537,9 +577,13 @@ private fun FinanceApp() {
                     "Backup & Export" -> BackupSecurityScreen(
                         onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
                         onConnectDrive = { openGoogleDriveForConnection() },
+                        onChooseDeviceFolder = { deviceFolderPicker.launch(null) },
                         onBackupNow = {
-                            if (drivePrefs.getString("drive_backup_tree_uri", null).isNullOrBlank()) driveStatus = "Connect a Google Drive folder first."
-                            else {
+                            val destination = drivePrefs.getString("automatic_backup_destination", "device") ?: "device"
+                            val folderKey = if (destination == "drive") "drive_backup_tree_uri" else "device_backup_tree_uri"
+                            if (drivePrefs.getString(folderKey, null).isNullOrBlank()) {
+                                driveStatus = if (destination == "drive") "Connect a Google Drive folder first." else "Choose a device backup folder first."
+                            } else {
                                 androidx.work.WorkManager.getInstance(context).enqueue(androidx.work.OneTimeWorkRequestBuilder<GoogleDriveBackupWorker>().build())
                                 driveStatus = "Backup queued. Check status again shortly."
                             }
@@ -2742,6 +2786,7 @@ private fun CreditHealthScreen() {
 private fun BackupSecurityScreen(
     onExportBackup: () -> Unit,
     onConnectDrive: () -> Unit,
+    onChooseDeviceFolder: () -> Unit,
     onBackupNow: () -> Unit,
     driveStatus: String,
     onRestoreBackup: () -> Unit,
@@ -2754,6 +2799,10 @@ private fun BackupSecurityScreen(
     var backupFrequency by remember { mutableStateOf(backupPreferences.getString("automatic_backup_frequency", "daily") ?: "daily") }
     var backupDestination by remember { mutableStateOf(backupPreferences.getString("automatic_backup_destination", "device") ?: "device") }
     var backupRetention by remember { mutableIntStateOf(backupPreferences.getInt("automatic_backup_retention", 30)) }
+    var backupScheduleMessage by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        if (automaticBackup) backupScheduleMessage = scheduleAutomaticBackup(backupContext)
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(Page),
         contentPadding = PaddingValues(16.dp),
@@ -2776,13 +2825,14 @@ private fun BackupSecurityScreen(
                         Switch(checked = automaticBackup, onCheckedChange = {
                             automaticBackup = it
                             backupPreferences.edit().putBoolean("automatic_backup_enabled", it).apply()
+                            backupScheduleMessage = scheduleAutomaticBackup(backupContext, updateExisting = true)
                         })
                     }
                     Text("Frequency", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                         listOf("daily" to "Daily", "weekly" to "Weekly", "monthly" to "Monthly").forEach { (value, label) ->
                             val selected = backupFrequency == value
-                            Surface(onClick = { backupFrequency = value; backupPreferences.edit().putString("automatic_backup_frequency", value).apply() },
+                            Surface(onClick = { backupFrequency = value; backupPreferences.edit().putString("automatic_backup_frequency", value).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext, updateExisting = true) },
                                 color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
                                 border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
                                 Text(label, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
@@ -2794,7 +2844,7 @@ private fun BackupSecurityScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("device" to "Device", "drive" to "Google Drive").forEach { (value, label) ->
                             val selected = backupDestination == value
-                            Surface(onClick = { backupDestination = value; backupPreferences.edit().putString("automatic_backup_destination", value).apply() },
+                            Surface(onClick = { backupDestination = value; backupPreferences.edit().putString("automatic_backup_destination", value).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext, updateExisting = true) },
                                 color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
                                 border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
                                 Text(label, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
@@ -2806,7 +2856,7 @@ private fun BackupSecurityScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf(7, 30, 90).forEach { count ->
                             val selected = backupRetention == count
-                            Surface(onClick = { backupRetention = count; backupPreferences.edit().putInt("automatic_backup_retention", count).apply() },
+                            Surface(onClick = { backupRetention = count; backupPreferences.edit().putInt("automatic_backup_retention", count).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext) },
                                 color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
                                 border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
                                 Text("$count files", modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -2816,7 +2866,7 @@ private fun BackupSecurityScreen(
                     }
                     Text(if (!automaticBackup) "Automatic backup is off." else "Enabled: ${backupFrequency} · ${if (backupDestination == "device") "Local device" else "Google Drive"} · Keep ${backupRetention} backups",
                         color = Muted, fontSize = 11.sp)
-                    Text("Schedule settings are saved; background file creation must be handled by the backup worker.", color = Muted, fontSize = 11.sp)
+                    Text(backupScheduleMessage.ifBlank { if (automaticBackup) "Automatic backup schedule is active." else "Enable automatic backup to create recurring backups." }, color = Muted, fontSize = 11.sp)
                 }
             }
         }
@@ -2827,12 +2877,16 @@ private fun BackupSecurityScreen(
                         Icon(Icons.Default.CloudSync, null, tint = IncomeGreen, modifier = Modifier.size(26.dp))
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Google Drive automatic backup", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(if (backupDestination == "drive") "Google Drive automatic backup" else "Device automatic backup", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             Text(driveStatus, color = Muted, fontSize = 12.sp)
                         }
                     }
-                    Text("Choose a private Google Drive folder. MoneyLog will create dated backups there daily. You can also run a backup manually.", color = Muted, fontSize = 12.sp)
-                    OutlinedButton(onClick = onConnectDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Connect Google Drive folder") }
+                    Text(if (backupDestination == "drive") "Choose a private Google Drive folder for cloud backups. The frequency selected above controls the schedule; retention keeps only the selected number of recent files." else "Choose a folder on this device. MoneyLog creates dated JSON backups there using your selected schedule and retention limit.", color = Muted, fontSize = 12.sp)
+                    if (backupDestination == "device") {
+                        OutlinedButton(onClick = onChooseDeviceFolder, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Choose device backup folder") }
+                    } else {
+                        OutlinedButton(onClick = onConnectDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Connect Google Drive folder") }
+                    }
                     Button(onClick = onBackupNow, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Icon(Icons.Default.CloudUpload, null); Spacer(Modifier.width(8.dp)); Text("Back up now") }
                 }
             }
