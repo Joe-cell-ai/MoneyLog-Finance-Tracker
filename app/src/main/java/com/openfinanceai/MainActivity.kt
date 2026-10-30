@@ -178,6 +178,60 @@ private fun financeIcon(key: String): ImageVector = when (key) {
     else -> Icons.Default.Category
 }
 
+private val FINANCE_ICON_OPTIONS = listOf(
+    "food", "groceries", "fuel", "transport", "health", "education",
+    "travel", "home", "income", "bills", "shopping", "card", "cash",
+    "payments", "bank", "work", "subscription", "gift", "fitness",
+    "pets", "entertainment", "other"
+)
+
+private fun savedFinanceIconKey(context: Context, type: String, name: String): String {
+    val key = "${type}_icon_${name.trim().lowercase(Locale.ROOT)}"
+    return context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+        .getString(key, null) ?: financeIconKeyForName(name)
+}
+
+@Composable
+private fun FinanceIconPicker(
+    selectedKey: String,
+    onSelect: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Choose an icon") },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 390.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Choose an icon that best represents this item.", color = Muted, fontSize = 12.sp)
+                FINANCE_ICON_OPTIONS.chunked(4).forEach { rowKeys ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rowKeys.forEach { key ->
+                            val selected = selectedKey == key
+                            Column(
+                                Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
+                                    .background(if (selected) Green.copy(alpha = .13f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .45f))
+                                    .border(if (selected) 1.5.dp else 1.dp, if (selected) Green else Color.Transparent, RoundedCornerShape(12.dp))
+                                    .clickable { onSelect(key) }.padding(vertical = 10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(financeIcon(key), null, tint = if (selected) Green else Muted, modifier = Modifier.size(23.dp))
+                                Text(key.replaceFirstChar { it.uppercase() }, color = Ink, fontSize = 9.sp, maxLines = 1)
+                            }
+                        }
+                        repeat(4 - rowKeys.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Done") } }
+    )
+}
+
+
 private fun nextLoanScheduledDueDate(
     context: Context,
     loan: Loan,
@@ -2341,6 +2395,8 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
+    var selectedIconKey by remember { mutableStateOf("other") }
+    var showIconPicker by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     val categoryColors = listOf(Green, ExpenseRed, SavingsBlue, Color(0xFF9B6AD6), Color(0xFFE99B51))
     Column(Modifier.fillMaxSize()) {
@@ -2363,11 +2419,11 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(Modifier.size(40.dp).background(tint.copy(alpha = .12f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                        Icon(financeIcon(financeIconKeyForName(category)), null, tint = tint)
+                        Icon(financeIcon(savedFinanceIconKey(context, "category", category)), null, tint = tint)
                     }
                     Spacer(Modifier.width(12.dp))
                     Text(category, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
-                    IconButton(onClick = { draft = category; editing = category; showAdd = true }) {
+                    IconButton(onClick = { draft = category; editing = category; selectedIconKey = savedFinanceIconKey(context, "category", category); showAdd = true }) {
                         Icon(Icons.Default.Edit, "Edit category", tint = Green)
                     }
                     IconButton(onClick = { pendingDelete = category }) {
@@ -2388,7 +2444,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(onClick = { draft = ""; editing = null; showAdd = true }) {
+                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; showAdd = true }) {
                     Icon(Icons.Default.Add, null)
                     Spacer(Modifier.width(6.dp))
                     Text("Add Category")
@@ -2412,12 +2468,13 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                     OutlinedTextField(draft, { draft = it }, label = { Text("Category name") }, singleLine = true)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(categoryTint(draft)), contentAlignment = Alignment.Center) {
-                            Icon(financeIcon(financeIconKeyForName(draft)), null, tint = categoryColor(draft))
+                            Icon(financeIcon(selectedIconKey), null, tint = categoryColor(draft))
                         }
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("Suggested icon", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                            Text("Automatically matched to the category name", color = Muted, fontSize = 10.sp)
+                            Text("Suggested from the name · tap to customize", color = Muted, fontSize = 10.sp)
                         }
+                        TextButton(onClick = { showIconPicker = true }) { Text("Change icon", fontSize = 11.sp) }
                     }
                 }
             },
@@ -2431,6 +2488,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                         } else {
                             categories = if (editing == null) categories + name else categories.map { if (it == editing) name else it }
                                 .distinctBy { it.lowercase(Locale.ROOT) }
+                            preferences.edit().putString("category_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).apply()
                             persistCategories(categories)
                             message = ""
                             showAdd = false
@@ -2441,6 +2499,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
             dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Cancel") } }
         )
     }
+    if (showIconPicker) FinanceIconPicker(selectedIconKey, { selectedIconKey = it; showIconPicker = false }, { showIconPicker = false })
     pendingDelete?.let { category ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
@@ -2478,6 +2537,8 @@ private fun TagManagementScreen() {
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
+    var selectedIconKey by remember { mutableStateOf("other") }
+    var showIconPicker by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     fun persistTags(values: List<String>) {
         val array = JSONArray()
@@ -2495,11 +2556,11 @@ private fun TagManagementScreen() {
             items(tags, key = { it }) { tag ->
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(15.dp)).padding(start = 13.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(40.dp).background(LavenderTint, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                        Icon(financeIcon(financeIconKeyForName(tag)), null, tint = Purple)
+                        Icon(financeIcon(savedFinanceIconKey(context, "tag", tag)), null, tint = Purple)
                     }
                     Spacer(Modifier.width(12.dp))
                     Text(tag, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Medium)
-                    IconButton(onClick = { draft = tag; editing = tag; showAdd = true }) { Icon(Icons.Default.Edit, "Edit tag", tint = Green) }
+                    IconButton(onClick = { draft = tag; editing = tag; selectedIconKey = savedFinanceIconKey(context, "tag", tag); showAdd = true }) { Icon(Icons.Default.Edit, "Edit tag", tint = Green) }
                     IconButton(onClick = { pendingDelete = tag }) { Icon(Icons.Default.DeleteOutline, "Delete tag", tint = ExpenseRed) }
                 }
             }
@@ -2507,7 +2568,7 @@ private fun TagManagementScreen() {
         }
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { draft = ""; editing = null; showAdd = true }) {
+                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; showAdd = true }) {
                     Icon(Icons.Default.Add, null)
                     Spacer(Modifier.width(6.dp))
                     Text("Add Tag")
@@ -2525,12 +2586,13 @@ private fun TagManagementScreen() {
                     OutlinedTextField(draft, { draft = it }, label = { Text("Tag name") }, singleLine = true)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(LavenderTint), contentAlignment = Alignment.Center) {
-                            Icon(financeIcon(financeIconKeyForName(draft)), null, tint = Purple)
+                            Icon(financeIcon(selectedIconKey), null, tint = Purple)
                         }
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("Suggested icon", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                            Text("Automatically matched to the tag name", color = Muted, fontSize = 10.sp)
+                            Text("Suggested from the name · tap to customize", color = Muted, fontSize = 10.sp)
                         }
+                        TextButton(onClick = { showIconPicker = true }) { Text("Change icon", fontSize = 11.sp) }
                     }
                 }
             },
@@ -2542,6 +2604,7 @@ private fun TagManagementScreen() {
                         if (duplicate) message = "That tag already exists."
                         else {
                             tags = if (editing == null) tags + name else tags.map { if (it == editing) name else it }.distinctBy { it.lowercase(Locale.ROOT) }
+                            preferences.edit().putString("tag_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).apply()
                             persistTags(tags)
                             message = ""
                             showAdd = false
@@ -2552,6 +2615,7 @@ private fun TagManagementScreen() {
             dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Cancel") } }
         )
     }
+    if (showIconPicker) FinanceIconPicker(selectedIconKey, { selectedIconKey = it; showIconPicker = false }, { showIconPicker = false })
     pendingDelete?.let { tag ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
