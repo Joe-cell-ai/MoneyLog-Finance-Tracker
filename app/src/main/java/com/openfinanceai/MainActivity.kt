@@ -589,7 +589,7 @@ private fun FinanceApp() {
                                     kotlin.math.round((transaction.amount - monthlyRate * loan.balance) / (1.0 + monthlyRate)).toLong()
                                 val storedOrEstimatedReduction = if (transaction.loanAllocationRecorded) transaction.loanPrincipalReduction else estimatedLegacyReduction
                                 val principalReduction = storedOrEstimatedReduction.coerceAtLeast(0L)
-                                    .coerceAtMost(loan.balance + transaction.loanPrincipalReduction)
+                                    .coerceAtMost(loan.originalPrincipal.coerceAtLeast(loan.balance))
                                 val sameInstallment = remainingTransactions.filter {
                                     it.transactionKind == "Loan repayment / EMI" &&
                                         it.loanLender.equals(transaction.loanLender, ignoreCase = true) &&
