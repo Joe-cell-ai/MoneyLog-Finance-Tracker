@@ -2696,10 +2696,8 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                         Box(Modifier.size(48.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFFF2F6FD)).border(1.dp, Color(0xFFE3ECF8), RoundedCornerShape(15.dp)), contentAlignment = Alignment.Center) {
                             Icon(financeIcon(savedFinanceIconKey(context, "tag", tag)), null, tint = tint, modifier = Modifier.size(21.dp))
                         }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(tag, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                            Text("$usage", color = Color(0xFF5C6B8B), fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                        }
+                        Text(tag, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text("$usage", color = Color(0xFF5C6B8B), fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.width(30.dp), textAlign = TextAlign.Center)
                         Box {
                             IconButton(onClick = { menuTag = tag }) { Icon(Icons.Default.MoreVert, "Tag options", tint = Color(0xFF687A9A)) }
                             DropdownMenu(expanded = menuTag == tag, onDismissRequest = { menuTag = null }) {
@@ -2713,6 +2711,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                             }
                         }
                     }
+                    Divider(color = Color(0xFFE8EDF5), thickness = 1.dp)
                 }
             }
             item {
@@ -4878,19 +4877,20 @@ private fun AddTransactionDialog(
             }
         },
         confirmButton = {
-            Button(onClick = {
-                val parsed = amount.toLongOrNull()
-                val validDate = runCatching { java.time.LocalDate.parse(date); true }.getOrDefault(false)
-                if (parsed == null || parsed <= 0) {
-                    error = "Enter a valid amount."
-                } else if (!validDate) {
-                    error = "Enter the date as YYYY-MM-DD."
-                } else {
-                    if (transactionKind.startsWith("Loan") && selectedLoanLender.isBlank()) error = "Select an existing loan or add a new loan first."
-                    else if (transactionKind == "Loan repayment / EMI" && selectedEmiDate.isBlank()) error = "Select the EMI installment to match this repayment."
-                    else onSave(title.trim().ifBlank { notes.trim().ifBlank { category.ifBlank { "Other" } } }, parsed, transactionKind, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTags.joinToString(", "), selectedLoanLender, selectedEmiDate)
-                }
-            }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5), contentColor = Color.White), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save Transaction", fontWeight = FontWeight.Bold) }
+            Box(
+                Modifier.fillMaxWidth().height(54.dp).clip(RoundedCornerShape(18.dp))
+                    .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFF5427E8), Color(0xFF8A35F0))))
+                    .clickable {
+                        val parsed = amount.toLongOrNull()
+                        val validDate = runCatching { java.time.LocalDate.parse(date); true }.getOrDefault(false)
+                        if (parsed == null || parsed <= 0) error = "Enter a valid amount."
+                        else if (!validDate) error = "Enter the date as YYYY-MM-DD."
+                        else if (transactionKind.startsWith("Loan") && selectedLoanLender.isBlank()) error = "Select an existing loan or add a new loan first."
+                        else if (transactionKind == "Loan repayment / EMI" && selectedEmiDate.isBlank()) error = "Select the EMI installment to match this repayment."
+                        else onSave(title.trim().ifBlank { notes.trim().ifBlank { category.ifBlank { "Other" } } }, parsed, transactionKind, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTags.joinToString(", "), selectedLoanLender, selectedEmiDate)
+                    },
+                contentAlignment = Alignment.Center
+            ) { Text("Save Transaction", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
