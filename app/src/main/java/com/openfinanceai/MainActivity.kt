@@ -717,8 +717,8 @@ private fun FinanceApp() {
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance }, transactions)
                     "Budgets" -> BudgetsScreen(transactions)
                     "Credit health" -> CreditHealthScreen()
-                    "Categories" -> CategoriesScreen(onCategoriesChanged = { categoryRefreshToken++ })
-                    "Tag Management" -> TagManagementScreen()
+                    "Categories" -> CategoriesScreen(transactions = transactions, onCategoriesChanged = { categoryRefreshToken++ })
+                    "Tag Management" -> TagManagementScreen(transactions = transactions)
                     "Backup & Export" -> BackupSecurityScreen(
                         onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
                         onConnectDrive = { openGoogleDriveForConnection() },
@@ -2452,7 +2452,7 @@ private val DEFAULT_MONEY_CATEGORIES = listOf(
 )
 
 @Composable
-private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
+private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCategoriesChanged: () -> Unit = {}) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
     val initialCategories = remember {
@@ -2467,6 +2467,8 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
     }
     var categories by remember { mutableStateOf(initialCategories) }
     var message by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
+    val visibleCategories = categories.filter { it.contains(searchQuery.trim(), ignoreCase = true) }
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
@@ -2496,8 +2498,9 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                     }
                 }
             }
+            item { OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Search categories...") }, leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF5948F5)) }, shape = RoundedCornerShape(16.dp), colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface)) }
             if (message.isNotBlank()) item { Text(message, color = Green, fontSize = 12.sp) }
-            items(categories, key = { it }) { category ->
+            items(visibleCategories, key = { it }) { category ->
                 val tint = categoryColor(category)
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                     Row(Modifier.fillMaxWidth().padding(start = 13.dp, top = 10.dp, bottom = 10.dp, end = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
@@ -2506,7 +2509,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(category, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text("Expense / income category", color = Muted, fontSize = 10.sp)
+                            Text("${transactions.count { it.category.equals(category, ignoreCase = true) }} transactions", color = Muted, fontSize = 10.sp)
                         }
                         IconButton(onClick = { draft = category; editing = category; selectedIconKey = savedFinanceIconKey(context, "category", category); showAdd = true }) { Icon(Icons.Default.Edit, "Edit category", tint = Color(0xFF5948F5)) }
                         IconButton(onClick = { pendingDelete = category }) { Icon(Icons.Default.DeleteOutline, "Delete category", tint = ExpenseRed) }
@@ -2571,7 +2574,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
 
 
 @Composable
-private fun TagManagementScreen() {
+private fun TagManagementScreen(transactions: List<Transaction> = emptyList()) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
     val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online Shopping")
@@ -2587,6 +2590,8 @@ private fun TagManagementScreen() {
     }
     var tags by remember { mutableStateOf(initialTags) }
     var message by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
+    val visibleTags = tags.filter { it.contains(searchQuery.trim(), ignoreCase = true) }
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
@@ -2615,8 +2620,9 @@ private fun TagManagementScreen() {
                     }
                 }
             }
+            item { OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Search tags...") }, leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF5948F5)) }, shape = RoundedCornerShape(16.dp), colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface)) }
             if (message.isNotBlank()) item { Text(message, color = Green, fontSize = 12.sp) }
-            items(tags, key = { it }) { tag ->
+            items(visibleTags, key = { it }) { tag ->
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                     Row(Modifier.fillMaxWidth().padding(start = 13.dp, top = 10.dp, bottom = 10.dp, end = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                         Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF1EFFF)), contentAlignment = Alignment.Center) {
@@ -2624,7 +2630,7 @@ private fun TagManagementScreen() {
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(tag, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text("Transaction tag", color = Muted, fontSize = 10.sp)
+                            Text("${transactions.count { transaction -> transaction.tag.split(Regex("[,;]")).any { it.trim().equals(tag, ignoreCase = true) } }} transactions", color = Muted, fontSize = 10.sp)
                         }
                         IconButton(onClick = { draft = tag; editing = tag; selectedIconKey = savedFinanceIconKey(context, "tag", tag); showAdd = true }) { Icon(Icons.Default.Edit, "Edit tag", tint = Color(0xFF5948F5)) }
                         IconButton(onClick = { pendingDelete = tag }) { Icon(Icons.Default.DeleteOutline, "Delete tag", tint = ExpenseRed) }
