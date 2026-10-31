@@ -4833,10 +4833,11 @@ private fun AddTransactionDialog(
                         onDismissRequest = { showDatePicker = false },
                         shape = RoundedCornerShape(26.dp),
                         colors = DatePickerDefaults.colors(containerColor = Color(0xFFFCFBFF)),
+                        title = { Text("Select Date", modifier = Modifier.padding(start = 8.dp, top = 8.dp), color = Color(0xFF151B3D), fontSize = 20.sp, fontWeight = FontWeight.Bold) },
                         confirmButton = { Button(onClick = {
                             pickerState.selectedDateMillis?.let { millis -> date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString() }
                             showDatePicker = false
-                        }, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) { Text("Apply date") } },
+                        }, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) { Text("Done") } },
                         dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel", color = Color(0xFF66718F)) } }
                     ) { DatePicker(state = pickerState, showModeToggle = false) }
                 }
