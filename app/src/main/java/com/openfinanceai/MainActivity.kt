@@ -2669,7 +2669,9 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
         values.forEach { array.put(it) }
         preferences.edit().putString("custom_tags", array.toString()).apply()
     }
-    Column(Modifier.fillMaxSize().background(Page)) {
+    Column(Modifier.fillMaxSize().background(Page).padding(horizontal = 10.dp, vertical = 8.dp)
+        .clip(RoundedCornerShape(24.dp)).background(Color.White)
+        .border(1.dp, Color(0xFFDCE8F7), RoundedCornerShape(24.dp))) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Color(0xFF174A83), modifier = Modifier.size(25.dp)) }
             Text("Tags", color = Color(0xFF17264D), fontSize = 23.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
