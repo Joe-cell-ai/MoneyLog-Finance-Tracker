@@ -4698,32 +4698,17 @@ private fun AddTransactionDialog(
         titleContentColor = Color(0xFF151B3D),
         textContentColor = Color(0xFF151B3D),
         title = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Box(Modifier.width(54.dp).height(5.dp).clip(CircleShape).background(Color(0xFFD8D7E8)))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("Add Transaction", color = Color(0xFF151B3D), fontWeight = FontWeight.Bold, fontSize = 21.sp)
+                    Text("Add income, expenses or loan payments", color = Color(0xFF66718F), fontSize = 11.sp)
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(Modifier.size(54.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF5948F5)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(25.dp))
-                    }
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("Add Transaction", color = Color(0xFF151B3D), fontWeight = FontWeight.Bold, fontSize = 21.sp)
-                        Text("Record your income, expenses and loan payments", color = Color(0xFF66718F), fontSize = 12.sp)
-                    }
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFFF0EFF8))) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF47516E))
-                    }
-                }
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close", tint = Color(0xFF47516E)) }
             }
         },
         text = {
-            Column(Modifier.fillMaxWidth().heightIn(max = 540.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .65f)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.fillMaxWidth().heightIn(max = 590.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color(0xFFF0F2F8)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("Expense", "Income", "Loan").forEach { option ->
                         val selected = if (option == "Loan") transactionKind.startsWith("Loan") else transactionKind == option
                         val accent = when (option) { "Expense" -> ExpenseRed; "Income" -> IncomeGreen; else -> Purple }
@@ -4732,131 +4717,177 @@ private fun AddTransactionDialog(
                             isIncome = option == "Income"
                             if (option == "Expense" && (category.equals("Salary", true) || category.equals("Other income", true) || category.equals("Income", true))) category = "Other"
                             if (option == "Income" && !category.equals("Salary", true) && !category.equals("Other income", true) && !category.equals("Income", true)) category = "Salary"
-                            if (option == "Loan") { transactionKind = "Loan repayment / EMI"; isIncome = false; title = if (title.isBlank()) "Loan EMI payment" else title; category = "Loan repayment" }
-                        }.padding(vertical = 11.dp), contentAlignment = Alignment.Center) {
-                            Text(option, color = if (selected) Color.White else Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            if (option == "Loan") {
+                                transactionKind = "Loan repayment / EMI"; isIncome = false
+                                title = if (title.isBlank()) "Loan EMI payment" else title
+                                category = "Loan repayment"
+                            }
+                        }.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                            Text(option, color = if (selected) Color.White else Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+                Card(shape = RoundedCornerShape(19.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F3F7))) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("AMOUNT", color = Color(0xFF66718F), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        OutlinedTextField(
+                            value = amount, onValueChange = { amount = it.filter(Char::isDigit) },
+                            modifier = Modifier.fillMaxWidth(), placeholder = { Text("0", fontSize = 30.sp) },
+                            leadingIcon = { Icon(Icons.Default.CurrencyRupee, null, tint = Color(0xFF252C50), modifier = Modifier.size(25.dp)) },
+                            trailingIcon = { Icon(Icons.Default.Calculate, "Calculator", tint = Color(0xFF66718F)) },
+                            singleLine = true, shape = RoundedCornerShape(14.dp),
+                            textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, color = Color(0xFF151B3D)),
+                            colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Color.Transparent, focusedContainerColor = Color.Transparent, unfocusedBorderColor = Color.Transparent, focusedBorderColor = Color.Transparent)
+                        )
+                        Text("Enter transaction amount", color = Color(0xFF66718F), fontSize = 10.sp)
+                    }
+                }
+                Text("Transaction Details", color = Color(0xFF151B3D), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 5.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFFFE9E5)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.ReceiptLong, null, tint = Color(0xFFE56B5D))
+                            }
+                            OutlinedTextField(value = title, onValueChange = { title = it }, modifier = Modifier.weight(1f),
+                                label = { Text("Description") }, placeholder = { Text("What was this transaction?") },
+                                singleLine = true, shape = RoundedCornerShape(12.dp))
+                        }
+                        Divider(color = Color(0xFFECEEF3))
+                        ExposedDropdownMenuBox(expanded = categoryMenuExpanded, onExpandedChange = { categoryMenuExpanded = it }) {
+                            Row(Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable).padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+                                Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFFFE9E5)), contentAlignment = Alignment.Center) {
+                                    Icon(financeIcon(savedFinanceIconKey(context, "category", category)), null, tint = categoryColor(category))
+                                }
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("Category", color = Color(0xFF66718F), fontSize = 10.sp)
+                                    Text(category, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                }
+                                Icon(Icons.Default.KeyboardArrowDown, null, tint = Muted)
+                            }
+                            ExposedDropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
+                                transactionCategoryOptions.forEach { option ->
+                                    DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                        Icon(financeIcon(savedFinanceIconKey(context, "category", option)), null, tint = categoryColor(option)); Text(option)
+                                    } }, onClick = { category = option; categoryMenuExpanded = false })
+                                }
+                            }
+                        }
+                        Divider(color = Color(0xFFECEEF3))
+                        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+                                Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFE7F0FF)), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.AccountBalanceWallet, null, tint = Color(0xFF3978D8))
+                                }
+                                Column(Modifier.weight(1f)) {
+                                    Text("Payment Method", color = Color(0xFF66718F), fontSize = 10.sp)
+                                    Text(paymentMethod, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf("UPI", "Google Pay", "Cash", "Debit Card", "Credit Card", "PayPal", "Bank").forEach { method ->
+                                    FilterChip(selected = paymentMethod == method, onClick = { paymentMethod = method }, label = { Text(method, fontSize = 10.sp) })
+                                }
+                            }
+                        }
+                        Divider(color = Color(0xFFECEEF3))
+                        Row(Modifier.fillMaxWidth().clickable { showDatePicker = true }.padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFF0E9FF)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.CalendarMonth, null, tint = Color(0xFF8A5BD6))
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("Date", color = Color(0xFF66718F), fontSize = 10.sp)
+                                Text(date, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            }
+                            Icon(Icons.Default.KeyboardArrowDown, null, tint = Muted)
+                        }
+                        Divider(color = Color(0xFFECEEF3))
+                        ExposedDropdownMenuBox(expanded = tagMenuExpanded, onExpandedChange = { tagMenuExpanded = it }) {
+                            Row(Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable).padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+                                Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFE5F6ED)), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.LocalOffer, null, tint = Color(0xFF299B68))
+                                }
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("Tags", color = Color(0xFF66718F), fontSize = 10.sp)
+                                    Text(selectedTags.joinToString(", ").ifBlank { "Add tags" }, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                }
+                                Icon(Icons.Default.KeyboardArrowDown, null, tint = Muted)
+                            }
+                            ExposedDropdownMenu(expanded = tagMenuExpanded, onDismissRequest = { tagMenuExpanded = false }) {
+                                DropdownMenuItem(text = { Text("Clear tags") }, onClick = { selectedTags = emptyList(); tagMenuExpanded = false })
+                                tags.forEach { option ->
+                                    DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(option, Modifier.weight(1f)); if (option in selectedTags) Icon(Icons.Default.Check, null, tint = Green)
+                                    } }, onClick = { selectedTags = if (option in selectedTags) selectedTags - option else selectedTags + option })
+                                }
+                                DropdownMenuItem(text = { Text("+ Create tag", color = Color(0xFF2878E8)) }, onClick = { tagMenuExpanded = false; tagDraft = ""; showCreateTag = true })
+                            }
+                        }
+                        Divider(color = Color(0xFFECEEF3))
+                        Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFFFF0E2)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Edit, null, tint = Color(0xFFE28B38))
+                            }
+                            OutlinedTextField(value = notes, onValueChange = { notes = it }, modifier = Modifier.weight(1f),
+                                label = { Text("Notes / Description") }, placeholder = { Text("Add notes (optional)") },
+                                minLines = 2, shape = RoundedCornerShape(12.dp))
                         }
                     }
                 }
                 if (transactionKind.startsWith("Loan")) {
                     Card(colors = CardDefaults.cardColors(containerColor = loanTint(selectedLoanLender.ifBlank { "Loan" })), shape = RoundedCornerShape(16.dp)) {
                         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                            Text("LOAN TRANSACTION", color = loanAccent(selectedLoanLender.ifBlank { "Loan" }), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Text("LOAN DETAILS", color = loanAccent(selectedLoanLender.ifBlank { "Loan" }), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                FilterChip(selected = transactionKind == "Loan received", onClick = { transactionKind = "Loan received"; isIncome = true; category = "Loan received"; if (title.isBlank() || title == "Loan EMI payment") title = "Loan received" }, label = { Text("Loan received") }, modifier = Modifier.weight(1f))
-                                FilterChip(selected = transactionKind == "Loan repayment / EMI", onClick = { transactionKind = "Loan repayment / EMI"; isIncome = false; category = "Loan repayment"; if (title.isBlank() || title == "Loan received") title = "Loan EMI payment" }, label = { Text("Repayment / EMI") }, modifier = Modifier.weight(1f))
+                                FilterChip(selected = transactionKind == "Loan received", onClick = { transactionKind = "Loan received"; isIncome = true; category = "Loan received"; if (title.isBlank()) title = "Loan received" }, label = { Text("Loan received") }, modifier = Modifier.weight(1f))
+                                FilterChip(selected = transactionKind == "Loan repayment / EMI", onClick = { transactionKind = "Loan repayment / EMI"; isIncome = false; category = "Loan repayment"; if (title.isBlank()) title = "Loan EMI payment" }, label = { Text("Repayment / EMI") }, modifier = Modifier.weight(1f))
                             }
                             ExposedDropdownMenuBox(expanded = loanMenuExpanded, onExpandedChange = { loanMenuExpanded = it }) {
                                 OutlinedTextField(value = selectedLoanLender, onValueChange = {}, readOnly = true, modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), label = { Text("Select existing loan") }, placeholder = { Text("Choose a loan") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = loanMenuExpanded) }, singleLine = true, shape = RoundedCornerShape(12.dp))
                                 ExposedDropdownMenu(expanded = loanMenuExpanded, onDismissRequest = { loanMenuExpanded = false }) {
-                                    loans.forEach { loan -> DropdownMenuItem(text = { Column { Text(loan.lender); Text("EMI \${Money.format(loan.emi)} · Balance \${Money.format(loan.balance)}", color = Muted, fontSize = 11.sp) } }, onClick = { selectedLoanLender = loan.lender; loanMenuExpanded = false; selectedEmiDate = "" }) }
+                                    loans.forEach { loan -> DropdownMenuItem(text = { Text(loan.lender) }, onClick = { selectedLoanLender = loan.lender; loanMenuExpanded = false; selectedEmiDate = "" }) }
                                 }
                             }
-                            OutlinedButton(onClick = { newLoanLender = ""; newLoanEmi = ""; newLoanRate = "0"; newLoanTenure = "12"; newLoanDue = java.time.LocalDate.now().plusMonths(1).withDayOfMonth(1).toString(); newLoanError = ""; showInlineAddLoan = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Add a new loan") }
+                            OutlinedButton(onClick = { newLoanLender = ""; newLoanEmi = ""; newLoanRate = "0"; newLoanTenure = "12"; newLoanDue = java.time.LocalDate.now().plusMonths(1).withDayOfMonth(1).toString(); newLoanError = ""; showInlineAddLoan = true }, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Add a new loan")
+                            }
                             if (transactionKind == "Loan repayment / EMI") {
                                 ExposedDropdownMenuBox(expanded = emiMenuExpanded, onExpandedChange = { emiMenuExpanded = it }) {
-                                    OutlinedTextField(value = selectedEmiDate, onValueChange = {}, readOnly = true, modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), label = { Text("EMI installment (auto-matched; change if needed)") }, placeholder = { Text("Select installment") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = emiMenuExpanded) }, singleLine = true, shape = RoundedCornerShape(12.dp))
+                                    OutlinedTextField(value = selectedEmiDate, onValueChange = {}, readOnly = true, modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), label = { Text("EMI installment (auto-matched)") }, placeholder = { Text("Select installment") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = emiMenuExpanded) }, singleLine = true, shape = RoundedCornerShape(12.dp))
                                     ExposedDropdownMenu(expanded = emiMenuExpanded, onDismissRequest = { emiMenuExpanded = false }) {
-                                        emiChoices.forEach { (label, scheduledAmount) -> DropdownMenuItem(text = { Column { Text(label); Text("Scheduled \${Money.format(scheduledAmount)}", color = Muted, fontSize = 11.sp) } }, onClick = { selectedEmiDate = label; emiMenuExpanded = false }) }
+                                        emiChoices.forEach { (label, scheduledAmount) -> DropdownMenuItem(text = { Text("$label · ${Money.format(scheduledAmount)}") }, onClick = { selectedEmiDate = label; emiMenuExpanded = false }) }
                                     }
                                 }
                                 if (selectedLoan != null && selectedEmiDate.isNotBlank()) {
                                     val expectedAmount = emiChoices.firstOrNull { it.first == selectedEmiDate }?.second ?: selectedLoan.emi
                                     val enteredAmount = amount.toLongOrNull() ?: 0L
-                                    Text(if (enteredAmount >= expectedAmount) "Full EMI amount covered — this installment can be marked Paid." else "Partial payment: \${Money.format((expectedAmount - enteredAmount).coerceAtLeast(0L))} still due. Status will not change to Paid.", color = if (enteredAmount >= expectedAmount) IncomeGreen else Color(0xFFB45309), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                    Text(if (enteredAmount >= expectedAmount) "Full EMI amount covered — installment can be marked Paid." else "Partial payment: ${Money.format((expectedAmount - enteredAmount).coerceAtLeast(0L))} still due.", color = if (enteredAmount >= expectedAmount) IncomeGreen else Color(0xFFB45309), fontSize = 11.sp)
                                 }
                             }
                         }
                     }
                 }
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = if (AppDarkTheme) Color(0xFF263144) else Color(0xFFF0F4FC))) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Amount", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        OutlinedTextField(
-                            value = amount, onValueChange = { amount = it.filter(Char::isDigit) },
-                            modifier = Modifier.fillMaxWidth(), placeholder = { Text("0") },
-                            leadingIcon = { Icon(Icons.Default.CurrencyRupee, null, tint = Ink) },
-                            trailingIcon = { Icon(Icons.Default.Calculate, "Calculator", tint = Muted) },
-                            singleLine = true, shape = RoundedCornerShape(14.dp),
-                            textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, color = Ink),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                unfocusedContainerColor = Color.Transparent, focusedContainerColor = Color.Transparent,
-                                unfocusedBorderColor = Color.Transparent, focusedBorderColor = Color.Transparent
-                            )
-                        )
-                        Text("Enter transaction amount", color = Muted, fontSize = 11.sp)
-                    }
-                }
-                OutlinedTextField(title, { title = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, leadingIcon = { Icon(Icons.Default.ReceiptLong, null, tint = Color(0xFF5948F5)) }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                ExposedDropdownMenuBox(
-                    expanded = categoryMenuExpanded,
-                    onExpandedChange = { categoryMenuExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = category,
-                        onValueChange = { category = it },
-                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                        label = { Text("Category") },
-                        leadingIcon = { Icon(financeIcon(savedFinanceIconKey(context, "category", category)), null, tint = categoryColor(category)) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryMenuExpanded) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp)
-                    )
-                    ExposedDropdownMenu(
-                        expanded = categoryMenuExpanded,
-                        onDismissRequest = { categoryMenuExpanded = false }
-                    ) {
-                        transactionCategoryOptions.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                                    Icon(financeIcon(savedFinanceIconKey(context, "category", option)), null, tint = categoryColor(option), modifier = Modifier.size(19.dp))
-                                    Text(option)
-                                } },
-                                onClick = { category = option; categoryMenuExpanded = false }
-                            )
-                        }
-                    }
-                }
-                ExposedDropdownMenuBox(expanded = tagMenuExpanded, onExpandedChange = { tagMenuExpanded = it }) {
-                    OutlinedTextField(
-                        value = selectedTags.joinToString(", "), onValueChange = {}, readOnly = true,
-                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
-                        label = { Text("Tags (optional)") }, placeholder = { Text("Choose one or more tags") },
-                        leadingIcon = { Icon(Icons.Default.Tag, null, tint = Color(0xFF8953D8)) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagMenuExpanded) },
-                        singleLine = true, shape = RoundedCornerShape(14.dp)
-                    )
-                    ExposedDropdownMenu(expanded = tagMenuExpanded, onDismissRequest = { tagMenuExpanded = false }) {
-                        DropdownMenuItem(text = { Text("Clear tags") }, onClick = { selectedTags = emptyList(); tagMenuExpanded = false })
-                        tags.forEach { option -> DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                            Icon(financeIcon(savedFinanceIconKey(context, "tag", option)), null, tint = savedFinanceColor(context, "tag", option), modifier = Modifier.size(19.dp))
-                            Text(option)
-                            if (option in selectedTags) Icon(Icons.Default.Check, null, tint = Green, modifier = Modifier.size(17.dp))
-                        } }, onClick = { selectedTags = if (option in selectedTags) selectedTags - option else selectedTags + option; tagMenuExpanded = true }) }
-                        DropdownMenuItem(text = { Text("+ Create tag", color = Green, fontWeight = FontWeight.SemiBold) }, onClick = { tagMenuExpanded = false; tagDraft = ""; showCreateTag = true })
-                    }
-                }
-                OutlinedButton(onClick = { tagDraft = ""; showCreateTag = true }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Add, null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Create Tag")
-                }
-                OutlinedTextField(
-                    value = date, onValueChange = {}, readOnly = true,
-                    label = { Text("Transaction date") },
-                    supportingText = { Text("Tap to open calendar and select a date") },
-                    leadingIcon = { Icon(Icons.Default.CalendarMonth, null, tint = Color(0xFF5948F5)) },
-                    trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date") } },
-                    modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }, singleLine = true
-                )
                 if (showDatePicker) {
                     val initialMillis = runCatching { java.time.LocalDate.parse(date).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrDefault(System.currentTimeMillis())
                     val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-                    DatePickerDialog(
-                        onDismissRequest = { showDatePicker = false },
-                        shape = RoundedCornerShape(26.dp),
+                    DatePickerDialog(onDismissRequest = { showDatePicker = false }, shape = RoundedCornerShape(26.dp),
                         colors = DatePickerDefaults.colors(containerColor = Color(0xFFFCFBFF)),
-                        confirmButton = { Button(onClick = {
+                        confirmButton = {
+                            Button(onClick = {
+                                pickerState.selectedDateMillis?.let { millis -> date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString() }
+                                showDatePicker = false
+                            }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2878E8))) { Text("Done") }
+                        },
+                        dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
+                    ) { DatePicker(state = pickerState, showModeToggle = false) }
+                }
+                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            }
+        },
+        confirmButton = { Button(onClick = {
                             pickerState.selectedDateMillis?.let { millis -> date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString() }
                             showDatePicker = false
                         }, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) { Text("Done") } },
