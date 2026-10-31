@@ -4645,7 +4645,7 @@ private fun AddTransactionDialog(
             (defaultTags + saved).distinctBy { it.lowercase(Locale.ROOT) }
         }.getOrDefault(defaultTags))
     }
-    var selectedTag by remember { mutableStateOf("") }
+    var selectedTags by remember { mutableStateOf(listOf<String>()) }
     var tagMenuExpanded by remember { mutableStateOf(false) }
     var showCreateTag by remember { mutableStateOf(false) }
     var tagDraft by remember { mutableStateOf("") }
@@ -4796,19 +4796,20 @@ private fun AddTransactionDialog(
                 }
                 ExposedDropdownMenuBox(expanded = tagMenuExpanded, onExpandedChange = { tagMenuExpanded = it }) {
                     OutlinedTextField(
-                        value = selectedTag, onValueChange = {}, readOnly = true,
+                        value = selectedTags.joinToString(", "), onValueChange = {}, readOnly = true,
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
-                        label = { Text("Tag (optional)") }, placeholder = { Text("Choose a tag") },
+                        label = { Text("Tags (optional)") }, placeholder = { Text("Choose one or more tags") },
                         leadingIcon = { Icon(Icons.Default.Tag, null, tint = Color(0xFF8953D8)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagMenuExpanded) },
                         singleLine = true, shape = RoundedCornerShape(14.dp)
                     )
                     ExposedDropdownMenu(expanded = tagMenuExpanded, onDismissRequest = { tagMenuExpanded = false }) {
-                        DropdownMenuItem(text = { Text("No tag") }, onClick = { selectedTag = ""; tagMenuExpanded = false })
+                        DropdownMenuItem(text = { Text("Clear tags") }, onClick = { selectedTags = emptyList(); tagMenuExpanded = false })
                         tags.forEach { option -> DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                            Icon(financeIcon(savedFinanceIconKey(context, "tag", option)), null, tint = Color(0xFF8953D8), modifier = Modifier.size(19.dp))
+                            Icon(financeIcon(savedFinanceIconKey(context, "tag", option)), null, tint = savedFinanceColor(context, "tag", option), modifier = Modifier.size(19.dp))
                             Text(option)
-                        } }, onClick = { selectedTag = option; tagMenuExpanded = false }) }
+                            if (option in selectedTags) Icon(Icons.Default.Check, null, tint = Green, modifier = Modifier.size(17.dp))
+                        } }, onClick = { selectedTags = if (option in selectedTags) selectedTags - option else selectedTags + option; tagMenuExpanded = true }) }
                         DropdownMenuItem(text = { Text("+ Create tag", color = Green, fontWeight = FontWeight.SemiBold) }, onClick = { tagMenuExpanded = false; tagDraft = ""; showCreateTag = true })
                     }
                 }
@@ -4862,7 +4863,7 @@ private fun AddTransactionDialog(
                 } else {
                     if (transactionKind.startsWith("Loan") && selectedLoanLender.isBlank()) error = "Select an existing loan or add a new loan first."
                     else if (transactionKind == "Loan repayment / EMI" && selectedEmiDate.isBlank()) error = "Select the EMI installment to match this repayment."
-                    else onSave(title.trim(), parsed, transactionKind, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTag, selectedLoanLender, selectedEmiDate)
+                    else onSave(title.trim(), parsed, transactionKind, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTags.joinToString(", "), selectedLoanLender, selectedEmiDate)
                 }
             }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5), contentColor = Color.White), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save transaction", fontWeight = FontWeight.Bold) }
         },
@@ -4878,13 +4879,13 @@ private fun AddTransactionDialog(
                     val name = tagDraft.trim().removePrefix("#").trim()
                     if (name.isNotBlank()) {
                         val existing = tags.firstOrNull { it.equals(name, ignoreCase = true) }
-                        if (existing != null) selectedTag = existing
+                        if (existing != null) selectedTags = (selectedTags + existing).distinct()
                         else {
                             tags = tags + name
                             val array = JSONArray()
                             tags.forEach { array.put(it) }
                             preferences.edit().putString("custom_tags", array.toString()).apply()
-                            selectedTag = name
+                            selectedTags = (selectedTags + name).distinct()
                         }
                         showCreateTag = false
                     }
