@@ -178,6 +178,12 @@ private fun financeIcon(key: String): ImageVector = when (key) {
     else -> Icons.Default.Category
 }
 
+private val FINANCE_ITEM_COLORS = listOf(Color(0xFF7048E8), Color(0xFFEF476F), Color(0xFFF28C28), Color(0xFFE9B824), Color(0xFF26A69A), Color(0xFF20B9C6), Color(0xFF2785E8), Color(0xFF16A34A))
+private fun savedFinanceColor(context: Context, type: String, name: String): Color {
+    val key = "${type}_color_index_${name.trim().lowercase(Locale.ROOT)}"
+    val index = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).getInt(key, -1)
+    return FINANCE_ITEM_COLORS.getOrNull(index) ?: if (type == "category") categoryColor(name) else Color(0xFF8953D8)
+}
 private val FINANCE_ICON_OPTIONS = listOf(
     "food", "groceries", "fuel", "transport", "health", "education",
     "travel", "home", "income", "bills", "shopping", "card", "cash",
@@ -194,38 +200,86 @@ private fun savedFinanceIconKey(context: Context, type: String, name: String): S
 @Composable
 private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, onClose: () -> Unit) {
     var query by remember { mutableStateOf("") }
-    val visibleIcons = FINANCE_ICON_OPTIONS.filter { it.contains(query.trim(), ignoreCase = true) }
-    AlertDialog(
-        onDismissRequest = onClose, shape = RoundedCornerShape(28.dp), containerColor = Color(0xFFFCFBFF),
-        title = { Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text("Choose an icon", color = Color(0xFF151B3D), fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text("Pick an icon that makes this item easy to recognize.", color = Color(0xFF66718F), fontSize = 12.sp)
-        } },
-        text = { Column(Modifier.fillMaxWidth().heightIn(max = 430.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                placeholder = { Text("Search icons") }, leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF5948F5)) }, shape = RoundedCornerShape(14.dp))
-            Column(Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                visibleIcons.chunked(4).forEach { rowKeys -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    rowKeys.forEach { key ->
-                        val selected = selectedKey == key
-                        Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
-                            .background(if (selected) Color(0xFFECEAFF) else Color(0xFFF3F4FA))
-                            .border(if (selected) 1.5.dp else 1.dp, if (selected) Color(0xFF5948F5) else Color(0xFFE6E8F0), RoundedCornerShape(14.dp))
-                            .clickable { onSelect(key) }.padding(vertical = 11.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Icon(financeIcon(key), null, tint = if (selected) Color(0xFF5948F5) else Color(0xFF66718F), modifier = Modifier.size(22.dp))
-                            Text(key.replaceFirstChar { it.uppercase() }, color = Color(0xFF252C50), fontSize = 9.sp, maxLines = 1)
+    var selectedGroup by remember { mutableStateOf("All") }
+    val groups = listOf("All", "Food", "Travel", "Shopping", "Health", "Other")
+    fun belongsToGroup(key: String): String = when (key) {
+        "food", "groceries" -> "Food"
+        "travel", "transport", "fuel" -> "Travel"
+        "shopping", "card", "cash", "payments" -> "Shopping"
+        "health", "fitness", "pets" -> "Health"
+        else -> "Other"
+    }
+    val visibleIcons = FINANCE_ICON_OPTIONS.filter {
+        it.contains(query.trim(), ignoreCase = true) &&
+            (selectedGroup == "All" || belongsToGroup(it) == selectedGroup)
+    }
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onClose,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize().padding(12.dp),
+            shape = RoundedCornerShape(26.dp),
+            color = if (AppDarkTheme) Color(0xFF1B2230) else Color(0xFFFCFBFF)
+        ) {
+            Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onClose) { Icon(Icons.Default.ArrowBack, "Back", tint = Ink) }
+                    Text("Select Category Icon", color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close", tint = Muted) }
+                }
+                OutlinedTextField(
+                    value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(),
+                    singleLine = true, placeholder = { Text("Search icons...") },
+                    leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF5948F5)) },
+                    shape = RoundedCornerShape(16.dp)
+                )
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    groups.forEach { group ->
+                        FilterChip(
+                            selected = selectedGroup == group,
+                            onClick = { selectedGroup = group },
+                            label = { Text(group) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF5948F5),
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    visibleIcons.chunked(4).forEach { rowKeys ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowKeys.forEach { key ->
+                                val selected = selectedKey == key
+                                Column(
+                                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
+                                        .background(if (selected) Color(0xFFECEAFF) else if (AppDarkTheme) Color(0xFF252E3D) else Color(0xFFF3F4FA))
+                                        .border(if (selected) 2.dp else 1.dp, if (selected) Color(0xFF5948F5) else Color(0xFFE6E8F0), RoundedCornerShape(16.dp))
+                                        .clickable { onSelect(key) }.padding(vertical = 14.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                                ) {
+                                    Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(categoryColor(key).copy(alpha = .13f)), contentAlignment = Alignment.Center) {
+                                        Icon(financeIcon(key), null, tint = categoryColor(key), modifier = Modifier.size(25.dp))
+                                    }
+                                    Text(key.replaceFirstChar { it.uppercase() }, color = Ink, fontSize = 10.sp, maxLines = 1)
+                                }
+                            }
+                            repeat(4 - rowKeys.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
-                    repeat(4 - rowKeys.size) { Spacer(Modifier.weight(1f)) }
-                } }
-                if (visibleIcons.isEmpty()) Text("No matching icons", color = Muted, fontSize = 12.sp)
+                    if (visibleIcons.isEmpty()) Text("No matching icons", color = Muted, fontSize = 12.sp)
+                }
+                Button(
+                    onClick = onClose, modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1677EA))
+                ) { Text("Done", fontWeight = FontWeight.Bold) }
             }
-        } },
-        confirmButton = { TextButton(onClick = onClose) { Text("Done", color = Color(0xFF5948F5), fontWeight = FontWeight.SemiBold) } }
-    )
+        }
+    }
 }
-
 
 
 private fun nextLoanScheduledDueDate(
@@ -717,8 +771,8 @@ private fun FinanceApp() {
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance }, transactions)
                     "Budgets" -> BudgetsScreen(transactions)
                     "Credit health" -> CreditHealthScreen()
-                    "Categories" -> CategoriesScreen(onCategoriesChanged = { categoryRefreshToken++ })
-                    "Tag Management" -> TagManagementScreen()
+                    "Categories" -> CategoriesScreen(transactions = transactions, onCategoriesChanged = { categoryRefreshToken++ })
+                    "Tag Management" -> TagManagementScreen(transactions = transactions)
                     "Backup & Export" -> BackupSecurityScreen(
                         onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
                         onConnectDrive = { openGoogleDriveForConnection() },
@@ -2452,7 +2506,7 @@ private val DEFAULT_MONEY_CATEGORIES = listOf(
 )
 
 @Composable
-private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
+private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCategoriesChanged: () -> Unit = {}) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
     val initialCategories = remember {
@@ -2467,10 +2521,14 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
     }
     var categories by remember { mutableStateOf(initialCategories) }
     var message by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
+    val visibleCategories = categories.filter { it.contains(searchQuery.trim(), ignoreCase = true) }
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
     var selectedIconKey by remember { mutableStateOf("other") }
+    var selectedColorIndex by remember { mutableIntStateOf(0) }
+    val selectedColor = FINANCE_ITEM_COLORS[selectedColorIndex.coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)]
     var showIconPicker by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     fun persistCategories(values: List<String>) {
@@ -2496,9 +2554,10 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                     }
                 }
             }
+            item { OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Search categories...") }, leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF5948F5)) }, shape = RoundedCornerShape(16.dp), colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface)) }
             if (message.isNotBlank()) item { Text(message, color = Green, fontSize = 12.sp) }
-            items(categories, key = { it }) { category ->
-                val tint = categoryColor(category)
+            items(visibleCategories, key = { it }) { category ->
+                val tint = savedFinanceColor(context, "category", category)
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                     Row(Modifier.fillMaxWidth().padding(start = 13.dp, top = 10.dp, bottom = 10.dp, end = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                         Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(tint.copy(alpha = .13f)), contentAlignment = Alignment.Center) {
@@ -2506,9 +2565,9 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(category, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text("Expense / income category", color = Muted, fontSize = 10.sp)
+                            Text("${transactions.count { it.category.equals(category, ignoreCase = true) }} transactions", color = Muted, fontSize = 10.sp)
                         }
-                        IconButton(onClick = { draft = category; editing = category; selectedIconKey = savedFinanceIconKey(context, "category", category); showAdd = true }) { Icon(Icons.Default.Edit, "Edit category", tint = Color(0xFF5948F5)) }
+                        IconButton(onClick = { draft = category; editing = category; selectedIconKey = savedFinanceIconKey(context, "category", category); selectedColorIndex = preferences.getInt("category_color_index_${category.lowercase(Locale.ROOT)}", 0).coerceIn(0, FINANCE_ITEM_COLORS.lastIndex); showAdd = true }) { Icon(Icons.Default.Edit, "Edit category", tint = Color(0xFF5948F5)) }
                         IconButton(onClick = { pendingDelete = category }) { Icon(Icons.Default.DeleteOutline, "Delete category", tint = ExpenseRed) }
                     }
                 }
@@ -2517,7 +2576,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
         }
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; showAdd = true }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp)) {
+                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; selectedColorIndex = 0; showAdd = true }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp)) {
                     Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Add Category")
                 }
                 Button(onClick = { persistCategories(categories); message = "Categories saved successfully." }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) {
@@ -2537,13 +2596,21 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                 leadingIcon = { Icon(Icons.Default.Category, null, tint = Color(0xFF5948F5)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp))
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF1EFFF)).padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFFE1DCFF)), contentAlignment = Alignment.Center) {
-                    Icon(financeIcon(selectedIconKey), null, tint = Color(0xFF5948F5), modifier = Modifier.size(23.dp))
+                    Icon(financeIcon(selectedIconKey), null, tint = selectedColor, modifier = Modifier.size(23.dp))
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Suggested icon", color = Color(0xFF252C50), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     Text("Updates as you type. You can change it.", color = Color(0xFF66718F), fontSize = 10.sp)
                 }
                 TextButton(onClick = { showIconPicker = true }) { Text("Change", color = Color(0xFF5948F5)) }
+            }
+            Text("Choose color", color = Color(0xFF252C50), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                FINANCE_ITEM_COLORS.forEachIndexed { index, color ->
+                    Box(Modifier.size(27.dp).clip(CircleShape).background(color)
+                        .border(if (selectedColorIndex == index) 3.dp else 1.dp, if (selectedColorIndex == index) Color(0xFF252C50) else color.copy(alpha = .35f), CircleShape)
+                        .clickable { selectedColorIndex = index })
+                }
             }
         } },
         confirmButton = { Button(onClick = {
@@ -2553,7 +2620,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
                 if (duplicate) message = "That category already exists."
                 else {
                     categories = (if (editing == null) categories + name else categories.map { if (it == editing) name else it }).distinctBy { it.lowercase(Locale.ROOT) }
-                    preferences.edit().putString("category_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).apply()
+                    preferences.edit().putString("category_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).putInt("category_color_index_${name.lowercase(Locale.ROOT)}", selectedColorIndex).apply()
                     persistCategories(categories); message = ""; showAdd = false
                 }
             } else message = "Enter a category name."
@@ -2571,7 +2638,7 @@ private fun CategoriesScreen(onCategoriesChanged: () -> Unit = {}) {
 
 
 @Composable
-private fun TagManagementScreen() {
+private fun TagManagementScreen(transactions: List<Transaction> = emptyList()) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
     val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online Shopping")
@@ -2587,10 +2654,14 @@ private fun TagManagementScreen() {
     }
     var tags by remember { mutableStateOf(initialTags) }
     var message by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
+    val visibleTags = tags.filter { it.contains(searchQuery.trim(), ignoreCase = true) }
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
     var selectedIconKey by remember { mutableStateOf("other") }
+    var selectedColorIndex by remember { mutableIntStateOf(7) }
+    val selectedColor = FINANCE_ITEM_COLORS[selectedColorIndex.coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)]
     var showIconPicker by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     fun persistTags(values: List<String>) {
@@ -2615,18 +2686,20 @@ private fun TagManagementScreen() {
                     }
                 }
             }
+            item { OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Search tags...") }, leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF5948F5)) }, shape = RoundedCornerShape(16.dp), colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface)) }
             if (message.isNotBlank()) item { Text(message, color = Green, fontSize = 12.sp) }
-            items(tags, key = { it }) { tag ->
+            items(visibleTags, key = { it }) { tag ->
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                     Row(Modifier.fillMaxWidth().padding(start = 13.dp, top = 10.dp, bottom = 10.dp, end = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-                        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF1EFFF)), contentAlignment = Alignment.Center) {
-                            Icon(financeIcon(savedFinanceIconKey(context, "tag", tag)), null, tint = Color(0xFF8953D8), modifier = Modifier.size(22.dp))
+                        val tagTint = savedFinanceColor(context, "tag", tag)
+                        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(tagTint.copy(alpha = .13f)), contentAlignment = Alignment.Center) {
+                            Icon(financeIcon(savedFinanceIconKey(context, "tag", tag)), null, tint = tagTint, modifier = Modifier.size(22.dp))
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(tag, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text("Transaction tag", color = Muted, fontSize = 10.sp)
+                            Text("${transactions.count { transaction -> transaction.tag.split(Regex("[,;]")).any { it.trim().equals(tag, ignoreCase = true) } }} transactions", color = Muted, fontSize = 10.sp)
                         }
-                        IconButton(onClick = { draft = tag; editing = tag; selectedIconKey = savedFinanceIconKey(context, "tag", tag); showAdd = true }) { Icon(Icons.Default.Edit, "Edit tag", tint = Color(0xFF5948F5)) }
+                        IconButton(onClick = { draft = tag; editing = tag; selectedIconKey = savedFinanceIconKey(context, "tag", tag); selectedColorIndex = preferences.getInt("tag_color_index_${tag.lowercase(Locale.ROOT)}", 7).coerceIn(0, FINANCE_ITEM_COLORS.lastIndex); showAdd = true }) { Icon(Icons.Default.Edit, "Edit tag", tint = Color(0xFF5948F5)) }
                         IconButton(onClick = { pendingDelete = tag }) { Icon(Icons.Default.DeleteOutline, "Delete tag", tint = ExpenseRed) }
                     }
                 }
@@ -2635,7 +2708,7 @@ private fun TagManagementScreen() {
         }
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; showAdd = true }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp)) {
+                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; selectedColorIndex = 7; showAdd = true }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp)) {
                     Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Add Tag")
                 }
                 Button(onClick = { persistTags(tags); message = "Tags saved successfully." }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) {
@@ -2655,13 +2728,21 @@ private fun TagManagementScreen() {
                 leadingIcon = { Icon(Icons.Default.Tag, null, tint = Color(0xFF5948F5)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp))
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF1EFFF)).padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFFE1DCFF)), contentAlignment = Alignment.Center) {
-                    Icon(financeIcon(selectedIconKey), null, tint = Color(0xFF8953D8), modifier = Modifier.size(23.dp))
+                    Icon(financeIcon(selectedIconKey), null, tint = selectedColor, modifier = Modifier.size(23.dp))
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Suggested icon", color = Color(0xFF252C50), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     Text("Updates as you type. You can change it.", color = Color(0xFF66718F), fontSize = 10.sp)
                 }
                 TextButton(onClick = { showIconPicker = true }) { Text("Change", color = Color(0xFF5948F5)) }
+            }
+            Text("Choose color", color = Color(0xFF252C50), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                FINANCE_ITEM_COLORS.forEachIndexed { index, color ->
+                    Box(Modifier.size(27.dp).clip(CircleShape).background(color)
+                        .border(if (selectedColorIndex == index) 3.dp else 1.dp, if (selectedColorIndex == index) Color(0xFF252C50) else color.copy(alpha = .35f), CircleShape)
+                        .clickable { selectedColorIndex = index })
+                }
             }
         } },
         confirmButton = { Button(onClick = {
@@ -2671,7 +2752,7 @@ private fun TagManagementScreen() {
                 if (duplicate) message = "That tag already exists."
                 else {
                     tags = (if (editing == null) tags + name else tags.map { if (it == editing) name else it }).distinctBy { it.lowercase(Locale.ROOT) }
-                    preferences.edit().putString("tag_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).apply()
+                    preferences.edit().putString("tag_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).putInt("tag_color_index_${name.lowercase(Locale.ROOT)}", selectedColorIndex).apply()
                     persistTags(tags); message = ""; showAdd = false
                 }
             } else message = "Enter a tag name."
@@ -4564,7 +4645,7 @@ private fun AddTransactionDialog(
             (defaultTags + saved).distinctBy { it.lowercase(Locale.ROOT) }
         }.getOrDefault(defaultTags))
     }
-    var selectedTag by remember { mutableStateOf("") }
+    var selectedTags by remember { mutableStateOf(listOf<String>()) }
     var tagMenuExpanded by remember { mutableStateOf(false) }
     var showCreateTag by remember { mutableStateOf(false) }
     var tagDraft by remember { mutableStateOf("") }
@@ -4603,8 +4684,8 @@ private fun AddTransactionDialog(
                         Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(25.dp))
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("New Transaction", color = Color(0xFF151B3D), fontWeight = FontWeight.Bold, fontSize = 21.sp)
-                        Text("Add income, expenses or loan payments", color = Color(0xFF66718F), fontSize = 12.sp)
+                        Text("Add Transaction", color = Color(0xFF151B3D), fontWeight = FontWeight.Bold, fontSize = 21.sp)
+                        Text("Record your income, expenses and loan payments", color = Color(0xFF66718F), fontSize = 12.sp)
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFFF0EFF8))) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF47516E))
@@ -4665,8 +4746,25 @@ private fun AddTransactionDialog(
                         }
                     }
                 }
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = if (AppDarkTheme) Color(0xFF263144) else Color(0xFFF0F4FC))) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Amount", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        OutlinedTextField(
+                            value = amount, onValueChange = { amount = it.filter(Char::isDigit) },
+                            modifier = Modifier.fillMaxWidth(), placeholder = { Text("0") },
+                            leadingIcon = { Icon(Icons.Default.CurrencyRupee, null, tint = Ink) },
+                            trailingIcon = { Icon(Icons.Default.Calculate, "Calculator", tint = Muted) },
+                            singleLine = true, shape = RoundedCornerShape(14.dp),
+                            textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, color = Ink),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = Color.Transparent, focusedContainerColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent, focusedBorderColor = Color.Transparent
+                            )
+                        )
+                        Text("Enter transaction amount", color = Muted, fontSize = 11.sp)
+                    }
+                }
                 OutlinedTextField(title, { title = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, leadingIcon = { Icon(Icons.Default.ReceiptLong, null, tint = Color(0xFF5948F5)) }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount (₹)") }, leadingIcon = { Icon(Icons.Default.CurrencyRupee, null, tint = Color(0xFF5948F5)) }, singleLine = true, shape = RoundedCornerShape(14.dp), textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
                 ExposedDropdownMenuBox(
                     expanded = categoryMenuExpanded,
                     onExpandedChange = { categoryMenuExpanded = it }
@@ -4698,19 +4796,20 @@ private fun AddTransactionDialog(
                 }
                 ExposedDropdownMenuBox(expanded = tagMenuExpanded, onExpandedChange = { tagMenuExpanded = it }) {
                     OutlinedTextField(
-                        value = selectedTag, onValueChange = {}, readOnly = true,
+                        value = selectedTags.joinToString(", "), onValueChange = {}, readOnly = true,
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
-                        label = { Text("Tag (optional)") }, placeholder = { Text("Choose a tag") },
+                        label = { Text("Tags (optional)") }, placeholder = { Text("Choose one or more tags") },
                         leadingIcon = { Icon(Icons.Default.Tag, null, tint = Color(0xFF8953D8)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagMenuExpanded) },
                         singleLine = true, shape = RoundedCornerShape(14.dp)
                     )
                     ExposedDropdownMenu(expanded = tagMenuExpanded, onDismissRequest = { tagMenuExpanded = false }) {
-                        DropdownMenuItem(text = { Text("No tag") }, onClick = { selectedTag = ""; tagMenuExpanded = false })
+                        DropdownMenuItem(text = { Text("Clear tags") }, onClick = { selectedTags = emptyList(); tagMenuExpanded = false })
                         tags.forEach { option -> DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                            Icon(financeIcon(savedFinanceIconKey(context, "tag", option)), null, tint = Color(0xFF8953D8), modifier = Modifier.size(19.dp))
+                            Icon(financeIcon(savedFinanceIconKey(context, "tag", option)), null, tint = savedFinanceColor(context, "tag", option), modifier = Modifier.size(19.dp))
                             Text(option)
-                        } }, onClick = { selectedTag = option; tagMenuExpanded = false }) }
+                            if (option in selectedTags) Icon(Icons.Default.Check, null, tint = Green, modifier = Modifier.size(17.dp))
+                        } }, onClick = { selectedTags = if (option in selectedTags) selectedTags - option else selectedTags + option; tagMenuExpanded = true }) }
                         DropdownMenuItem(text = { Text("+ Create tag", color = Green, fontWeight = FontWeight.SemiBold) }, onClick = { tagMenuExpanded = false; tagDraft = ""; showCreateTag = true })
                     }
                 }
@@ -4737,13 +4836,18 @@ private fun AddTransactionDialog(
                         confirmButton = { Button(onClick = {
                             pickerState.selectedDateMillis?.let { millis -> date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString() }
                             showDatePicker = false
-                        }, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) { Text("Apply date") } },
+                        }, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) { Text("Done") } },
                         dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel", color = Color(0xFF66718F)) } }
-                    ) { DatePicker(state = pickerState, showModeToggle = false) }
+                    ) {
+                        Column {
+                            Text("Select Date", modifier = Modifier.padding(start = 24.dp, top = 18.dp, bottom = 4.dp), color = Color(0xFF151B3D), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            DatePicker(state = pickerState, showModeToggle = false)
+                        }
+                    }
                 }
                 Text("Payment method", color = Muted, fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("UPI", "Cash", "Card", "Bank").forEach { method ->
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("UPI", "Google Pay", "Cash", "Debit Card", "Credit Card", "PayPal", "Bank").forEach { method ->
                         FilterChip(selected = paymentMethod == method, onClick = { paymentMethod = method }, label = { Text(method) })
                     }
                 }
@@ -4764,7 +4868,7 @@ private fun AddTransactionDialog(
                 } else {
                     if (transactionKind.startsWith("Loan") && selectedLoanLender.isBlank()) error = "Select an existing loan or add a new loan first."
                     else if (transactionKind == "Loan repayment / EMI" && selectedEmiDate.isBlank()) error = "Select the EMI installment to match this repayment."
-                    else onSave(title.trim(), parsed, transactionKind, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTag, selectedLoanLender, selectedEmiDate)
+                    else onSave(title.trim(), parsed, transactionKind, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTags.joinToString(", "), selectedLoanLender, selectedEmiDate)
                 }
             }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5), contentColor = Color.White), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save transaction", fontWeight = FontWeight.Bold) }
         },
@@ -4780,13 +4884,13 @@ private fun AddTransactionDialog(
                     val name = tagDraft.trim().removePrefix("#").trim()
                     if (name.isNotBlank()) {
                         val existing = tags.firstOrNull { it.equals(name, ignoreCase = true) }
-                        if (existing != null) selectedTag = existing
+                        if (existing != null) selectedTags = (selectedTags + existing).distinct()
                         else {
                             tags = tags + name
                             val array = JSONArray()
                             tags.forEach { array.put(it) }
                             preferences.edit().putString("custom_tags", array.toString()).apply()
-                            selectedTag = name
+                            selectedTags = (selectedTags + name).distinct()
                         }
                         showCreateTag = false
                     }
