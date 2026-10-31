@@ -178,6 +178,12 @@ private fun financeIcon(key: String): ImageVector = when (key) {
     else -> Icons.Default.Category
 }
 
+private val FINANCE_ITEM_COLORS = listOf(Color(0xFF7048E8), Color(0xFFEF476F), Color(0xFFF28C28), Color(0xFFE9B824), Color(0xFF26A69A), Color(0xFF20B9C6), Color(0xFF2785E8), Color(0xFF16A34A))
+private fun savedFinanceColor(context: Context, type: String, name: String): Color {
+    val key = "${type}_color_index_${name.trim().lowercase(Locale.ROOT)}"
+    val index = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).getInt(key, -1)
+    return FINANCE_ITEM_COLORS.getOrNull(index) ?: if (type == "category") categoryColor(name) else Color(0xFF8953D8)
+}
 private val FINANCE_ICON_OPTIONS = listOf(
     "food", "groceries", "fuel", "transport", "health", "education",
     "travel", "home", "income", "bills", "shopping", "card", "cash",
@@ -2473,6 +2479,8 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
     var selectedIconKey by remember { mutableStateOf("other") }
+    var selectedColorIndex by remember { mutableIntStateOf(0) }
+    val selectedColor = FINANCE_ITEM_COLORS[selectedColorIndex.coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)]
     var showIconPicker by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     fun persistCategories(values: List<String>) {
@@ -2501,7 +2509,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
             item { OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Search categories...") }, leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF5948F5)) }, shape = RoundedCornerShape(16.dp), colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface)) }
             if (message.isNotBlank()) item { Text(message, color = Green, fontSize = 12.sp) }
             items(visibleCategories, key = { it }) { category ->
-                val tint = categoryColor(category)
+                val tint = savedFinanceColor(context, "category", category)
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                     Row(Modifier.fillMaxWidth().padding(start = 13.dp, top = 10.dp, bottom = 10.dp, end = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                         Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(tint.copy(alpha = .13f)), contentAlignment = Alignment.Center) {
@@ -2511,7 +2519,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                             Text(category, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             Text("${transactions.count { it.category.equals(category, ignoreCase = true) }} transactions", color = Muted, fontSize = 10.sp)
                         }
-                        IconButton(onClick = { draft = category; editing = category; selectedIconKey = savedFinanceIconKey(context, "category", category); showAdd = true }) { Icon(Icons.Default.Edit, "Edit category", tint = Color(0xFF5948F5)) }
+                        IconButton(onClick = { draft = category; editing = category; selectedIconKey = savedFinanceIconKey(context, "category", category); selectedColorIndex = preferences.getInt("category_color_index_${category.lowercase(Locale.ROOT)}", 0).coerceIn(0, FINANCE_ITEM_COLORS.lastIndex); showAdd = true }) { Icon(Icons.Default.Edit, "Edit category", tint = Color(0xFF5948F5)) }
                         IconButton(onClick = { pendingDelete = category }) { Icon(Icons.Default.DeleteOutline, "Delete category", tint = ExpenseRed) }
                     }
                 }
@@ -2520,7 +2528,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
         }
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; showAdd = true }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp)) {
+                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; selectedColorIndex = 0; showAdd = true }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp)) {
                     Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Add Category")
                 }
                 Button(onClick = { persistCategories(categories); message = "Categories saved successfully." }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) {
@@ -2540,13 +2548,21 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                 leadingIcon = { Icon(Icons.Default.Category, null, tint = Color(0xFF5948F5)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp))
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF1EFFF)).padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFFE1DCFF)), contentAlignment = Alignment.Center) {
-                    Icon(financeIcon(selectedIconKey), null, tint = Color(0xFF5948F5), modifier = Modifier.size(23.dp))
+                    Icon(financeIcon(selectedIconKey), null, tint = selectedColor, modifier = Modifier.size(23.dp))
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Suggested icon", color = Color(0xFF252C50), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     Text("Updates as you type. You can change it.", color = Color(0xFF66718F), fontSize = 10.sp)
                 }
                 TextButton(onClick = { showIconPicker = true }) { Text("Change", color = Color(0xFF5948F5)) }
+            }
+            Text("Choose color", color = Color(0xFF252C50), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                FINANCE_ITEM_COLORS.forEachIndexed { index, color ->
+                    Box(Modifier.size(27.dp).clip(CircleShape).background(color)
+                        .border(if (selectedColorIndex == index) 3.dp else 1.dp, if (selectedColorIndex == index) Color(0xFF252C50) else color.copy(alpha = .35f), CircleShape)
+                        .clickable { selectedColorIndex = index })
+                }
             }
         } },
         confirmButton = { Button(onClick = {
@@ -2556,7 +2572,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                 if (duplicate) message = "That category already exists."
                 else {
                     categories = (if (editing == null) categories + name else categories.map { if (it == editing) name else it }).distinctBy { it.lowercase(Locale.ROOT) }
-                    preferences.edit().putString("category_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).apply()
+                    preferences.edit().putString("category_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).putInt("category_color_index_${name.lowercase(Locale.ROOT)}", selectedColorIndex).apply()
                     persistCategories(categories); message = ""; showAdd = false
                 }
             } else message = "Enter a category name."
@@ -2596,6 +2612,8 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList()) {
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
     var selectedIconKey by remember { mutableStateOf("other") }
+    var selectedColorIndex by remember { mutableIntStateOf(7) }
+    val selectedColor = FINANCE_ITEM_COLORS[selectedColorIndex.coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)]
     var showIconPicker by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     fun persistTags(values: List<String>) {
@@ -2625,14 +2643,15 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList()) {
             items(visibleTags, key = { it }) { tag ->
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                     Row(Modifier.fillMaxWidth().padding(start = 13.dp, top = 10.dp, bottom = 10.dp, end = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-                        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF1EFFF)), contentAlignment = Alignment.Center) {
-                            Icon(financeIcon(savedFinanceIconKey(context, "tag", tag)), null, tint = Color(0xFF8953D8), modifier = Modifier.size(22.dp))
+                        val tagTint = savedFinanceColor(context, "tag", tag)
+                        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(tagTint.copy(alpha = .13f)), contentAlignment = Alignment.Center) {
+                            Icon(financeIcon(savedFinanceIconKey(context, "tag", tag)), null, tint = tagTint, modifier = Modifier.size(22.dp))
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(tag, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             Text("${transactions.count { transaction -> transaction.tag.split(Regex("[,;]")).any { it.trim().equals(tag, ignoreCase = true) } }} transactions", color = Muted, fontSize = 10.sp)
                         }
-                        IconButton(onClick = { draft = tag; editing = tag; selectedIconKey = savedFinanceIconKey(context, "tag", tag); showAdd = true }) { Icon(Icons.Default.Edit, "Edit tag", tint = Color(0xFF5948F5)) }
+                        IconButton(onClick = { draft = tag; editing = tag; selectedIconKey = savedFinanceIconKey(context, "tag", tag); selectedColorIndex = preferences.getInt("tag_color_index_${tag.lowercase(Locale.ROOT)}", 7).coerceIn(0, FINANCE_ITEM_COLORS.lastIndex); showAdd = true }) { Icon(Icons.Default.Edit, "Edit tag", tint = Color(0xFF5948F5)) }
                         IconButton(onClick = { pendingDelete = tag }) { Icon(Icons.Default.DeleteOutline, "Delete tag", tint = ExpenseRed) }
                     }
                 }
@@ -2641,7 +2660,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList()) {
         }
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; showAdd = true }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp)) {
+                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; selectedColorIndex = 7; showAdd = true }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp)) {
                     Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Add Tag")
                 }
                 Button(onClick = { persistTags(tags); message = "Tags saved successfully." }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) {
@@ -2661,13 +2680,21 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList()) {
                 leadingIcon = { Icon(Icons.Default.Tag, null, tint = Color(0xFF5948F5)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp))
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF1EFFF)).padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFFE1DCFF)), contentAlignment = Alignment.Center) {
-                    Icon(financeIcon(selectedIconKey), null, tint = Color(0xFF8953D8), modifier = Modifier.size(23.dp))
+                    Icon(financeIcon(selectedIconKey), null, tint = selectedColor, modifier = Modifier.size(23.dp))
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Suggested icon", color = Color(0xFF252C50), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     Text("Updates as you type. You can change it.", color = Color(0xFF66718F), fontSize = 10.sp)
                 }
                 TextButton(onClick = { showIconPicker = true }) { Text("Change", color = Color(0xFF5948F5)) }
+            }
+            Text("Choose color", color = Color(0xFF252C50), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                FINANCE_ITEM_COLORS.forEachIndexed { index, color ->
+                    Box(Modifier.size(27.dp).clip(CircleShape).background(color)
+                        .border(if (selectedColorIndex == index) 3.dp else 1.dp, if (selectedColorIndex == index) Color(0xFF252C50) else color.copy(alpha = .35f), CircleShape)
+                        .clickable { selectedColorIndex = index })
+                }
             }
         } },
         confirmButton = { Button(onClick = {
@@ -2677,7 +2704,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList()) {
                 if (duplicate) message = "That tag already exists."
                 else {
                     tags = (if (editing == null) tags + name else tags.map { if (it == editing) name else it }).distinctBy { it.lowercase(Locale.ROOT) }
-                    preferences.edit().putString("tag_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).apply()
+                    preferences.edit().putString("tag_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).putInt("tag_color_index_${name.lowercase(Locale.ROOT)}", selectedColorIndex).apply()
                     persistTags(tags); message = ""; showAdd = false
                 }
             } else message = "Enter a tag name."
