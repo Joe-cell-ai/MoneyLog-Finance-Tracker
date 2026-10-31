@@ -4746,7 +4746,6 @@ private fun AddTransactionDialog(
                         }
                     }
                 }
-                OutlinedTextField(title, { title = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, leadingIcon = { Icon(Icons.Default.ReceiptLong, null, tint = Color(0xFF5948F5)) }, singleLine = true, shape = RoundedCornerShape(14.dp))
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = if (AppDarkTheme) Color(0xFF263144) else Color(0xFFF0F4FC))) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("Amount", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -4765,6 +4764,7 @@ private fun AddTransactionDialog(
                         Text("Enter transaction amount", color = Muted, fontSize = 11.sp)
                     }
                 }
+                OutlinedTextField(title, { title = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, leadingIcon = { Icon(Icons.Default.ReceiptLong, null, tint = Color(0xFF5948F5)) }, singleLine = true, shape = RoundedCornerShape(14.dp))
                 ExposedDropdownMenuBox(
                     expanded = categoryMenuExpanded,
                     onExpandedChange = { categoryMenuExpanded = it }
