@@ -200,38 +200,86 @@ private fun savedFinanceIconKey(context: Context, type: String, name: String): S
 @Composable
 private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, onClose: () -> Unit) {
     var query by remember { mutableStateOf("") }
-    val visibleIcons = FINANCE_ICON_OPTIONS.filter { it.contains(query.trim(), ignoreCase = true) }
-    AlertDialog(
-        onDismissRequest = onClose, shape = RoundedCornerShape(28.dp), containerColor = Color(0xFFFCFBFF),
-        title = { Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text("Choose an icon", color = Color(0xFF151B3D), fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text("Pick an icon that makes this item easy to recognize.", color = Color(0xFF66718F), fontSize = 12.sp)
-        } },
-        text = { Column(Modifier.fillMaxWidth().heightIn(max = 430.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-                placeholder = { Text("Search icons") }, leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF5948F5)) }, shape = RoundedCornerShape(14.dp))
-            Column(Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                visibleIcons.chunked(4).forEach { rowKeys -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    rowKeys.forEach { key ->
-                        val selected = selectedKey == key
-                        Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
-                            .background(if (selected) Color(0xFFECEAFF) else Color(0xFFF3F4FA))
-                            .border(if (selected) 1.5.dp else 1.dp, if (selected) Color(0xFF5948F5) else Color(0xFFE6E8F0), RoundedCornerShape(14.dp))
-                            .clickable { onSelect(key) }.padding(vertical = 11.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Icon(financeIcon(key), null, tint = if (selected) Color(0xFF5948F5) else Color(0xFF66718F), modifier = Modifier.size(22.dp))
-                            Text(key.replaceFirstChar { it.uppercase() }, color = Color(0xFF252C50), fontSize = 9.sp, maxLines = 1)
+    var selectedGroup by remember { mutableStateOf("All") }
+    val groups = listOf("All", "Food", "Travel", "Shopping", "Health", "Other")
+    fun belongsToGroup(key: String): String = when (key) {
+        "food", "groceries" -> "Food"
+        "travel", "transport", "fuel" -> "Travel"
+        "shopping", "card", "cash", "payments" -> "Shopping"
+        "health", "fitness", "pets" -> "Health"
+        else -> "Other"
+    }
+    val visibleIcons = FINANCE_ICON_OPTIONS.filter {
+        it.contains(query.trim(), ignoreCase = true) &&
+            (selectedGroup == "All" || belongsToGroup(it) == selectedGroup)
+    }
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onClose,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize().padding(12.dp),
+            shape = RoundedCornerShape(26.dp),
+            color = if (AppDarkTheme) Color(0xFF1B2230) else Color(0xFFFCFBFF)
+        ) {
+            Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onClose) { Icon(Icons.Default.ArrowBack, "Back", tint = Ink) }
+                    Text("Select Category Icon", color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close", tint = Muted) }
+                }
+                OutlinedTextField(
+                    value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(),
+                    singleLine = true, placeholder = { Text("Search icons...") },
+                    leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF5948F5)) },
+                    shape = RoundedCornerShape(16.dp)
+                )
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    groups.forEach { group ->
+                        FilterChip(
+                            selected = selectedGroup == group,
+                            onClick = { selectedGroup = group },
+                            label = { Text(group) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF5948F5),
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    visibleIcons.chunked(4).forEach { rowKeys ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowKeys.forEach { key ->
+                                val selected = selectedKey == key
+                                Column(
+                                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
+                                        .background(if (selected) Color(0xFFECEAFF) else if (AppDarkTheme) Color(0xFF252E3D) else Color(0xFFF3F4FA))
+                                        .border(if (selected) 2.dp else 1.dp, if (selected) Color(0xFF5948F5) else Color(0xFFE6E8F0), RoundedCornerShape(16.dp))
+                                        .clickable { onSelect(key) }.padding(vertical = 14.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                                ) {
+                                    Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(categoryColor(key).copy(alpha = .13f)), contentAlignment = Alignment.Center) {
+                                        Icon(financeIcon(key), null, tint = categoryColor(key), modifier = Modifier.size(25.dp))
+                                    }
+                                    Text(key.replaceFirstChar { it.uppercase() }, color = Ink, fontSize = 10.sp, maxLines = 1)
+                                }
+                            }
+                            repeat(4 - rowKeys.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
-                    repeat(4 - rowKeys.size) { Spacer(Modifier.weight(1f)) }
-                } }
-                if (visibleIcons.isEmpty()) Text("No matching icons", color = Muted, fontSize = 12.sp)
+                    if (visibleIcons.isEmpty()) Text("No matching icons", color = Muted, fontSize = 12.sp)
+                }
+                Button(
+                    onClick = onClose, modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1677EA))
+                ) { Text("Done", fontWeight = FontWeight.Bold) }
             }
-        } },
-        confirmButton = { TextButton(onClick = onClose) { Text("Done", color = Color(0xFF5948F5), fontWeight = FontWeight.SemiBold) } }
-    )
+        }
+    }
 }
-
 
 
 private fun nextLoanScheduledDueDate(
@@ -4636,8 +4684,8 @@ private fun AddTransactionDialog(
                         Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(25.dp))
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("New Transaction", color = Color(0xFF151B3D), fontWeight = FontWeight.Bold, fontSize = 21.sp)
-                        Text("Add income, expenses or loan payments", color = Color(0xFF66718F), fontSize = 12.sp)
+                        Text("Add Transaction", color = Color(0xFF151B3D), fontWeight = FontWeight.Bold, fontSize = 21.sp)
+                        Text("Record your income, expenses and loan payments", color = Color(0xFF66718F), fontSize = 12.sp)
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFFF0EFF8))) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF47516E))
@@ -4699,7 +4747,24 @@ private fun AddTransactionDialog(
                     }
                 }
                 OutlinedTextField(title, { title = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, leadingIcon = { Icon(Icons.Default.ReceiptLong, null, tint = Color(0xFF5948F5)) }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount (₹)") }, leadingIcon = { Icon(Icons.Default.CurrencyRupee, null, tint = Color(0xFF5948F5)) }, singleLine = true, shape = RoundedCornerShape(14.dp), textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = if (AppDarkTheme) Color(0xFF263144) else Color(0xFFF0F4FC))) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Amount", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        OutlinedTextField(
+                            value = amount, onValueChange = { amount = it.filter(Char::isDigit) },
+                            modifier = Modifier.fillMaxWidth(), placeholder = { Text("0") },
+                            leadingIcon = { Icon(Icons.Default.CurrencyRupee, null, tint = Ink) },
+                            trailingIcon = { Icon(Icons.Default.Calculate, "Calculator", tint = Muted) },
+                            singleLine = true, shape = RoundedCornerShape(14.dp),
+                            textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, color = Ink),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = Color.Transparent, focusedContainerColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent, focusedBorderColor = Color.Transparent
+                            )
+                        )
+                        Text("Enter transaction amount", color = Muted, fontSize = 11.sp)
+                    }
+                }
                 ExposedDropdownMenuBox(
                     expanded = categoryMenuExpanded,
                     onExpandedChange = { categoryMenuExpanded = it }
@@ -4775,8 +4840,8 @@ private fun AddTransactionDialog(
                     ) { DatePicker(state = pickerState, showModeToggle = false) }
                 }
                 Text("Payment method", color = Muted, fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("UPI", "Cash", "Card", "Bank").forEach { method ->
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("UPI", "Google Pay", "Cash", "Debit Card", "Credit Card", "PayPal", "Bank").forEach { method ->
                         FilterChip(selected = paymentMethod == method, onClick = { paymentMethod = method }, label = { Text(method) })
                     }
                 }
