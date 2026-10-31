@@ -4673,7 +4673,9 @@ private fun AddTransactionDialog(
     var tagDraft by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
     var showDatePicker by remember { mutableStateOf(false) }
-    var paymentMethod by remember { mutableStateOf("UPI") }
+    var paymentMethod by remember { mutableStateOf("UPI / Google Pay") }
+    var paymentMenuExpanded by remember { mutableStateOf(false) }
+    var showNotesEditor by remember { mutableStateOf(false) }
     var notes by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
 
@@ -4764,19 +4766,21 @@ private fun AddTransactionDialog(
                             }
                         }
                         Divider(color = Color(0xFFECEEF3))
-                        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-                                Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFE7F0FF)), contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.AccountBalanceWallet, null, tint = Color(0xFF3978D8))
+                        Box {
+                            Row(Modifier.fillMaxWidth().clickable { paymentMenuExpanded = true }.padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+                                Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFE7F0FF)), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.CreditCard, null, tint = Color(0xFF2369D8), modifier = Modifier.size(23.dp))
                                 }
-                                Column(Modifier.weight(1f)) {
-                                    Text("Payment Method", color = Color(0xFF66718F), fontSize = 10.sp)
-                                    Text(paymentMethod, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("Payment Method", color = Color(0xFF25365C), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(paymentMethod, color = Color(0xFF60708E), fontSize = 13.sp)
                                 }
+                                Icon(Icons.Default.ChevronRight, null, tint = Color(0xFF45658E))
                             }
-                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                listOf("UPI", "Google Pay", "Cash", "Debit Card", "Credit Card", "PayPal", "Bank").forEach { method ->
-                                    FilterChip(selected = paymentMethod == method, onClick = { paymentMethod = method }, label = { Text(method, fontSize = 10.sp) })
+                            DropdownMenu(expanded = paymentMenuExpanded, onDismissRequest = { paymentMenuExpanded = false }) {
+                                listOf("UPI / Google Pay", "UPI", "Google Pay", "Cash", "Debit Card", "Credit Card", "PayPal", "Bank").forEach { method ->
+                                    DropdownMenuItem(text = { Text(method) }, onClick = { paymentMethod = method; paymentMenuExpanded = false })
                                 }
                             }
                         }
@@ -4816,13 +4820,22 @@ private fun AddTransactionDialog(
                             }
                         }
                         Divider(color = Color(0xFFECEEF3))
-                        Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-                            Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFFFF0E2)), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Edit, null, tint = Color(0xFFE28B38))
+                        Column {
+                            Row(Modifier.fillMaxWidth().clickable { showNotesEditor = !showNotesEditor }.padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+                                Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFFFE9DE)), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.ReceiptLong, null, tint = Color(0xFFC94B2D), modifier = Modifier.size(23.dp))
+                                }
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("Notes / Description", color = Color(0xFF25365C), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(if (notes.isBlank()) "Add notes (optional)" else notes, color = Color(0xFF60708E), fontSize = 13.sp, maxLines = 1)
+                                }
+                                Icon(Icons.Default.ChevronRight, null, tint = Color(0xFF45658E))
                             }
-                            OutlinedTextField(value = notes, onValueChange = { notes = it }, modifier = Modifier.weight(1f),
-                                label = { Text("Notes / Description") }, placeholder = { Text("Add notes (optional)") },
-                                minLines = 2, shape = RoundedCornerShape(12.dp))
+                            if (showNotesEditor) {
+                                OutlinedTextField(value = notes, onValueChange = { notes = it }, modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text("Add notes (optional)") }, minLines = 2, shape = RoundedCornerShape(12.dp))
+                            }
                         }
                     }
                 }
