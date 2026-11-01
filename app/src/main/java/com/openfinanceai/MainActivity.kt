@@ -204,6 +204,36 @@ private fun financeIcon(key: String): ImageVector = when (key) {
     else -> Icons.Default.Apps
 }
 
+@Composable
+private fun FinanceIconDisplay(key: String, tint: Color, modifier: Modifier = Modifier) {
+    val brandMark = when (key) {
+        "brand_cred" -> "CRED" to Color(0xFF171717)
+        "brand_google_play" -> "▶" to Color(0xFF20A464)
+        "brand_amazon" -> "a" to Color(0xFF171717)
+        "brand_apple_pay" -> "Pay" to Color(0xFF171717)
+        "brand_google_pay" -> "G" to Color(0xFF4285F4)
+        "brand_paypal" -> "P" to Color(0xFF1769AA)
+        "brand_phonepe" -> "पे" to Color(0xFF5F259F)
+        "brand_paytm" -> "paytm" to Color(0xFF00A5E8)
+        "brand_swiggy" -> "S" to Color(0xFFFC8019)
+        "brand_zomato" -> "Z" to Color(0xFFE23744)
+        "brand_netflix", "brand_streaming" -> "N" to Color(0xFFE50914)
+        "brand_spotify" -> "≋" to Color(0xFF1DB954)
+        "brand_uber" -> "U" to Color(0xFF171717)
+        "brand_ola" -> "O" to Color(0xFF16A34A)
+        "brand_flipkart" -> "F" to Color(0xFFF7C600)
+        "brand_myntra" -> "M" to Color(0xFFFF3F6C)
+        else -> null
+    }
+    if (brandMark != null) {
+        Text(brandMark.first, modifier = modifier, color = brandMark.second,
+            fontSize = if (brandMark.first.length > 2) 11.sp else 21.sp,
+            fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center, maxLines = 1)
+    } else {
+        Icon(financeIcon(key), null, tint = tint, modifier = modifier)
+    }
+}
+
 private val FINANCE_ITEM_COLORS = listOf(Color(0xFF7048E8), Color(0xFFEF476F), Color(0xFFF28C28), Color(0xFFE9B824), Color(0xFF26A69A), Color(0xFF20B9C6), Color(0xFF2785E8), Color(0xFF16A34A))
 private fun savedFinanceColor(context: Context, type: String, name: String): Color {
     val key = "${type}_color_index_${name.trim().lowercase(Locale.ROOT)}"
@@ -291,7 +321,7 @@ private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, o
                                     verticalArrangement = Arrangement.spacedBy(7.dp)
                                 ) {
                                     Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(categoryColor(key).copy(alpha = .13f)), contentAlignment = Alignment.Center) {
-                                        Icon(financeIcon(key), null, tint = categoryColor(key), modifier = Modifier.size(25.dp))
+                                        FinanceIconDisplay(key, categoryColor(key), Modifier.size(25.dp))
                                     }
                                     Text(key.replaceFirstChar { it.uppercase() }, color = Ink, fontSize = 10.sp, maxLines = 1)
                                 }
@@ -2591,7 +2621,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                     Row(Modifier.fillMaxWidth().padding(start = 13.dp, top = 10.dp, bottom = 10.dp, end = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                         Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(tint.copy(alpha = .13f)), contentAlignment = Alignment.Center) {
-                            Icon(financeIcon(savedFinanceIconKey(context, "category", category)), null, tint = tint, modifier = Modifier.size(22.dp))
+                            FinanceIconDisplay(savedFinanceIconKey(context, "category", category), tint, Modifier.size(22.dp))
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(category, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
@@ -2626,7 +2656,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                 leadingIcon = { Icon(Icons.Default.Category, null, tint = Color(0xFF5948F5)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp))
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF1EFFF)).padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFFE1DCFF)), contentAlignment = Alignment.Center) {
-                    Icon(financeIcon(selectedIconKey), null, tint = selectedColor, modifier = Modifier.size(23.dp))
+                    FinanceIconDisplay(selectedIconKey, selectedColor, Modifier.size(23.dp))
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Suggested icon", color = Color(0xFF252C50), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
@@ -2726,7 +2756,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                 Column(Modifier.fillMaxWidth().background(Color.Transparent)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(13.dp)) {
                         Box(Modifier.size(48.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFFF2F6FD)).border(1.dp, Color(0xFFE3ECF8), RoundedCornerShape(15.dp)), contentAlignment = Alignment.Center) {
-                            Icon(financeIcon(savedFinanceIconKey(context, "tag", tag)), null, tint = tint, modifier = Modifier.size(21.dp))
+                            FinanceIconDisplay(savedFinanceIconKey(context, "tag", tag), tint, Modifier.size(21.dp))
                         }
                         Text(tag, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         Text("$usage", color = Color(0xFF5C6B8B), fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.width(30.dp), textAlign = TextAlign.Center)
@@ -2761,7 +2791,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                             listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Online Shopping").forEach { name ->
                                 val tint = savedFinanceColor(context, "tag", name)
                                 Box(Modifier.size(46.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFFF4F7FC)).border(1.dp, Color(0xFFE3EAF5), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
-                                    Icon(financeIcon(financeIconKeyForName(name)), null, tint = tint, modifier = Modifier.size(25.dp))
+                                    FinanceIconDisplay(financeIconKeyForName(name), tint, Modifier.size(25.dp))
                                 }
                             }
                         }
@@ -2785,7 +2815,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                     label = { Text("Tag name") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                     leadingIcon = { Icon(Icons.Default.Tag, null, tint = Color(0xFF2878E8)) }, shape = RoundedCornerShape(14.dp))
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color(0xFFF0F5FF)).padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(financeIcon(selectedIconKey), null, tint = FINANCE_ITEM_COLORS[selectedColorIndex.coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)], modifier = Modifier.size(25.dp))
+                    FinanceIconDisplay(selectedIconKey, FINANCE_ITEM_COLORS[selectedColorIndex.coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)], Modifier.size(25.dp))
                     Spacer(Modifier.width(10.dp)); Text("Suggested icon · change anytime", Modifier.weight(1f), color = Muted, fontSize = 11.sp)
                     TextButton(onClick = { showIconPicker = true }) { Text("Change") }
                 }
@@ -4781,7 +4811,7 @@ private fun AddTransactionDialog(
                             Row(Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable).padding(vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                                 Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFFFE9E5)), contentAlignment = Alignment.Center) {
-                                    Icon(financeIcon(savedFinanceIconKey(context, "category", category)), null, tint = categoryColor(category))
+                                    FinanceIconDisplay(savedFinanceIconKey(context, "category", category), categoryColor(category))
                                 }
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text("Category", color = Color(0xFF66718F), fontSize = 10.sp)
@@ -4792,7 +4822,7 @@ private fun AddTransactionDialog(
                             ExposedDropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
                                 transactionCategoryOptions.forEach { option ->
                                     DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                                        Icon(financeIcon(savedFinanceIconKey(context, "category", option)), null, tint = categoryColor(option)); Text(option)
+                                        FinanceIconDisplay(savedFinanceIconKey(context, "category", option), categoryColor(option)); Text(option)
                                     } }, onClick = { category = option; categoryMenuExpanded = false })
                                 }
                             }
