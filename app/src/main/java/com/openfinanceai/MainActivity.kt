@@ -24,6 +24,7 @@ import com.tom_roush.pdfbox.text.PDFTextStripper
 import androidx.compose.ui.platform.LocalContext
 import org.json.JSONArray
 import org.json.JSONObject
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -125,13 +127,16 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
 }
 private fun categoryTint(category: String): Color = categoryColor(category).copy(alpha = 0.12f)
 
-private fun financeIconKeyForName(name: String): String {
+internal fun financeIconKeyForName(name: String): String {
     // Brand matches must run before broad category keywords (for example Google Play before "play"/entertainment).
     val value = name.trim().lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), " ").trim()
+    val words = value.split(' ').filter { it.isNotBlank() }.toSet()
+    fun hasToken(vararg candidates: String): Boolean = candidates.any { it in words }
     return when {
         listOf("cred", "cred app").any { value == it || value.startsWith("$it ") } -> "brand_cred"
         listOf("google play", "play store").any { value.contains(it) } -> "brand_google_play"
-        listOf("amazon", "amazon pay").any { value.contains(it) } -> "brand_amazon"
+        value == "amazon pay" || value.startsWith("amazon pay ") -> "brand_amazon_pay"
+        value == "amazon" || value.startsWith("amazon ") -> "brand_amazon"
         listOf("apple pay").any { value.contains(it) } -> "brand_apple_pay"
         listOf("google pay", "gpay", "g pay").any { value == it || value.contains(it) } -> "brand_google_pay"
         listOf("paypal", "pay pal").any { value.contains(it) } -> "brand_paypal"
@@ -146,13 +151,13 @@ private fun financeIconKeyForName(name: String): String {
         listOf("flipkart").any { value.contains(it) } -> "brand_flipkart"
         listOf("myntra").any { value.contains(it) } -> "brand_myntra"
         listOf("hotstar", "jio cinema").any { value.contains(it) } -> "brand_streaming"
-        listOf("pet", "pets", "pet care", "vet", "animal").any { value.contains(it) } -> "pets"
+        (value.contains("pet care") || hasToken("pet", "pets", "vet", "animal")) -> "pets"
         listOf("restaurant", "food", "dining", "coffee", "cafe").any { value.contains(it) } -> "food"
         listOf("grocery", "groceries", "supermarket").any { value.contains(it) } -> "groceries"
         listOf("fuel", "petrol", "diesel", "gas station").any { value.contains(it) } -> "fuel"
         listOf("flight", "air travel", "airplane").any { value.contains(it) } -> "flight"
         listOf("hotel", "stay", "accommodation").any { value.contains(it) } -> "hotel"
-        listOf("bus", "train", "metro", "transport", "taxi", "cab", "car", "bike", "vehicle").any { value.contains(it) } -> "transport"
+        (value.contains("public transit") || value.contains("transport") || hasToken("bus", "train", "metro", "taxi", "cab", "car", "bike", "vehicle")) -> "transport"
         listOf("health", "medical", "medicine", "hospital", "doctor", "pharmacy").any { value.contains(it) } -> "health"
         listOf("education", "school", "college", "course", "tuition", "books").any { value.contains(it) } -> "education"
         listOf("travel", "trip", "vacation").any { value.contains(it) } -> "travel"
@@ -175,7 +180,7 @@ private fun financeIconKeyForName(name: String): String {
 
 private fun financeIcon(key: String): ImageVector = when (key) {
     "food", "brand_swiggy", "brand_zomato" -> Icons.Default.Restaurant
-    "groceries", "shopping", "brand_amazon", "brand_flipkart", "brand_myntra" -> Icons.Default.ShoppingCart
+    "groceries", "shopping", "brand_amazon", "brand_amazon_pay", "brand_flipkart", "brand_myntra" -> Icons.Default.ShoppingCart
     "fuel" -> Icons.Default.LocalGasStation
     "transport", "brand_uber", "brand_ola" -> Icons.Default.DirectionsCar
     "health" -> Icons.Default.LocalHospital
@@ -206,35 +211,39 @@ private fun financeIcon(key: String): ImageVector = when (key) {
 
 @Composable
 private fun FinanceIconDisplay(key: String, tint: Color, modifier: Modifier = Modifier) {
-    val brandMark = when (key) {
-        "brand_cred" -> "CRED" to Color(0xFF171717)
-        "brand_google_play" -> "▶" to Color(0xFF20A464)
-        "brand_amazon" -> "a" to Color(0xFF171717)
-        "brand_apple_pay" -> "Pay" to Color(0xFF171717)
-        "brand_google_pay" -> "G" to Color(0xFF4285F4)
-        "brand_paypal" -> "P" to Color(0xFF1769AA)
-        "brand_phonepe" -> "पे" to Color(0xFF5F259F)
-        "brand_paytm" -> "paytm" to Color(0xFF00A5E8)
-        "brand_swiggy" -> "S" to Color(0xFFFC8019)
-        "brand_zomato" -> "Z" to Color(0xFFE23744)
-        "brand_netflix", "brand_streaming" -> "N" to Color(0xFFE50914)
-        "brand_spotify" -> "≋" to Color(0xFF1DB954)
-        "brand_uber" -> "U" to Color(0xFF171717)
-        "brand_ola" -> "O" to Color(0xFF16A34A)
-        "brand_flipkart" -> "F" to Color(0xFFF7C600)
-        "brand_myntra" -> "M" to Color(0xFFFF3F6C)
+    // Bundled vector brand assets render offline and are shared by management and transaction forms.
+    val brandDrawable = when (key) {
+        "brand_cred" -> R.drawable.brand_cred
+        "brand_amazon" -> R.drawable.brand_amazon
+        "brand_amazon_pay" -> R.drawable.brand_amazonpay
+        "brand_myntra" -> R.drawable.brand_myntra
+        "brand_flipkart" -> R.drawable.brand_flipkart
+        "brand_google_play" -> R.drawable.brand_googleplay
+        "brand_apple_pay" -> R.drawable.brand_applepay
+        "brand_google_pay" -> R.drawable.brand_googlepay
+        "brand_paypal" -> R.drawable.brand_paypal
+        "brand_phonepe" -> R.drawable.brand_phonepe
+        "brand_paytm" -> R.drawable.brand_paytm
+        "brand_swiggy" -> R.drawable.brand_swiggy
+        "brand_zomato" -> R.drawable.brand_zomato
+        "brand_netflix" -> R.drawable.brand_netflix
+        "brand_spotify" -> R.drawable.brand_spotify
+        "brand_uber" -> R.drawable.brand_uber
+        "brand_ola" -> R.drawable.brand_ola
         else -> null
     }
-    if (brandMark != null) {
-        Text(brandMark.first, modifier = modifier, color = brandMark.second,
-            fontSize = if (brandMark.first.length > 2) 11.sp else 21.sp,
-            fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center, maxLines = 1)
+    if (brandDrawable != null) {
+        Image(
+            painter = painterResource(id = brandDrawable),
+            contentDescription = key.removePrefix("brand_").replace('_', ' '),
+            modifier = modifier
+        )
     } else {
         Icon(financeIcon(key), null, tint = tint, modifier = modifier)
     }
 }
 
-private val FINANCE_ITEM_COLORS = listOf(Color(0xFF7048E8), Color(0xFFEF476F), Color(0xFFF28C28), Color(0xFFE9B824), Color(0xFF26A69A), Color(0xFF20B9C6), Color(0xFF2785E8), Color(0xFF16A34A))
+private val FINANCE_ITEM_COLORS = listOf(Color(0xFF7048E8), Color(0xFFEF476F), Color(0xFFF28C28), Color(0xFFE9B824), Color(0xFF26A69A), Color(0xFF20B9C6), Color(0xFF2785E8))
 private fun savedFinanceColor(context: Context, type: String, name: String): Color {
     val key = "${type}_color_index_${name.trim().lowercase(Locale.ROOT)}"
     val index = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).getInt(key, -1)
@@ -245,11 +254,32 @@ private val FINANCE_ICON_OPTIONS = listOf(
     "travel", "home", "income", "bills", "shopping", "card", "cash",
     "payments", "bank", "work", "subscription", "gift", "fitness",
     "pets", "entertainment", "app", "flight", "hotel",
-    "brand_cred", "brand_google_play", "brand_amazon", "brand_apple_pay",
+    "brand_cred", "brand_google_play", "brand_amazon", "brand_amazon_pay", "brand_apple_pay",
     "brand_google_pay", "brand_paypal", "brand_phonepe", "brand_paytm",
     "brand_swiggy", "brand_zomato", "brand_netflix", "brand_spotify",
     "brand_uber", "brand_ola", "brand_flipkart", "brand_myntra", "brand_streaming"
 )
+private fun financeIconLabel(key: String): String = when (key) {
+    "brand_cred" -> "CRED"
+    "brand_google_play" -> "Google Play"
+    "brand_amazon" -> "Amazon"
+    "brand_amazon_pay" -> "Amazon Pay"
+    "brand_apple_pay" -> "Apple Pay"
+    "brand_google_pay" -> "Google Pay"
+    "brand_paypal" -> "PayPal"
+    "brand_phonepe" -> "PhonePe"
+    "brand_paytm" -> "Paytm"
+    "brand_swiggy" -> "Swiggy"
+    "brand_zomato" -> "Zomato"
+    "brand_netflix" -> "Netflix"
+    "brand_spotify" -> "Spotify"
+    "brand_uber" -> "Uber"
+    "brand_ola" -> "Ola"
+    "brand_flipkart" -> "Flipkart"
+    "brand_myntra" -> "Myntra"
+    "brand_streaming" -> "Streaming"
+    else -> key.replace('_', ' ').replaceFirstChar { it.uppercase() }
+}
 
 private fun savedFinanceIconKey(context: Context, type: String, name: String): String {
     val key = "${type}_icon_${name.trim().lowercase(Locale.ROOT)}"
@@ -260,17 +290,19 @@ private fun savedFinanceIconKey(context: Context, type: String, name: String): S
 @Composable
 private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, onClose: () -> Unit) {
     var query by remember { mutableStateOf("") }
+    var draftSelectedKey by remember(selectedKey) { mutableStateOf(selectedKey) }
     var selectedGroup by remember { mutableStateOf("All") }
     val groups = listOf("All", "Food", "Travel", "Shopping", "Health", "Other")
     fun belongsToGroup(key: String): String = when (key) {
         "food", "groceries", "brand_swiggy", "brand_zomato" -> "Food"
         "travel", "transport", "fuel", "flight", "hotel", "brand_uber", "brand_ola" -> "Travel"
-        "shopping", "card", "cash", "payments", "brand_cred", "brand_google_play", "brand_amazon", "brand_apple_pay", "brand_google_pay", "brand_paypal", "brand_phonepe", "brand_paytm", "brand_flipkart", "brand_myntra" -> "Shopping"
+        "shopping", "card", "cash", "payments", "brand_cred", "brand_google_play", "brand_amazon", "brand_amazon_pay", "brand_apple_pay", "brand_google_pay", "brand_paypal", "brand_phonepe", "brand_paytm", "brand_flipkart", "brand_myntra" -> "Shopping"
         "health", "fitness", "pets" -> "Health"
         else -> "Other"
     }
     val visibleIcons = FINANCE_ICON_OPTIONS.filter {
-        it.contains(query.trim(), ignoreCase = true) &&
+        (financeIconLabel(it).contains(query.trim(), ignoreCase = true) ||
+            it.contains(query.trim().replace(' ', '_'), ignoreCase = true)) &&
             (selectedGroup == "All" || belongsToGroup(it) == selectedGroup)
     }
     androidx.compose.ui.window.Dialog(
@@ -311,19 +343,19 @@ private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, o
                     visibleIcons.chunked(4).forEach { rowKeys ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             rowKeys.forEach { key ->
-                                val selected = selectedKey == key
+                                val selected = draftSelectedKey == key
                                 Column(
                                     Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
                                         .background(if (selected) Color(0xFFECEAFF) else if (AppDarkTheme) Color(0xFF252E3D) else Color(0xFFF3F4FA))
                                         .border(if (selected) 2.dp else 1.dp, if (selected) Color(0xFF5948F5) else Color(0xFFE6E8F0), RoundedCornerShape(16.dp))
-                                        .clickable { onSelect(key) }.padding(vertical = 14.dp),
+                                        .clickable { draftSelectedKey = key }.padding(vertical = 14.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(7.dp)
                                 ) {
                                     Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(categoryColor(key).copy(alpha = .13f)), contentAlignment = Alignment.Center) {
                                         FinanceIconDisplay(key, categoryColor(key), Modifier.size(25.dp))
                                     }
-                                    Text(key.replaceFirstChar { it.uppercase() }, color = Ink, fontSize = 10.sp, maxLines = 1)
+                                    Text(financeIconLabel(key), color = Ink, fontSize = 10.sp, maxLines = 1)
                                 }
                             }
                             repeat(4 - rowKeys.size) { Spacer(Modifier.weight(1f)) }
@@ -332,7 +364,7 @@ private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, o
                     if (visibleIcons.isEmpty()) Text("No matching icons", color = Muted, fontSize = 12.sp)
                 }
                 Button(
-                    onClick = onClose, modifier = Modifier.fillMaxWidth().height(52.dp),
+                    onClick = { onSelect(draftSelectedKey) }, modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1677EA))
                 ) { Text("Done", fontWeight = FontWeight.Bold) }
@@ -1433,28 +1465,14 @@ private fun SectionHeading(title: String, action: String, onClick: () -> Unit = 
 
 @Composable
 private fun TransactionRow(transaction: Transaction, onLongPress: () -> Unit = {}) {
+    val context = LocalContext.current
+    val categoryTintColor = categoryColor(transaction.category)
     Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp)).combinedClickable(onClick = onLongPress, onLongClick = onLongPress).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(44.dp).clip(CircleShape).background(categoryColor(transaction.category)), contentAlignment = Alignment.Center) {
-            Icon(
-                when {
-                    transaction.income -> Icons.Default.AccountBalanceWallet
-                    transaction.transactionKind == "Loan repayment / EMI" || transaction.category.contains("loan", true) || transaction.category.contains("emi", true) -> Icons.Default.AccountBalance
-                    transaction.paymentMethod.contains("cash", true) -> Icons.Default.Payments
-                    transaction.paymentMethod.contains("card", true) -> Icons.Default.CreditCard
-                    transaction.paymentMethod.contains("upi", true) || transaction.paymentMethod.contains("google pay", true) || transaction.paymentMethod.contains("phonepe", true) || transaction.paymentMethod.contains("paytm", true) -> Icons.Default.QrCode
-                    transaction.category.contains("food", true) || transaction.category.contains("grocer", true) -> Icons.Default.Restaurant
-                    transaction.category.contains("transport", true) || transaction.category.contains("travel", true) || transaction.category.contains("fuel", true) -> Icons.Default.DirectionsCar
-                    transaction.category.contains("bill", true) || transaction.category.contains("utilit", true) || transaction.category.contains("home", true) || transaction.category.contains("rent", true) -> Icons.Default.Home
-                    transaction.category.contains("shop", true) || transaction.category.contains("cloth", true) -> Icons.Default.ShoppingBag
-                    transaction.category.contains("entertain", true) || transaction.category.contains("movie", true) -> Icons.Default.ConfirmationNumber
-                    transaction.category.contains("health", true) || transaction.category.contains("fitness", true) || transaction.category.contains("medical", true) -> Icons.Default.Favorite
-                    transaction.category.contains("education", true) -> Icons.Default.School
-                    transaction.category.contains("travel", true) -> Icons.Default.Flight
-                    else -> Icons.Default.MoreHoriz
-                },
-                contentDescription = transaction.category,
-                tint = Color.White,
-                modifier = Modifier.size(21.dp)
+        Box(Modifier.size(44.dp).clip(CircleShape).background(categoryTint(transaction.category)), contentAlignment = Alignment.Center) {
+            FinanceIconDisplay(
+                savedFinanceIconKey(context, "category", transaction.category),
+                categoryTintColor,
+                Modifier.size(23.dp)
             )
         }
         Spacer(Modifier.width(11.dp))
@@ -2564,21 +2582,17 @@ private val DEFAULT_MONEY_CATEGORIES = listOf(
     "Other", "Savings/Investment", "Transport", "Transport/Public transit",
     "Utilities/Electricity", "Utilities/Internet", "Utilities/Water"
 )
+private val DEFAULT_MONEY_TAGS = listOf(
+    "Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play",
+    "Debit Card", "PayPal", "Google Pay", "Online Shopping"
+)
 
 @Composable
 private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCategoriesChanged: () -> Unit = {}) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
-    val initialCategories = remember {
-        runCatching {
-            val raw = preferences.getString("custom_categories", null)
-            if (raw.isNullOrBlank()) DEFAULT_MONEY_CATEGORIES else {
-                val array = JSONArray(raw)
-                (0 until array.length()).map { array.getString(it).trim() }.filter { it.isNotBlank() }
-                    .distinctBy { it.lowercase(Locale.ROOT) }.ifEmpty { DEFAULT_MONEY_CATEGORIES }
-            }
-        }.getOrDefault(DEFAULT_MONEY_CATEGORIES)
-    }
+    val store = remember(preferences) { FinanceManagementStore(preferences, DEFAULT_MONEY_CATEGORIES, DEFAULT_MONEY_TAGS) }
+    val initialCategories = remember(store) { store.loadCategories() }
     var categories by remember { mutableStateOf(initialCategories) }
     var message by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
@@ -2591,9 +2605,9 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
     val selectedColor = FINANCE_ITEM_COLORS[selectedColorIndex.coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)]
     var showIconPicker by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
+    var menuCategory by remember { mutableStateOf<String?>(null) }
     fun persistCategories(values: List<String>) {
-        val array = JSONArray(); values.forEach { array.put(it) }
-        preferences.edit().putString("custom_categories", array.toString()).apply()
+        store.saveCategories(values)
         onCategoriesChanged()
     }
     Column(Modifier.fillMaxSize().background(Page)) {
@@ -2609,7 +2623,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("${categories.size} categories", color = Color(0xFF252C50), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("Tap edit to rename or customize an icon.", color = Color(0xFF66718F), fontSize = 11.sp)
+                            Text("Use the menu to edit, customize or remove a category.", color = Color(0xFF66718F), fontSize = 11.sp)
                         }
                     }
                 }
@@ -2627,8 +2641,18 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                             Text(category, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             Text("${transactions.count { it.category.equals(category, ignoreCase = true) }} transactions", color = Muted, fontSize = 10.sp)
                         }
-                        IconButton(onClick = { draft = category; editing = category; selectedIconKey = savedFinanceIconKey(context, "category", category); selectedColorIndex = preferences.getInt("category_color_index_${category.lowercase(Locale.ROOT)}", 0).coerceIn(0, FINANCE_ITEM_COLORS.lastIndex); showAdd = true }) { Icon(Icons.Default.Edit, "Edit category", tint = Color(0xFF5948F5)) }
-                        IconButton(onClick = { pendingDelete = category }) { Icon(Icons.Default.DeleteOutline, "Delete category", tint = ExpenseRed) }
+                        Box {
+                            IconButton(onClick = { menuCategory = category }) { Icon(Icons.Default.MoreVert, "Category options", tint = Color(0xFF687A9A)) }
+                            DropdownMenu(expanded = menuCategory == category, onDismissRequest = { menuCategory = null }) {
+                                DropdownMenuItem(text = { Text("Edit") }, onClick = {
+                                    draft = category; editing = category
+                                    selectedIconKey = savedFinanceIconKey(context, "category", category)
+                                    selectedColorIndex = preferences.getInt("category_color_index_${category.lowercase(Locale.ROOT)}", 0).coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)
+                                    menuCategory = null; showAdd = true
+                                })
+                                DropdownMenuItem(text = { Text("Delete", color = ExpenseRed) }, onClick = { menuCategory = null; pendingDelete = category })
+                            }
+                        }
                     }
                 }
             }
@@ -2676,12 +2700,15 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
         confirmButton = { Button(onClick = {
             val name = draft.trim()
             if (name.isNotBlank()) {
-                val duplicate = categories.any { it.equals(name, ignoreCase = true) && it != editing }
+                val duplicate = categories.any { it.equals(name, ignoreCase = true) && !it.equals(editing, ignoreCase = true) }
                 if (duplicate) message = "That category already exists."
                 else {
-                    categories = (if (editing == null) categories + name else categories.map { if (it == editing) name else it }).distinctBy { it.lowercase(Locale.ROOT) }
-                    preferences.edit().putString("category_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).putInt("category_color_index_${name.lowercase(Locale.ROOT)}", selectedColorIndex).apply()
-                    persistCategories(categories); message = ""; showAdd = false
+                    val saved = if (editing == null) store.addCategory(name) else store.renameCategory(editing!!, name)
+                    if (saved) {
+                        categories = store.loadCategories()
+                        store.saveCategoryAppearance(name, selectedIconKey, selectedColorIndex)
+                        persistCategories(categories); message = ""; showAdd = false
+                    } else message = "That category already exists."
                 }
             } else message = "Enter a category name."
         }, shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) { Text("Save Category") } },
@@ -2691,7 +2718,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
     pendingDelete?.let { category -> AlertDialog(
         onDismissRequest = { pendingDelete = null }, title = { Text("Delete category?") },
         text = { Text("Remove \"$category\" from this category list? Existing transactions keep their original labels.") },
-        confirmButton = { TextButton(onClick = { categories = categories - category; persistCategories(categories); pendingDelete = null }) { Text("Delete", color = ExpenseRed) } },
+        confirmButton = { TextButton(onClick = { store.deleteCategory(category); categories = store.loadCategories(); onCategoriesChanged(); pendingDelete = null }) { Text("Delete", color = ExpenseRed) } },
         dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } }
     ) }
 }
@@ -2701,42 +2728,31 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
 private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), onBack: () -> Unit = {}) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
-    val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online Shopping")
-    val initialTags = remember {
-        runCatching {
-            val raw = preferences.getString("custom_tags", null)
-            val saved = if (raw.isNullOrBlank()) emptyList() else {
-                val array = JSONArray(raw)
-                (0 until array.length()).map { array.getString(it).trim().removePrefix("#").trim() }.filter { it.isNotBlank() }
-            }
-            (defaultTags + saved).distinctBy { it.lowercase(Locale.ROOT) }
-        }.getOrDefault(defaultTags)
-    }
+    val store = remember(preferences) { FinanceManagementStore(preferences, DEFAULT_MONEY_CATEGORIES, DEFAULT_MONEY_TAGS) }
+    val initialTags = remember(store) { store.loadTags() }
     var tags by remember { mutableStateOf(initialTags) }
     var searchQuery by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
     var selectedIconKey by remember { mutableStateOf("other") }
-    var selectedColorIndex by remember { mutableIntStateOf(7) }
+    var selectedColorIndex by remember { mutableIntStateOf(6) }
     var showIconPicker by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     var menuTag by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf("") }
     val visibleTags = tags.filter { it.contains(searchQuery.trim(), ignoreCase = true) }
     fun persistTags(values: List<String>) {
-        val array = JSONArray()
-        values.forEach { array.put(it) }
-        preferences.edit().putString("custom_tags", array.toString()).apply()
+        store.saveTags(values)
     }
     Column(Modifier.fillMaxSize().background(Page).padding(horizontal = 10.dp, vertical = 8.dp)
-        .clip(RoundedCornerShape(24.dp)).background(Color.White)
+        .clip(RoundedCornerShape(24.dp)).background(Color(0xFFFCFBFF))
         .border(1.dp, Color(0xFFDCE8F7), RoundedCornerShape(24.dp))) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Color(0xFF174A83), modifier = Modifier.size(25.dp)) }
-            Text("Tags", color = Color(0xFF17264D), fontSize = 23.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            IconButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; selectedColorIndex = 7; showAdd = true }) {
-                Icon(Icons.Default.Add, "Add tag", tint = Color(0xFF174A83), modifier = Modifier.size(29.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Tag Management", color = Color(0xFF17264D), fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Text("Select and manage your transaction tags", color = Color(0xFF71809A), fontSize = 11.sp)
             }
         }
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
@@ -2766,7 +2782,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                                 DropdownMenuItem(text = { Text("Edit") }, onClick = {
                                     draft = tag; editing = tag
                                     selectedIconKey = savedFinanceIconKey(context, "tag", tag)
-                                    selectedColorIndex = preferences.getInt("tag_color_index_${tag.lowercase(Locale.ROOT)}", 7).coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)
+                                    selectedColorIndex = preferences.getInt("tag_color_index_${tag.lowercase(Locale.ROOT)}", 6).coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)
                                     menuTag = null; showAdd = true
                                 })
                                 DropdownMenuItem(text = { Text("Delete", color = ExpenseRed) }, onClick = { menuTag = null; pendingDelete = tag })
@@ -2776,34 +2792,16 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                     Divider(color = Color(0xFFE8EDF5), thickness = 1.dp)
                 }
             }
-            item {
-                Spacer(Modifier.height(5.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFCFDFF)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2EAF6)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Suggested Icons", color = Color(0xFF17264D), fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Online Shopping").forEach { name ->
-                                val tint = savedFinanceColor(context, "tag", name)
-                                Box(Modifier.size(46.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFFF4F7FC)).border(1.dp, Color(0xFFE3EAF5), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
-                                    FinanceIconDisplay(financeIconKeyForName(name), tint, Modifier.size(25.dp))
-                                }
-                            }
-                        }
-                        Text("The app suggests an icon based on the name.\nYou can change it anytime.", color = Color(0xFF60708E), fontSize = 12.sp, lineHeight = 17.sp)
-                    }
+        }
+        Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
+            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; selectedColorIndex = 6; showAdd = true }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp)) {
+                    Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Add Tag")
+                }
+                Button(onClick = { persistTags(tags); message = "Tags confirmed and saved." }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2878E8))) {
+                    Text("Confirm", fontWeight = FontWeight.SemiBold)
                 }
             }
-        }
-        Button(onClick = { draft = ""; editing = null; selectedIconKey = "other"; selectedColorIndex = 7; showAdd = true },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).navigationBarsPadding().height(50.dp),
-            shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2878E8))) {
-            Icon(Icons.Default.Add, null); Spacer(Modifier.width(7.dp)); Text("Add Tag", fontWeight = FontWeight.SemiBold)
         }
     }
     if (showAdd) AlertDialog(
@@ -2831,11 +2829,14 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
             Button(onClick = {
                 val name = draft.trim().removePrefix("#").trim()
                 if (name.isBlank()) message = "Enter a tag name."
-                else if (tags.any { it.equals(name, true) && it != editing }) message = "That tag already exists."
+                else if (tags.any { it.equals(name, true) && !it.equals(editing, true) }) message = "That tag already exists."
                 else {
-                    tags = (if (editing == null) tags + name else tags.map { if (it == editing) name else it }).distinctBy { it.lowercase(Locale.ROOT) }
-                    preferences.edit().putString("tag_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).putInt("tag_color_index_${name.lowercase(Locale.ROOT)}", selectedColorIndex).apply()
-                    persistTags(tags); message = ""; showAdd = false
+                    val saved = if (editing == null) store.addTag(name) else store.renameTag(editing!!, name)
+                    if (saved) {
+                        tags = store.loadTags()
+                        store.saveTagAppearance(name, selectedIconKey, selectedColorIndex)
+                        persistTags(tags); message = ""; showAdd = false
+                    } else message = "That tag already exists."
                 }
             }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2878E8)), shape = RoundedCornerShape(13.dp)) { Text("Save Tag") }
         },
@@ -2845,7 +2846,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
     pendingDelete?.let { tag ->
         AlertDialog(onDismissRequest = { pendingDelete = null }, title = { Text("Delete tag?") },
             text = { Text("Remove \"$tag\" from the tag list? Existing transactions keep their saved tag.") },
-            confirmButton = { TextButton(onClick = { tags = tags - tag; persistTags(tags); pendingDelete = null }) { Text("Delete", color = ExpenseRed) } },
+            confirmButton = { TextButton(onClick = { store.deleteTag(tag); tags = store.loadTags(); pendingDelete = null }) { Text("Delete", color = ExpenseRed) } },
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } })
     }
 }
@@ -4395,6 +4396,7 @@ private fun TransactionDetailsDialog(
     onDuplicate: () -> Unit,
     onTips: () -> Unit
 ) {
+    val context = LocalContext.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val categoryTotal = allTransactions.filter { it.category.equals(transaction.category, ignoreCase = true) && it.income == transaction.income }.sumOf { it.amount }
     val currency = Money
@@ -4420,7 +4422,7 @@ private fun TransactionDetailsDialog(
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         Box(Modifier.size(68.dp).clip(CircleShape).background(categoryTint(transaction.category)), contentAlignment = Alignment.Center) {
-                            Icon(if (transaction.income) Icons.Default.TrendingUp else Icons.Default.Restaurant, contentDescription = null, tint = categoryColor(transaction.category), modifier = Modifier.size(32.dp))
+                            FinanceIconDisplay(savedFinanceIconKey(context, "category", transaction.category), categoryColor(transaction.category), Modifier.size(34.dp))
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(transaction.category, color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -4513,6 +4515,7 @@ private fun TransactionDetailRow(icon: ImageVector, label: String, value: String
 @Composable
 private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Unit, onSave: (Transaction) -> Unit) {
     val accent = Color(0xFF5948F5)
+    val context = LocalContext.current
     var title by remember(transaction) { mutableStateOf(transaction.title) }
     var amount by remember(transaction) { mutableStateOf(transaction.amount.toString()) }
     var category by remember(transaction) { mutableStateOf(transaction.category) }
@@ -4561,8 +4564,12 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
                 }
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Description") }, leadingIcon = { Icon(Icons.Default.ReceiptLong, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
                 OutlinedTextField(value = amount, onValueChange = { amount = it.filter(Char::isDigit) }, label = { Text("Amount (₹)") }, leadingIcon = { Icon(Icons.Default.CurrencyRupee, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
-                OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, leadingIcon = { Icon(Icons.Default.LocalOffer, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
-                OutlinedTextField(value = tag, onValueChange = { tag = it.removePrefix("#") }, label = { Text("Tag (optional)") }, leadingIcon = { Icon(Icons.Default.Tag, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
+                OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, leadingIcon = { FinanceIconDisplay(savedFinanceIconKey(context, "category", category), categoryColor(category), Modifier.size(20.dp)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
+                OutlinedTextField(value = tag, onValueChange = { tag = it.removePrefix("#") }, label = { Text("Tag (optional)") }, leadingIcon = {
+                    val primaryTag = tag.substringBefore(",").trim()
+                    if (primaryTag.isBlank()) Icon(Icons.Default.LocalOffer, null, tint = accent, modifier = Modifier.size(20.dp))
+                    else FinanceIconDisplay(savedFinanceIconKey(context, "tag", primaryTag), accent, Modifier.size(20.dp))
+                }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
                 OutlinedTextField(value = date, onValueChange = {}, readOnly = true, label = { Text("Transaction date") }, leadingIcon = { Icon(Icons.Default.CalendarMonth, null, tint = accent) }, trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date", tint = accent) } }, modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }, singleLine = true, shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent))
                 if (showDatePicker) {
                     val initialMillis = runCatching { transactionDateOrNull(transaction)?.atStartOfDay(java.time.ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: System.currentTimeMillis() }.getOrDefault(System.currentTimeMillis())
@@ -4660,21 +4667,12 @@ private fun AddTransactionDialog(
     // Read the same on-device category list used by Settings > Categories.
     // The refresh token changes whenever categories are added, renamed, or deleted.
     val savedCategories = remember(context, categoryRefreshToken) {
-        runCatching {
-            val raw = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
-                .getString("custom_categories", null)
-            if (raw.isNullOrBlank()) DEFAULT_MONEY_CATEGORIES else {
-                val array = JSONArray(raw)
-                (0 until array.length()).map { array.getString(it).trim() }
-                    .filter { it.isNotBlank() }
-                    .distinctBy { it.lowercase(Locale.ROOT) }
-                    .ifEmpty { DEFAULT_MONEY_CATEGORIES }
-            }
-        }.getOrDefault(DEFAULT_MONEY_CATEGORIES)
+        val categoryPrefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+        FinanceManagementStore(categoryPrefs, DEFAULT_MONEY_CATEGORIES, DEFAULT_MONEY_TAGS).loadCategories()
     }
     // Category Management has no income/expense type field, so show every saved
     // category for either transaction type instead of hiding user-created entries.
-    val transactionCategoryOptions = (savedCategories + listOf("Salary", "Other income"))
+    val transactionCategoryOptions = (savedCategories + listOf("Salary", "Other income", "Other"))
         .distinctBy { it.lowercase(Locale.ROOT) }
     var isIncome by remember { mutableStateOf(initialIncome) }
     var transactionKind by remember { mutableStateOf(if (initialIncome) "Income" else "Expense") }
@@ -4717,18 +4715,9 @@ private fun AddTransactionDialog(
         }
     }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
-    val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online Shopping")
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
-    var tags by remember {
-        mutableStateOf(runCatching {
-            val raw = preferences.getString("custom_tags", null)
-            val saved = if (raw.isNullOrBlank()) emptyList() else {
-                val array = JSONArray(raw)
-                (0 until array.length()).map { array.getString(it).trim().removePrefix("#").trim() }.filter { it.isNotBlank() }
-            }
-            (defaultTags + saved).distinctBy { it.lowercase(Locale.ROOT) }
-        }.getOrDefault(defaultTags))
-    }
+    val store = remember(preferences) { FinanceManagementStore(preferences, DEFAULT_MONEY_CATEGORIES, DEFAULT_MONEY_TAGS) }
+    var tags by remember(store) { mutableStateOf(store.loadTags()) }
     var selectedTags by remember { mutableStateOf(listOf<String>()) }
     var tagMenuExpanded by remember { mutableStateOf(false) }
     var showCreateTag by remember { mutableStateOf(false) }
@@ -4863,7 +4852,9 @@ private fun AddTransactionDialog(
                             Row(Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable).padding(vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                                 Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFE5F6ED)), contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.LocalOffer, null, tint = Color(0xFF299B68))
+                                    val primaryTag = selectedTags.firstOrNull()
+                                    if (primaryTag != null) FinanceIconDisplay(savedFinanceIconKey(context, "tag", primaryTag), savedFinanceColor(context, "tag", primaryTag), Modifier.size(21.dp))
+                                    else Icon(Icons.Default.LocalOffer, null, tint = Color(0xFF299B68))
                                 }
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text("Tags", color = Color(0xFF66718F), fontSize = 10.sp)
@@ -4874,7 +4865,8 @@ private fun AddTransactionDialog(
                             ExposedDropdownMenu(expanded = tagMenuExpanded, onDismissRequest = { tagMenuExpanded = false }) {
                                 DropdownMenuItem(text = { Text("Clear tags") }, onClick = { selectedTags = emptyList(); tagMenuExpanded = false })
                                 tags.forEach { option ->
-                                    DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically) {
+                                    DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                        FinanceIconDisplay(savedFinanceIconKey(context, "tag", option), savedFinanceColor(context, "tag", option), Modifier.size(20.dp))
                                         Text(option, Modifier.weight(1f)); if (option in selectedTags) Icon(Icons.Default.Check, null, tint = Green)
                                     } }, onClick = { selectedTags = if (option in selectedTags) selectedTags - option else selectedTags + option })
                                 }
@@ -4982,10 +4974,10 @@ private fun AddTransactionDialog(
                         if (existing != null) selectedTags = (selectedTags + existing).distinct()
                         else {
                             tags = tags + name
-                            val array = JSONArray()
-                            tags.forEach { array.put(it) }
-                            preferences.edit().putString("custom_tags", array.toString()).apply()
-                            selectedTags = (selectedTags + name).distinct()
+                            if (store.addTag(name)) {
+                                tags = store.loadTags()
+                                selectedTags = (selectedTags + name).distinct()
+                            }
                         }
                         showCreateTag = false
                     }

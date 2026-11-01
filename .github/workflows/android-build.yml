@@ -31,6 +31,8 @@ jobs:
           gradle-version: "8.9"
       - name: Verify Gradle installation
         run: gradle --version
+      - name: Run category and tag persistence tests
+        run: gradle --no-daemon --stacktrace --warning-mode all testDebugUnitTest
       - name: Prepare persistent signing key
         if: env.MONEYLOG_KEYSTORE_BASE64 != '' && env.MONEYLOG_KEYSTORE_PASSWORD != '' && env.MONEYLOG_KEY_ALIAS != '' && env.MONEYLOG_KEY_PASSWORD != ''
         shell: bash
