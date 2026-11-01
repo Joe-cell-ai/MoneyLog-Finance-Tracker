@@ -38,6 +38,6 @@ class FinanceIconSuggestionsTest {
 
     @Test
     fun unknownNamesReceiveGenericAppIcon() {
-        assertEquals("app", financeIconKeyForName("My custom payment label"))
+        assertEquals("app", financeIconKeyForName("Custom label xyz"))
     }
 }
