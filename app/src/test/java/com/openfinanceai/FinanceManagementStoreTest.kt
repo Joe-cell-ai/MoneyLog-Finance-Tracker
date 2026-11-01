@@ -84,6 +84,27 @@ class FinanceManagementStoreTest {
     }
 
     @Test
+    fun brandAndCategoryNamesResolveToSpecificOfflineIconKeys() {
+        assertEquals("brand_cred", financeIconKeyForName("CRED"))
+        assertEquals("brand_phonepe", financeIconKeyForName("PhonePe"))
+        assertEquals("brand_swiggy", financeIconKeyForName("Swiggy"))
+        assertEquals("brand_zomato", financeIconKeyForName("Zomato"))
+        assertEquals("brand_google_pay", financeIconKeyForName("Google Pay"))
+        assertEquals("brand_amazon", financeIconKeyForName("Amazon"))
+        assertEquals("brand_amazon_pay", financeIconKeyForName("Amazon Pay"))
+        assertEquals("brand_paypal", financeIconKeyForName("PayPal"))
+        assertEquals("brand_apple_pay", financeIconKeyForName("Apple Pay"))
+        assertEquals("brand_google_play", financeIconKeyForName("Google Play"))
+        assertEquals("brand_myntra", financeIconKeyForName("MYNTRA"))
+        assertEquals("pets", financeIconKeyForName("Pet Care"))
+        assertEquals("food", financeIconKeyForName("Restaurant"))
+        assertEquals("flight", financeIconKeyForName("Flight"))
+        assertEquals("fuel", financeIconKeyForName("Fuel"))
+        assertEquals("health", financeIconKeyForName("Medical"))
+        assertEquals("app", financeIconKeyForName("Unknown Merchant"))
+    }
+
+    @Test
     fun renameRejectsDuplicateNamesWithoutChangingStoredItems() {
         assertFalse(store.renameCategory("Food", "Transport"))
         assertEquals(defaults, store.loadCategories())
