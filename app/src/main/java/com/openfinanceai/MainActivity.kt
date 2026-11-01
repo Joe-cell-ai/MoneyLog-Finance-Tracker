@@ -223,7 +223,7 @@ private fun FinanceIconDisplay(key: String, tint: Color, modifier: Modifier = Mo
         "brand_paytm" -> R.drawable.brand_paytm
         "brand_swiggy" -> R.drawable.brand_swiggy
         "brand_zomato" -> R.drawable.brand_zomato
-        "brand_netflix", "brand_streaming" -> R.drawable.brand_netflix
+        "brand_netflix" -> R.drawable.brand_netflix
         "brand_spotify" -> R.drawable.brand_spotify
         "brand_uber" -> R.drawable.brand_uber
         else -> null
@@ -2596,10 +2596,13 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
     val initialCategories = remember {
         runCatching {
             val raw = preferences.getString("custom_categories", null)
-            if (raw.isNullOrBlank()) DEFAULT_MONEY_CATEGORIES else {
+            val initialized = preferences.getBoolean("custom_categories_initialized", false)
+            if (raw.isNullOrBlank()) {
+                if (initialized) emptyList() else DEFAULT_MONEY_CATEGORIES
+            } else {
                 val array = JSONArray(raw)
                 (0 until array.length()).map { array.getString(it).trim() }.filter { it.isNotBlank() }
-                    .distinctBy { it.lowercase(Locale.ROOT) }.ifEmpty { DEFAULT_MONEY_CATEGORIES }
+                    .distinctBy { it.lowercase(Locale.ROOT) }
             }
         }.getOrDefault(DEFAULT_MONEY_CATEGORIES)
     }
@@ -2618,7 +2621,8 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
     var menuCategory by remember { mutableStateOf<String?>(null) }
     fun persistCategories(values: List<String>) {
         val array = JSONArray(); values.forEach { array.put(it) }
-        preferences.edit().putString("custom_categories", array.toString()).apply()
+        preferences.edit().putString("custom_categories", array.toString())
+            .putBoolean("custom_categories_initialized", true).apply()
         onCategoriesChanged()
     }
     Column(Modifier.fillMaxSize().background(Page)) {
@@ -4698,20 +4702,22 @@ private fun AddTransactionDialog(
     // The refresh token changes whenever categories are added, renamed, or deleted.
     val savedCategories = remember(context, categoryRefreshToken) {
         runCatching {
-            val raw = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
-                .getString("custom_categories", null)
-            if (raw.isNullOrBlank()) DEFAULT_MONEY_CATEGORIES else {
+            val categoryPrefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+            val raw = categoryPrefs.getString("custom_categories", null)
+            val initialized = categoryPrefs.getBoolean("custom_categories_initialized", false)
+            if (raw.isNullOrBlank()) {
+                if (initialized) emptyList() else DEFAULT_MONEY_CATEGORIES
+            } else {
                 val array = JSONArray(raw)
                 (0 until array.length()).map { array.getString(it).trim() }
                     .filter { it.isNotBlank() }
                     .distinctBy { it.lowercase(Locale.ROOT) }
-                    .ifEmpty { DEFAULT_MONEY_CATEGORIES }
             }
         }.getOrDefault(DEFAULT_MONEY_CATEGORIES)
     }
     // Category Management has no income/expense type field, so show every saved
     // category for either transaction type instead of hiding user-created entries.
-    val transactionCategoryOptions = (savedCategories + listOf("Salary", "Other income"))
+    val transactionCategoryOptions = (savedCategories + listOf("Salary", "Other income", "Other"))
         .distinctBy { it.lowercase(Locale.ROOT) }
     var isIncome by remember { mutableStateOf(initialIncome) }
     var transactionKind by remember { mutableStateOf(if (initialIncome) "Income" else "Expense") }
