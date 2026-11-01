@@ -127,7 +127,7 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
 }
 private fun categoryTint(category: String): Color = categoryColor(category).copy(alpha = 0.12f)
 
-private fun financeIconKeyForName(name: String): String {
+internal fun financeIconKeyForName(name: String): String {
     // Brand matches must run before broad category keywords (for example Google Play before "play"/entertainment).
     val value = name.trim().lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), " ").trim()
     val words = value.split(' ').filter { it.isNotBlank() }.toSet()
@@ -150,7 +150,7 @@ private fun financeIconKeyForName(name: String): String {
         listOf("flipkart").any { value.contains(it) } -> "brand_flipkart"
         listOf("myntra").any { value.contains(it) } -> "brand_myntra"
         listOf("hotstar", "jio cinema").any { value.contains(it) } -> "brand_streaming"
-        (value == "pet" || value.contains("pet care") || hasToken("pets", "vet", "animal")) -> "pets"
+        (value.contains("pet care") || hasToken("pet", "pets", "vet", "animal")) -> "pets"
         listOf("restaurant", "food", "dining", "coffee", "cafe").any { value.contains(it) } -> "food"
         listOf("grocery", "groceries", "supermarket").any { value.contains(it) } -> "groceries"
         listOf("fuel", "petrol", "diesel", "gas station").any { value.contains(it) } -> "fuel"
@@ -255,6 +255,26 @@ private val FINANCE_ICON_OPTIONS = listOf(
     "brand_swiggy", "brand_zomato", "brand_netflix", "brand_spotify",
     "brand_uber", "brand_ola", "brand_flipkart", "brand_myntra", "brand_streaming"
 )
+private fun financeIconLabel(key: String): String = when (key) {
+    "brand_cred" -> "CRED"
+    "brand_google_play" -> "Google Play"
+    "brand_amazon" -> "Amazon"
+    "brand_apple_pay" -> "Apple Pay"
+    "brand_google_pay" -> "Google Pay"
+    "brand_paypal" -> "PayPal"
+    "brand_phonepe" -> "PhonePe"
+    "brand_paytm" -> "Paytm"
+    "brand_swiggy" -> "Swiggy"
+    "brand_zomato" -> "Zomato"
+    "brand_netflix" -> "Netflix"
+    "brand_spotify" -> "Spotify"
+    "brand_uber" -> "Uber"
+    "brand_ola" -> "Ola"
+    "brand_flipkart" -> "Flipkart"
+    "brand_myntra" -> "Myntra"
+    "brand_streaming" -> "Streaming"
+    else -> key.replace('_', ' ').replaceFirstChar { it.uppercase() }
+}
 
 private fun savedFinanceIconKey(context: Context, type: String, name: String): String {
     val key = "${type}_icon_${name.trim().lowercase(Locale.ROOT)}"
@@ -276,7 +296,8 @@ private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, o
         else -> "Other"
     }
     val visibleIcons = FINANCE_ICON_OPTIONS.filter {
-        it.contains(query.trim(), ignoreCase = true) &&
+        (financeIconLabel(it).contains(query.trim(), ignoreCase = true) ||
+            it.contains(query.trim().replace(' ', '_'), ignoreCase = true)) &&
             (selectedGroup == "All" || belongsToGroup(it) == selectedGroup)
     }
     androidx.compose.ui.window.Dialog(
@@ -329,26 +350,7 @@ private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, o
                                     Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(categoryColor(key).copy(alpha = .13f)), contentAlignment = Alignment.Center) {
                                         FinanceIconDisplay(key, categoryColor(key), Modifier.size(25.dp))
                                     }
-                                    Text(when (key) {
-                                        "brand_cred" -> "CRED"
-                                        "brand_google_play" -> "Google Play"
-                                        "brand_amazon" -> "Amazon"
-                                        "brand_apple_pay" -> "Apple Pay"
-                                        "brand_google_pay" -> "Google Pay"
-                                        "brand_paypal" -> "PayPal"
-                                        "brand_phonepe" -> "PhonePe"
-                                        "brand_paytm" -> "Paytm"
-                                        "brand_swiggy" -> "Swiggy"
-                                        "brand_zomato" -> "Zomato"
-                                        "brand_netflix" -> "Netflix"
-                                        "brand_spotify" -> "Spotify"
-                                        "brand_uber" -> "Uber"
-                                        "brand_ola" -> "Ola"
-                                        "brand_flipkart" -> "Flipkart"
-                                        "brand_myntra" -> "Myntra"
-                                        "brand_streaming" -> "Streaming"
-                                        else -> key.replaceFirstChar { it.uppercase() }
-                                    }, color = Ink, fontSize = 10.sp, maxLines = 1)
+                                    Text(financeIconLabel(key), color = Ink, fontSize = 10.sp, maxLines = 1)
                                 }
                             }
                             repeat(4 - rowKeys.size) { Spacer(Modifier.weight(1f)) }
