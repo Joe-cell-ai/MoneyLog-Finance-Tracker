@@ -1457,28 +1457,14 @@ private fun SectionHeading(title: String, action: String, onClick: () -> Unit = 
 
 @Composable
 private fun TransactionRow(transaction: Transaction, onLongPress: () -> Unit = {}) {
+    val context = LocalContext.current
+    val categoryTintColor = categoryColor(transaction.category)
     Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp)).combinedClickable(onClick = onLongPress, onLongClick = onLongPress).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(44.dp).clip(CircleShape).background(categoryColor(transaction.category)), contentAlignment = Alignment.Center) {
-            Icon(
-                when {
-                    transaction.income -> Icons.Default.AccountBalanceWallet
-                    transaction.transactionKind == "Loan repayment / EMI" || transaction.category.contains("loan", true) || transaction.category.contains("emi", true) -> Icons.Default.AccountBalance
-                    transaction.paymentMethod.contains("cash", true) -> Icons.Default.Payments
-                    transaction.paymentMethod.contains("card", true) -> Icons.Default.CreditCard
-                    transaction.paymentMethod.contains("upi", true) || transaction.paymentMethod.contains("google pay", true) || transaction.paymentMethod.contains("phonepe", true) || transaction.paymentMethod.contains("paytm", true) -> Icons.Default.QrCode
-                    transaction.category.contains("food", true) || transaction.category.contains("grocer", true) -> Icons.Default.Restaurant
-                    transaction.category.contains("transport", true) || transaction.category.contains("travel", true) || transaction.category.contains("fuel", true) -> Icons.Default.DirectionsCar
-                    transaction.category.contains("bill", true) || transaction.category.contains("utilit", true) || transaction.category.contains("home", true) || transaction.category.contains("rent", true) -> Icons.Default.Home
-                    transaction.category.contains("shop", true) || transaction.category.contains("cloth", true) -> Icons.Default.ShoppingBag
-                    transaction.category.contains("entertain", true) || transaction.category.contains("movie", true) -> Icons.Default.ConfirmationNumber
-                    transaction.category.contains("health", true) || transaction.category.contains("fitness", true) || transaction.category.contains("medical", true) -> Icons.Default.Favorite
-                    transaction.category.contains("education", true) -> Icons.Default.School
-                    transaction.category.contains("travel", true) -> Icons.Default.Flight
-                    else -> Icons.Default.MoreHoriz
-                },
-                contentDescription = transaction.category,
-                tint = Color.White,
-                modifier = Modifier.size(21.dp)
+        Box(Modifier.size(44.dp).clip(CircleShape).background(categoryTint(transaction.category)), contentAlignment = Alignment.Center) {
+            FinanceIconDisplay(
+                savedFinanceIconKey(context, "category", transaction.category),
+                categoryTintColor,
+                Modifier.size(23.dp)
             )
         }
         Spacer(Modifier.width(11.dp))
@@ -4435,6 +4421,7 @@ private fun TransactionDetailsDialog(
     onDuplicate: () -> Unit,
     onTips: () -> Unit
 ) {
+    val context = LocalContext.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val categoryTotal = allTransactions.filter { it.category.equals(transaction.category, ignoreCase = true) && it.income == transaction.income }.sumOf { it.amount }
     val currency = Money
@@ -4460,7 +4447,7 @@ private fun TransactionDetailsDialog(
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         Box(Modifier.size(68.dp).clip(CircleShape).background(categoryTint(transaction.category)), contentAlignment = Alignment.Center) {
-                            Icon(if (transaction.income) Icons.Default.TrendingUp else Icons.Default.Restaurant, contentDescription = null, tint = categoryColor(transaction.category), modifier = Modifier.size(32.dp))
+                            FinanceIconDisplay(savedFinanceIconKey(context, "category", transaction.category), categoryColor(transaction.category), Modifier.size(34.dp))
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(transaction.category, color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
