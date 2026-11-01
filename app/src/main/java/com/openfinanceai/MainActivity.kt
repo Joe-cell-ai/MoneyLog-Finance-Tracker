@@ -135,7 +135,8 @@ internal fun financeIconKeyForName(name: String): String {
     return when {
         listOf("cred", "cred app").any { value == it || value.startsWith("$it ") } -> "brand_cred"
         listOf("google play", "play store").any { value.contains(it) } -> "brand_google_play"
-        listOf("amazon", "amazon pay").any { value.contains(it) } -> "brand_amazon"
+        value == "amazon pay" || value.startsWith("amazon pay ") -> "brand_amazon_pay"
+        value == "amazon" || value.startsWith("amazon ") -> "brand_amazon"
         listOf("apple pay").any { value.contains(it) } -> "brand_apple_pay"
         listOf("google pay", "gpay", "g pay").any { value == it || value.contains(it) } -> "brand_google_pay"
         listOf("paypal", "pay pal").any { value.contains(it) } -> "brand_paypal"
@@ -179,7 +180,7 @@ internal fun financeIconKeyForName(name: String): String {
 
 private fun financeIcon(key: String): ImageVector = when (key) {
     "food", "brand_swiggy", "brand_zomato" -> Icons.Default.Restaurant
-    "groceries", "shopping", "brand_amazon", "brand_flipkart", "brand_myntra" -> Icons.Default.ShoppingCart
+    "groceries", "shopping", "brand_amazon", "brand_amazon_pay", "brand_flipkart", "brand_myntra" -> Icons.Default.ShoppingCart
     "fuel" -> Icons.Default.LocalGasStation
     "transport", "brand_uber", "brand_ola" -> Icons.Default.DirectionsCar
     "health" -> Icons.Default.LocalHospital
@@ -213,7 +214,9 @@ private fun FinanceIconDisplay(key: String, tint: Color, modifier: Modifier = Mo
     // Bundled vector brand assets render offline and are shared by management and transaction forms.
     val brandDrawable = when (key) {
         "brand_cred" -> R.drawable.brand_cred
-        "brand_amazon" -> R.drawable.brand_amazonpay
+        "brand_amazon" -> R.drawable.brand_amazon
+        "brand_amazon_pay" -> R.drawable.brand_amazonpay
+        "brand_myntra" -> R.drawable.brand_myntra
         "brand_flipkart" -> R.drawable.brand_flipkart
         "brand_google_play" -> R.drawable.brand_googleplay
         "brand_apple_pay" -> R.drawable.brand_applepay
@@ -251,7 +254,7 @@ private val FINANCE_ICON_OPTIONS = listOf(
     "travel", "home", "income", "bills", "shopping", "card", "cash",
     "payments", "bank", "work", "subscription", "gift", "fitness",
     "pets", "entertainment", "app", "flight", "hotel",
-    "brand_cred", "brand_google_play", "brand_amazon", "brand_apple_pay",
+    "brand_cred", "brand_google_play", "brand_amazon", "brand_amazon_pay", "brand_apple_pay",
     "brand_google_pay", "brand_paypal", "brand_phonepe", "brand_paytm",
     "brand_swiggy", "brand_zomato", "brand_netflix", "brand_spotify",
     "brand_uber", "brand_ola", "brand_flipkart", "brand_myntra", "brand_streaming"
@@ -260,6 +263,7 @@ private fun financeIconLabel(key: String): String = when (key) {
     "brand_cred" -> "CRED"
     "brand_google_play" -> "Google Play"
     "brand_amazon" -> "Amazon"
+    "brand_amazon_pay" -> "Amazon Pay"
     "brand_apple_pay" -> "Apple Pay"
     "brand_google_pay" -> "Google Pay"
     "brand_paypal" -> "PayPal"
@@ -292,7 +296,7 @@ private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, o
     fun belongsToGroup(key: String): String = when (key) {
         "food", "groceries", "brand_swiggy", "brand_zomato" -> "Food"
         "travel", "transport", "fuel", "flight", "hotel", "brand_uber", "brand_ola" -> "Travel"
-        "shopping", "card", "cash", "payments", "brand_cred", "brand_google_play", "brand_amazon", "brand_apple_pay", "brand_google_pay", "brand_paypal", "brand_phonepe", "brand_paytm", "brand_flipkart", "brand_myntra" -> "Shopping"
+        "shopping", "card", "cash", "payments", "brand_cred", "brand_google_play", "brand_amazon", "brand_amazon_pay", "brand_apple_pay", "brand_google_pay", "brand_paypal", "brand_phonepe", "brand_paytm", "brand_flipkart", "brand_myntra" -> "Shopping"
         "health", "fitness", "pets" -> "Health"
         else -> "Other"
     }
@@ -2660,7 +2664,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                     Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Add Category")
                 }
                 Button(onClick = { persistCategories(categories); message = "Categories saved successfully." }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) {
-                    Text("Save", fontWeight = FontWeight.SemiBold)
+                    Text("Confirm", fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -2685,7 +2689,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                 TextButton(onClick = { showIconPicker = true }) { Text("Change", color = Color(0xFF5948F5)) }
             }
             Text("Choose color", color = Color(0xFF252C50), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                 FINANCE_ITEM_COLORS.forEachIndexed { index, color ->
                     Box(Modifier.size(27.dp).clip(CircleShape).background(color)
                         .border(if (selectedColorIndex == index) 3.dp else 1.dp, if (selectedColorIndex == index) Color(0xFF252C50) else color.copy(alpha = .35f), CircleShape)
@@ -2800,7 +2804,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                     Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("Suggested Icons", color = Color(0xFF17264D), fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Online Shopping").forEach { name ->
+                            listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online Shopping").forEach { name ->
                                 val tint = savedFinanceColor(context, "tag", name)
                                 Box(Modifier.size(46.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFFF4F7FC)).border(1.dp, Color(0xFFE3EAF5), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
                                     FinanceIconDisplay(financeIconKeyForName(name), tint, Modifier.size(25.dp))
@@ -2812,10 +2816,15 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                 }
             }
         }
-        Button(onClick = { draft = ""; editing = null; selectedIconKey = "other"; selectedColorIndex = 7; showAdd = true },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).navigationBarsPadding().height(50.dp),
-            shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2878E8))) {
-            Icon(Icons.Default.Add, null); Spacer(Modifier.width(7.dp)); Text("Add Tag", fontWeight = FontWeight.SemiBold)
+        Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
+            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; selectedColorIndex = 6; showAdd = true }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp)) {
+                    Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Add Tag")
+                }
+                Button(onClick = { persistTags(tags); message = "Tags confirmed and saved." }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2878E8))) {
+                    Text("Confirm", fontWeight = FontWeight.SemiBold)
+                }
+            }
         }
     }
     if (showAdd) AlertDialog(
