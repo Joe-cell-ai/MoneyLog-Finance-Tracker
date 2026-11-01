@@ -2574,24 +2574,17 @@ private val DEFAULT_MONEY_CATEGORIES = listOf(
     "Other", "Savings/Investment", "Transport", "Transport/Public transit",
     "Utilities/Electricity", "Utilities/Internet", "Utilities/Water"
 )
+private val DEFAULT_MONEY_TAGS = listOf(
+    "Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play",
+    "Debit Card", "PayPal", "Google Pay", "Online Shopping"
+)
 
 @Composable
 private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCategoriesChanged: () -> Unit = {}) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
-    val initialCategories = remember {
-        runCatching {
-            val raw = preferences.getString("custom_categories", null)
-            val initialized = preferences.getBoolean("custom_categories_initialized", false)
-            if (raw.isNullOrBlank()) {
-                if (initialized) emptyList() else DEFAULT_MONEY_CATEGORIES
-            } else {
-                val array = JSONArray(raw)
-                (0 until array.length()).map { array.getString(it).trim() }.filter { it.isNotBlank() }
-                    .distinctBy { it.lowercase(Locale.ROOT) }
-            }
-        }.getOrDefault(DEFAULT_MONEY_CATEGORIES)
-    }
+    val store = remember(preferences) { FinanceManagementStore(preferences, DEFAULT_MONEY_CATEGORIES, DEFAULT_MONEY_TAGS) }
+    val initialCategories = remember(store) { store.loadCategories() }
     var categories by remember { mutableStateOf(initialCategories) }
     var message by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
@@ -2606,9 +2599,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     var menuCategory by remember { mutableStateOf<String?>(null) }
     fun persistCategories(values: List<String>) {
-        val array = JSONArray(); values.forEach { array.put(it) }
-        preferences.edit().putString("custom_categories", array.toString())
-            .putBoolean("custom_categories_initialized", true).apply()
+        store.saveCategories(values)
         onCategoriesChanged()
     }
     Column(Modifier.fillMaxSize().background(Page)) {
@@ -2704,9 +2695,12 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                 val duplicate = categories.any { it.equals(name, ignoreCase = true) && it != editing }
                 if (duplicate) message = "That category already exists."
                 else {
-                    categories = (if (editing == null) categories + name else categories.map { if (it == editing) name else it }).distinctBy { it.lowercase(Locale.ROOT) }
-                    preferences.edit().putString("category_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).putInt("category_color_index_${name.lowercase(Locale.ROOT)}", selectedColorIndex).apply()
-                    persistCategories(categories); message = ""; showAdd = false
+                    val saved = if (editing == null) store.addCategory(name) else store.renameCategory(editing!!, name)
+                    if (saved) {
+                        categories = store.loadCategories()
+                        store.saveCategoryAppearance(name, selectedIconKey, selectedColorIndex)
+                        persistCategories(categories); message = ""; showAdd = false
+                    } else message = "That category already exists."
                 }
             } else message = "Enter a category name."
         }, shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) { Text("Save Category") } },
@@ -2716,7 +2710,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
     pendingDelete?.let { category -> AlertDialog(
         onDismissRequest = { pendingDelete = null }, title = { Text("Delete category?") },
         text = { Text("Remove \"$category\" from this category list? Existing transactions keep their original labels.") },
-        confirmButton = { TextButton(onClick = { categories = categories - category; persistCategories(categories); pendingDelete = null }) { Text("Delete", color = ExpenseRed) } },
+        confirmButton = { TextButton(onClick = { store.deleteCategory(category); categories = store.loadCategories(); onCategoriesChanged(); pendingDelete = null }) { Text("Delete", color = ExpenseRed) } },
         dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } }
     ) }
 }
@@ -2726,18 +2720,8 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
 private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), onBack: () -> Unit = {}) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
-    val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online Shopping")
-    val initialTags = remember {
-        runCatching {
-            val raw = preferences.getString("custom_tags", null)
-            val saved = if (raw.isNullOrBlank()) emptyList() else {
-                val array = JSONArray(raw)
-                (0 until array.length()).map { array.getString(it).trim().removePrefix("#").trim() }.filter { it.isNotBlank() }
-            }
-            val initialized = preferences.getBoolean("custom_tags_initialized", false)
-            (if (initialized) saved else defaultTags + saved).distinctBy { it.lowercase(Locale.ROOT) }
-        }.getOrDefault(defaultTags)
-    }
+    val store = remember(preferences) { FinanceManagementStore(preferences, DEFAULT_MONEY_CATEGORIES, DEFAULT_MONEY_TAGS) }
+    val initialTags = remember(store) { store.loadTags() }
     var tags by remember { mutableStateOf(initialTags) }
     var searchQuery by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
@@ -2751,9 +2735,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
     var message by remember { mutableStateOf("") }
     val visibleTags = tags.filter { it.contains(searchQuery.trim(), ignoreCase = true) }
     fun persistTags(values: List<String>) {
-        val array = JSONArray()
-        values.forEach { array.put(it) }
-        preferences.edit().putString("custom_tags", array.toString()).putBoolean("custom_tags_initialized", true).apply()
+        store.saveTags(values)
     }
     Column(Modifier.fillMaxSize().background(Page).padding(horizontal = 10.dp, vertical = 8.dp)
         .clip(RoundedCornerShape(24.dp)).background(Color(0xFFFCFBFF))
@@ -2859,9 +2841,12 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                 if (name.isBlank()) message = "Enter a tag name."
                 else if (tags.any { it.equals(name, true) && it != editing }) message = "That tag already exists."
                 else {
-                    tags = (if (editing == null) tags + name else tags.map { if (it == editing) name else it }).distinctBy { it.lowercase(Locale.ROOT) }
-                    preferences.edit().putString("tag_icon_${name.lowercase(Locale.ROOT)}", selectedIconKey).putInt("tag_color_index_${name.lowercase(Locale.ROOT)}", selectedColorIndex).apply()
-                    persistTags(tags); message = ""; showAdd = false
+                    val saved = if (editing == null) store.addTag(name) else store.renameTag(editing!!, name)
+                    if (saved) {
+                        tags = store.loadTags()
+                        store.saveTagAppearance(name, selectedIconKey, selectedColorIndex)
+                        persistTags(tags); message = ""; showAdd = false
+                    } else message = "That tag already exists."
                 }
             }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2878E8)), shape = RoundedCornerShape(13.dp)) { Text("Save Tag") }
         },
@@ -2871,7 +2856,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
     pendingDelete?.let { tag ->
         AlertDialog(onDismissRequest = { pendingDelete = null }, title = { Text("Delete tag?") },
             text = { Text("Remove \"$tag\" from the tag list? Existing transactions keep their saved tag.") },
-            confirmButton = { TextButton(onClick = { tags = tags - tag; persistTags(tags); pendingDelete = null }) { Text("Delete", color = ExpenseRed) } },
+            confirmButton = { TextButton(onClick = { store.deleteTag(tag); tags = store.loadTags(); pendingDelete = null }) { Text("Delete", color = ExpenseRed) } },
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } })
     }
 }
@@ -4688,19 +4673,8 @@ private fun AddTransactionDialog(
     // Read the same on-device category list used by Settings > Categories.
     // The refresh token changes whenever categories are added, renamed, or deleted.
     val savedCategories = remember(context, categoryRefreshToken) {
-        runCatching {
-            val categoryPrefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
-            val raw = categoryPrefs.getString("custom_categories", null)
-            val initialized = categoryPrefs.getBoolean("custom_categories_initialized", false)
-            if (raw.isNullOrBlank()) {
-                if (initialized) emptyList() else DEFAULT_MONEY_CATEGORIES
-            } else {
-                val array = JSONArray(raw)
-                (0 until array.length()).map { array.getString(it).trim() }
-                    .filter { it.isNotBlank() }
-                    .distinctBy { it.lowercase(Locale.ROOT) }
-            }
-        }.getOrDefault(DEFAULT_MONEY_CATEGORIES)
+        val categoryPrefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+        FinanceManagementStore(categoryPrefs, DEFAULT_MONEY_CATEGORIES, DEFAULT_MONEY_TAGS).loadCategories()
     }
     // Category Management has no income/expense type field, so show every saved
     // category for either transaction type instead of hiding user-created entries.
@@ -4747,19 +4721,9 @@ private fun AddTransactionDialog(
         }
     }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
-    val defaultTags = listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online Shopping")
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
-    var tags by remember {
-        mutableStateOf(runCatching {
-            val raw = preferences.getString("custom_tags", null)
-            val saved = if (raw.isNullOrBlank()) emptyList() else {
-                val array = JSONArray(raw)
-                (0 until array.length()).map { array.getString(it).trim().removePrefix("#").trim() }.filter { it.isNotBlank() }
-            }
-            val initialized = preferences.getBoolean("custom_tags_initialized", false)
-            (if (initialized) saved else defaultTags + saved).distinctBy { it.lowercase(Locale.ROOT) }
-        }.getOrDefault(defaultTags))
-    }
+    val store = remember(preferences) { FinanceManagementStore(preferences, DEFAULT_MONEY_CATEGORIES, DEFAULT_MONEY_TAGS) }
+    var tags by remember(store) { mutableStateOf(store.loadTags()) }
     var selectedTags by remember { mutableStateOf(listOf<String>()) }
     var tagMenuExpanded by remember { mutableStateOf(false) }
     var showCreateTag by remember { mutableStateOf(false) }
@@ -5016,10 +4980,10 @@ private fun AddTransactionDialog(
                         if (existing != null) selectedTags = (selectedTags + existing).distinct()
                         else {
                             tags = tags + name
-                            val array = JSONArray()
-                            tags.forEach { array.put(it) }
-                            preferences.edit().putString("custom_tags", array.toString()).putBoolean("custom_tags_initialized", true).apply()
-                            selectedTags = (selectedTags + name).distinct()
+                            if (store.addTag(name)) {
+                                tags = store.loadTags()
+                                selectedTags = (selectedTags + name).distinct()
+                            }
                         }
                         showCreateTag = false
                     }
