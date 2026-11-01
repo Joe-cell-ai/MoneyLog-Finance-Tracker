@@ -2692,7 +2692,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
         confirmButton = { Button(onClick = {
             val name = draft.trim()
             if (name.isNotBlank()) {
-                val duplicate = categories.any { it.equals(name, ignoreCase = true) && it != editing }
+                val duplicate = categories.any { it.equals(name, ignoreCase = true) && !it.equals(editing, ignoreCase = true) }
                 if (duplicate) message = "That category already exists."
                 else {
                     val saved = if (editing == null) store.addCategory(name) else store.renameCategory(editing!!, name)
@@ -2839,7 +2839,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
             Button(onClick = {
                 val name = draft.trim().removePrefix("#").trim()
                 if (name.isBlank()) message = "Enter a tag name."
-                else if (tags.any { it.equals(name, true) && it != editing }) message = "That tag already exists."
+                else if (tags.any { it.equals(name, true) && !it.equals(editing, true) }) message = "That tag already exists."
                 else {
                     val saved = if (editing == null) store.addTag(name) else store.renameTag(editing!!, name)
                     if (saved) {
