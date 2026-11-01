@@ -24,6 +24,7 @@ import com.tom_roush.pdfbox.text.PDFTextStripper
 import androidx.compose.ui.platform.LocalContext
 import org.json.JSONArray
 import org.json.JSONObject
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -206,29 +208,27 @@ private fun financeIcon(key: String): ImageVector = when (key) {
 
 @Composable
 private fun FinanceIconDisplay(key: String, tint: Color, modifier: Modifier = Modifier) {
-    val brandMark = when (key) {
-        "brand_cred" -> "CRED" to Color(0xFF171717)
-        "brand_google_play" -> "▶" to Color(0xFF20A464)
-        "brand_amazon" -> "a" to Color(0xFF171717)
-        "brand_apple_pay" -> "Pay" to Color(0xFF171717)
-        "brand_google_pay" -> "G" to Color(0xFF4285F4)
-        "brand_paypal" -> "P" to Color(0xFF1769AA)
-        "brand_phonepe" -> "पे" to Color(0xFF5F259F)
-        "brand_paytm" -> "paytm" to Color(0xFF00A5E8)
-        "brand_swiggy" -> "S" to Color(0xFFFC8019)
-        "brand_zomato" -> "Z" to Color(0xFFE23744)
-        "brand_netflix", "brand_streaming" -> "N" to Color(0xFFE50914)
-        "brand_spotify" -> "≋" to Color(0xFF1DB954)
-        "brand_uber" -> "U" to Color(0xFF171717)
-        "brand_ola" -> "O" to Color(0xFF16A34A)
-        "brand_flipkart" -> "F" to Color(0xFFF7C600)
-        "brand_myntra" -> "M" to Color(0xFFFF3F6C)
+    // Bundled vector brand assets render offline and are shared by management and transaction forms.
+    val brandDrawable = when (key) {
+        "brand_google_play" -> R.drawable.brand_googleplay
+        "brand_apple_pay" -> R.drawable.brand_applepay
+        "brand_google_pay" -> R.drawable.brand_googlepay
+        "brand_paypal" -> R.drawable.brand_paypal
+        "brand_phonepe" -> R.drawable.brand_phonepe
+        "brand_paytm" -> R.drawable.brand_paytm
+        "brand_swiggy" -> R.drawable.brand_swiggy
+        "brand_zomato" -> R.drawable.brand_zomato
+        "brand_netflix", "brand_streaming" -> R.drawable.brand_netflix
+        "brand_spotify" -> R.drawable.brand_spotify
+        "brand_uber" -> R.drawable.brand_uber
         else -> null
     }
-    if (brandMark != null) {
-        Text(brandMark.first, modifier = modifier, color = brandMark.second,
-            fontSize = if (brandMark.first.length > 2) 11.sp else 21.sp,
-            fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center, maxLines = 1)
+    if (brandDrawable != null) {
+        Image(
+            painter = painterResource(id = brandDrawable),
+            contentDescription = key.removePrefix("brand_").replace('_', ' '),
+            modifier = modifier
+        )
     } else {
         Icon(financeIcon(key), null, tint = tint, modifier = modifier)
     }
