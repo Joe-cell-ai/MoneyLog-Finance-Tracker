@@ -226,6 +226,7 @@ private fun FinanceIconDisplay(key: String, tint: Color, modifier: Modifier = Mo
         "brand_netflix" -> R.drawable.brand_netflix
         "brand_spotify" -> R.drawable.brand_spotify
         "brand_uber" -> R.drawable.brand_uber
+        "brand_ola" -> R.drawable.brand_ola
         else -> null
     }
     if (brandDrawable != null) {
