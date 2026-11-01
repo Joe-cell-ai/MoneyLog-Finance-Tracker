@@ -2591,6 +2591,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
     val selectedColor = FINANCE_ITEM_COLORS[selectedColorIndex.coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)]
     var showIconPicker by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
+    var menuCategory by remember { mutableStateOf<String?>(null) }
     fun persistCategories(values: List<String>) {
         val array = JSONArray(); values.forEach { array.put(it) }
         preferences.edit().putString("custom_categories", array.toString()).apply()
@@ -2609,7 +2610,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("${categories.size} categories", color = Color(0xFF252C50), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("Tap edit to rename or customize an icon.", color = Color(0xFF66718F), fontSize = 11.sp)
+                            Text("Use the menu to edit, customize or remove a category.", color = Color(0xFF66718F), fontSize = 11.sp)
                         }
                     }
                 }
@@ -2627,8 +2628,18 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                             Text(category, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             Text("${transactions.count { it.category.equals(category, ignoreCase = true) }} transactions", color = Muted, fontSize = 10.sp)
                         }
-                        IconButton(onClick = { draft = category; editing = category; selectedIconKey = savedFinanceIconKey(context, "category", category); selectedColorIndex = preferences.getInt("category_color_index_${category.lowercase(Locale.ROOT)}", 0).coerceIn(0, FINANCE_ITEM_COLORS.lastIndex); showAdd = true }) { Icon(Icons.Default.Edit, "Edit category", tint = Color(0xFF5948F5)) }
-                        IconButton(onClick = { pendingDelete = category }) { Icon(Icons.Default.DeleteOutline, "Delete category", tint = ExpenseRed) }
+                        Box {
+                            IconButton(onClick = { menuCategory = category }) { Icon(Icons.Default.MoreVert, "Category options", tint = Color(0xFF687A9A)) }
+                            DropdownMenu(expanded = menuCategory == category, onDismissRequest = { menuCategory = null }) {
+                                DropdownMenuItem(text = { Text("Edit") }, onClick = {
+                                    draft = category; editing = category
+                                    selectedIconKey = savedFinanceIconKey(context, "category", category)
+                                    selectedColorIndex = preferences.getInt("category_color_index_${category.lowercase(Locale.ROOT)}", 0).coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)
+                                    menuCategory = null; showAdd = true
+                                })
+                                DropdownMenuItem(text = { Text("Delete", color = ExpenseRed) }, onClick = { menuCategory = null; pendingDelete = category })
+                            }
+                        }
                     }
                 }
             }
@@ -2709,7 +2720,8 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                 val array = JSONArray(raw)
                 (0 until array.length()).map { array.getString(it).trim().removePrefix("#").trim() }.filter { it.isNotBlank() }
             }
-            (defaultTags + saved).distinctBy { it.lowercase(Locale.ROOT) }
+            val initialized = preferences.getBoolean("custom_tags_initialized", false)
+            (if (initialized) saved else defaultTags + saved).distinctBy { it.lowercase(Locale.ROOT) }
         }.getOrDefault(defaultTags)
     }
     var tags by remember { mutableStateOf(initialTags) }
@@ -2727,14 +2739,14 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
     fun persistTags(values: List<String>) {
         val array = JSONArray()
         values.forEach { array.put(it) }
-        preferences.edit().putString("custom_tags", array.toString()).apply()
+        preferences.edit().putString("custom_tags", array.toString()).putBoolean("custom_tags_initialized", true).apply()
     }
     Column(Modifier.fillMaxSize().background(Page).padding(horizontal = 10.dp, vertical = 8.dp)
         .clip(RoundedCornerShape(24.dp)).background(Color.White)
         .border(1.dp, Color(0xFFDCE8F7), RoundedCornerShape(24.dp))) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Color(0xFF174A83), modifier = Modifier.size(25.dp)) }
-            Text("Tags", color = Color(0xFF17264D), fontSize = 23.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("Tag Management", color = Color(0xFF17264D), fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             IconButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; selectedColorIndex = 7; showAdd = true }) {
                 Icon(Icons.Default.Add, "Add tag", tint = Color(0xFF174A83), modifier = Modifier.size(29.dp))
             }
@@ -4513,6 +4525,7 @@ private fun TransactionDetailRow(icon: ImageVector, label: String, value: String
 @Composable
 private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Unit, onSave: (Transaction) -> Unit) {
     val accent = Color(0xFF5948F5)
+    val context = LocalContext.current
     var title by remember(transaction) { mutableStateOf(transaction.title) }
     var amount by remember(transaction) { mutableStateOf(transaction.amount.toString()) }
     var category by remember(transaction) { mutableStateOf(transaction.category) }
@@ -4561,8 +4574,8 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
                 }
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Description") }, leadingIcon = { Icon(Icons.Default.ReceiptLong, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
                 OutlinedTextField(value = amount, onValueChange = { amount = it.filter(Char::isDigit) }, label = { Text("Amount (₹)") }, leadingIcon = { Icon(Icons.Default.CurrencyRupee, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
-                OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, leadingIcon = { Icon(Icons.Default.LocalOffer, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
-                OutlinedTextField(value = tag, onValueChange = { tag = it.removePrefix("#") }, label = { Text("Tag (optional)") }, leadingIcon = { Icon(Icons.Default.Tag, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
+                OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, leadingIcon = { FinanceIconDisplay(savedFinanceIconKey(context, "category", category), categoryColor(category), Modifier.size(20.dp)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
+                OutlinedTextField(value = tag, onValueChange = { tag = it.removePrefix("#") }, label = { Text("Tag (optional)") }, leadingIcon = { FinanceIconDisplay(savedFinanceIconKey(context, "tag", tag.substringBefore(",").trim()), accent, Modifier.size(20.dp)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
                 OutlinedTextField(value = date, onValueChange = {}, readOnly = true, label = { Text("Transaction date") }, leadingIcon = { Icon(Icons.Default.CalendarMonth, null, tint = accent) }, trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date", tint = accent) } }, modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }, singleLine = true, shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent))
                 if (showDatePicker) {
                     val initialMillis = runCatching { transactionDateOrNull(transaction)?.atStartOfDay(java.time.ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: System.currentTimeMillis() }.getOrDefault(System.currentTimeMillis())
