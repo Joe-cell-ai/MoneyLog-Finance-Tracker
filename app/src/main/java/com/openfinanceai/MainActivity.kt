@@ -2689,7 +2689,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                 TextButton(onClick = { showIconPicker = true }) { Text("Change", color = Color(0xFF5948F5)) }
             }
             Text("Choose color", color = Color(0xFF252C50), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 FINANCE_ITEM_COLORS.forEachIndexed { index, color ->
                     Box(Modifier.size(27.dp).clip(CircleShape).background(color)
                         .border(if (selectedColorIndex == index) 3.dp else 1.dp, if (selectedColorIndex == index) Color(0xFF252C50) else color.copy(alpha = .35f), CircleShape)
@@ -2803,11 +2803,14 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                 ) {
                     Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("Suggested Icons", color = Color(0xFF17264D), fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                             listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online Shopping").forEach { name ->
                                 val tint = savedFinanceColor(context, "tag", name)
-                                Box(Modifier.size(46.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFFF4F7FC)).border(1.dp, Color(0xFFE3EAF5), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
-                                    FinanceIconDisplay(financeIconKeyForName(name), tint, Modifier.size(25.dp))
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Box(Modifier.size(46.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFFF4F7FC)).border(1.dp, Color(0xFFE3EAF5), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
+                                        FinanceIconDisplay(financeIconKeyForName(name), tint, Modifier.size(25.dp))
+                                    }
+                                    Text(name, color = Color(0xFF60708E), fontSize = 9.sp, maxLines = 1)
                                 }
                             }
                         }
