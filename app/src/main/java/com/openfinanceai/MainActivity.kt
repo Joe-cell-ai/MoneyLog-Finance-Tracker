@@ -210,6 +210,9 @@ private fun financeIcon(key: String): ImageVector = when (key) {
 private fun FinanceIconDisplay(key: String, tint: Color, modifier: Modifier = Modifier) {
     // Bundled vector brand assets render offline and are shared by management and transaction forms.
     val brandDrawable = when (key) {
+        "brand_cred" -> R.drawable.brand_cred
+        "brand_amazon" -> R.drawable.brand_amazonpay
+        "brand_flipkart" -> R.drawable.brand_flipkart
         "brand_google_play" -> R.drawable.brand_googleplay
         "brand_apple_pay" -> R.drawable.brand_applepay
         "brand_google_pay" -> R.drawable.brand_googlepay
@@ -323,7 +326,26 @@ private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, o
                                     Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(categoryColor(key).copy(alpha = .13f)), contentAlignment = Alignment.Center) {
                                         FinanceIconDisplay(key, categoryColor(key), Modifier.size(25.dp))
                                     }
-                                    Text(key.replaceFirstChar { it.uppercase() }, color = Ink, fontSize = 10.sp, maxLines = 1)
+                                    Text(when (key) {
+                                        "brand_cred" -> "CRED"
+                                        "brand_google_play" -> "Google Play"
+                                        "brand_amazon" -> "Amazon"
+                                        "brand_apple_pay" -> "Apple Pay"
+                                        "brand_google_pay" -> "Google Pay"
+                                        "brand_paypal" -> "PayPal"
+                                        "brand_phonepe" -> "PhonePe"
+                                        "brand_paytm" -> "Paytm"
+                                        "brand_swiggy" -> "Swiggy"
+                                        "brand_zomato" -> "Zomato"
+                                        "brand_netflix" -> "Netflix"
+                                        "brand_spotify" -> "Spotify"
+                                        "brand_uber" -> "Uber"
+                                        "brand_ola" -> "Ola"
+                                        "brand_flipkart" -> "Flipkart"
+                                        "brand_myntra" -> "Myntra"
+                                        "brand_streaming" -> "Streaming"
+                                        else -> key.replaceFirstChar { it.uppercase() }
+                                    }, color = Ink, fontSize = 10.sp, maxLines = 1)
                                 }
                             }
                             repeat(4 - rowKeys.size) { Spacer(Modifier.weight(1f)) }
