@@ -73,7 +73,7 @@ internal class FinanceManagementStore(
         val normalized = values.map { it.trim() }.filter { it.isNotBlank() }
             .distinctBy { it.lowercase(Locale.ROOT) }
         val array = JSONArray()
-        normalized.forEach(array::put)
+        normalized.forEach { array.put(it) }
         preferences.edit()
             .putString(storageKey, array.toString())
             .putBoolean(initializedKey, true)
