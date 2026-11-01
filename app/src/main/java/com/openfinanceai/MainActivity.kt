@@ -126,48 +126,74 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
 private fun categoryTint(category: String): Color = categoryColor(category).copy(alpha = 0.12f)
 
 private fun financeIconKeyForName(name: String): String {
-    val value = name.trim().lowercase(Locale.ROOT)
+    // Brand matches must run before broad category keywords (for example Google Play before "play"/entertainment).
+    val value = name.trim().lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), " ").trim()
     return when {
-        listOf("food", "restaurant", "dining", "coffee", "cafe").any { value.contains(it) } -> "food"
+        listOf("cred", "cred app").any { value == it || value.startsWith("$it ") } -> "brand_cred"
+        listOf("google play", "play store").any { value.contains(it) } -> "brand_google_play"
+        listOf("amazon", "amazon pay").any { value.contains(it) } -> "brand_amazon"
+        listOf("apple pay").any { value.contains(it) } -> "brand_apple_pay"
+        listOf("google pay", "gpay", "g pay").any { value == it || value.contains(it) } -> "brand_google_pay"
+        listOf("paypal", "pay pal").any { value.contains(it) } -> "brand_paypal"
+        listOf("phonepe", "phone pe").any { value.contains(it) } -> "brand_phonepe"
+        listOf("paytm").any { value.contains(it) } -> "brand_paytm"
+        listOf("swiggy").any { value.contains(it) } -> "brand_swiggy"
+        listOf("zomato").any { value.contains(it) } -> "brand_zomato"
+        listOf("netflix").any { value.contains(it) } -> "brand_netflix"
+        listOf("spotify").any { value.contains(it) } -> "brand_spotify"
+        listOf("uber").any { value == it || value.startsWith("uber ") } -> "brand_uber"
+        listOf("ola").any { value == it || value.startsWith("ola ") } -> "brand_ola"
+        listOf("flipkart").any { value.contains(it) } -> "brand_flipkart"
+        listOf("myntra").any { value.contains(it) } -> "brand_myntra"
+        listOf("hotstar", "jio cinema").any { value.contains(it) } -> "brand_streaming"
+        listOf("pet", "pets", "pet care", "vet", "animal").any { value.contains(it) } -> "pets"
+        listOf("restaurant", "food", "dining", "coffee", "cafe").any { value.contains(it) } -> "food"
         listOf("grocery", "groceries", "supermarket").any { value.contains(it) } -> "groceries"
         listOf("fuel", "petrol", "diesel", "gas station").any { value.contains(it) } -> "fuel"
-        listOf("transport", "taxi", "cab", "car", "bike", "vehicle").any { value.contains(it) } -> "transport"
+        listOf("flight", "air travel", "airplane").any { value.contains(it) } -> "flight"
+        listOf("hotel", "stay", "accommodation").any { value.contains(it) } -> "hotel"
+        listOf("bus", "train", "metro", "transport", "taxi", "cab", "car", "bike", "vehicle").any { value.contains(it) } -> "transport"
         listOf("health", "medical", "medicine", "hospital", "doctor", "pharmacy").any { value.contains(it) } -> "health"
-        listOf("education", "school", "college", "course", "tuition").any { value.contains(it) } -> "education"
-        listOf("travel", "flight", "hotel", "trip", "vacation").any { value.contains(it) } -> "travel"
+        listOf("education", "school", "college", "course", "tuition", "books").any { value.contains(it) } -> "education"
+        listOf("travel", "trip", "vacation").any { value.contains(it) } -> "travel"
         listOf("home", "household", "rent", "furniture").any { value.contains(it) } -> "home"
         listOf("salary", "income", "payroll", "wages", "freelance").any { value.contains(it) } -> "income"
         listOf("bill", "utility", "electricity", "water", "internet", "phone").any { value.contains(it) } -> "bills"
-        listOf("shopping", "clothing", "online", "amazon", "supplies").any { value.contains(it) } -> "shopping"
+        listOf("shopping", "clothing", "online", "mall", "supplies").any { value.contains(it) } -> "shopping"
         listOf("credit", "debit", "card").any { value.contains(it) } -> "card"
         listOf("cash").any { value.contains(it) } -> "cash"
-        listOf("apple pay", "google pay", "paypal", "upi", "wallet").any { value.contains(it) } -> "payments"
+        listOf("upi", "wallet", "payment").any { value.contains(it) } -> "payments"
         listOf("bank", "loan", "emi", "repayment").any { value.contains(it) } -> "bank"
         listOf("work", "business", "office").any { value.contains(it) } -> "work"
         listOf("subscription", "membership").any { value.contains(it) } -> "subscription"
         listOf("gift", "donation").any { value.contains(it) } -> "gift"
         listOf("fitness", "gym", "sport").any { value.contains(it) } -> "fitness"
-        listOf("pet", "vet", "animal").any { value.contains(it) } -> "pets"
-        listOf("movie", "music", "entertainment", "game", "google play").any { value.contains(it) } -> "entertainment"
-        else -> "other"
+        listOf("movie", "music", "entertainment", "game").any { value.contains(it) } -> "entertainment"
+        else -> "app"
     }
 }
 
 private fun financeIcon(key: String): ImageVector = when (key) {
-    "food" -> Icons.Default.Restaurant
-    "groceries" -> Icons.Default.ShoppingCart
+    "food", "brand_swiggy", "brand_zomato" -> Icons.Default.Restaurant
+    "groceries", "shopping", "brand_amazon", "brand_flipkart", "brand_myntra" -> Icons.Default.ShoppingCart
     "fuel" -> Icons.Default.LocalGasStation
-    "transport" -> Icons.Default.DirectionsCar
+    "transport", "brand_uber", "brand_ola" -> Icons.Default.DirectionsCar
     "health" -> Icons.Default.LocalHospital
     "education" -> Icons.Default.School
-    "travel" -> Icons.Default.Flight
+    "flight" -> Icons.Default.Flight
+    "hotel" -> Icons.Default.Hotel
+    "travel" -> Icons.Default.Luggage
     "home" -> Icons.Default.Home
     "income" -> Icons.Default.Payments
     "bills" -> Icons.Default.Receipt
-    "shopping" -> Icons.Default.ShoppingCart
-    "card" -> Icons.Default.CreditCard
+    "card", "brand_cred" -> Icons.Default.CreditCard
     "cash" -> Icons.Default.AccountBalanceWallet
-    "payments" -> Icons.Default.Payments
+    "payments", "brand_google_pay", "brand_phonepe", "brand_paytm" -> Icons.Default.Payments
+    "brand_apple_pay" -> Icons.Default.PhoneIphone
+    "brand_paypal" -> Icons.Default.AccountBalanceWallet
+    "brand_google_play" -> Icons.Default.PlayCircle
+    "brand_netflix", "brand_streaming" -> Icons.Default.Movie
+    "brand_spotify" -> Icons.Default.MusicNote
     "bank" -> Icons.Default.AccountBalance
     "work" -> Icons.Default.Work
     "subscription" -> Icons.Default.Subscriptions
@@ -175,7 +201,7 @@ private fun financeIcon(key: String): ImageVector = when (key) {
     "fitness" -> Icons.Default.FitnessCenter
     "pets" -> Icons.Default.Pets
     "entertainment" -> Icons.Default.Movie
-    else -> Icons.Default.Category
+    else -> Icons.Default.Apps
 }
 
 private val FINANCE_ITEM_COLORS = listOf(Color(0xFF7048E8), Color(0xFFEF476F), Color(0xFFF28C28), Color(0xFFE9B824), Color(0xFF26A69A), Color(0xFF20B9C6), Color(0xFF2785E8), Color(0xFF16A34A))
@@ -188,7 +214,11 @@ private val FINANCE_ICON_OPTIONS = listOf(
     "food", "groceries", "fuel", "transport", "health", "education",
     "travel", "home", "income", "bills", "shopping", "card", "cash",
     "payments", "bank", "work", "subscription", "gift", "fitness",
-    "pets", "entertainment", "other"
+    "pets", "entertainment", "app", "flight", "hotel",
+    "brand_cred", "brand_google_play", "brand_amazon", "brand_apple_pay",
+    "brand_google_pay", "brand_paypal", "brand_phonepe", "brand_paytm",
+    "brand_swiggy", "brand_zomato", "brand_netflix", "brand_spotify",
+    "brand_uber", "brand_ola", "brand_flipkart", "brand_myntra", "brand_streaming"
 )
 
 private fun savedFinanceIconKey(context: Context, type: String, name: String): String {
@@ -203,9 +233,9 @@ private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, o
     var selectedGroup by remember { mutableStateOf("All") }
     val groups = listOf("All", "Food", "Travel", "Shopping", "Health", "Other")
     fun belongsToGroup(key: String): String = when (key) {
-        "food", "groceries" -> "Food"
-        "travel", "transport", "fuel" -> "Travel"
-        "shopping", "card", "cash", "payments" -> "Shopping"
+        "food", "groceries", "brand_swiggy", "brand_zomato" -> "Food"
+        "travel", "transport", "fuel", "flight", "hotel", "brand_uber", "brand_ola" -> "Travel"
+        "shopping", "card", "cash", "payments", "brand_cred", "brand_google_play", "brand_amazon", "brand_apple_pay", "brand_google_pay", "brand_paypal", "brand_phonepe", "brand_paytm", "brand_flipkart", "brand_myntra" -> "Shopping"
         "health", "fitness", "pets" -> "Health"
         else -> "Other"
     }
