@@ -126,48 +126,74 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
 private fun categoryTint(category: String): Color = categoryColor(category).copy(alpha = 0.12f)
 
 private fun financeIconKeyForName(name: String): String {
-    val value = name.trim().lowercase(Locale.ROOT)
+    // Brand matches must run before broad category keywords (for example Google Play before "play"/entertainment).
+    val value = name.trim().lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), " ").trim()
     return when {
-        listOf("food", "restaurant", "dining", "coffee", "cafe").any { value.contains(it) } -> "food"
+        listOf("cred", "cred app").any { value == it || value.startsWith("$it ") } -> "brand_cred"
+        listOf("google play", "play store").any { value.contains(it) } -> "brand_google_play"
+        listOf("amazon", "amazon pay").any { value.contains(it) } -> "brand_amazon"
+        listOf("apple pay").any { value.contains(it) } -> "brand_apple_pay"
+        listOf("google pay", "gpay", "g pay").any { value == it || value.contains(it) } -> "brand_google_pay"
+        listOf("paypal", "pay pal").any { value.contains(it) } -> "brand_paypal"
+        listOf("phonepe", "phone pe").any { value.contains(it) } -> "brand_phonepe"
+        listOf("paytm").any { value.contains(it) } -> "brand_paytm"
+        listOf("swiggy").any { value.contains(it) } -> "brand_swiggy"
+        listOf("zomato").any { value.contains(it) } -> "brand_zomato"
+        listOf("netflix").any { value.contains(it) } -> "brand_netflix"
+        listOf("spotify").any { value.contains(it) } -> "brand_spotify"
+        listOf("uber").any { value == it || value.startsWith("uber ") } -> "brand_uber"
+        listOf("ola").any { value == it || value.startsWith("ola ") } -> "brand_ola"
+        listOf("flipkart").any { value.contains(it) } -> "brand_flipkart"
+        listOf("myntra").any { value.contains(it) } -> "brand_myntra"
+        listOf("hotstar", "jio cinema").any { value.contains(it) } -> "brand_streaming"
+        listOf("pet", "pets", "pet care", "vet", "animal").any { value.contains(it) } -> "pets"
+        listOf("restaurant", "food", "dining", "coffee", "cafe").any { value.contains(it) } -> "food"
         listOf("grocery", "groceries", "supermarket").any { value.contains(it) } -> "groceries"
         listOf("fuel", "petrol", "diesel", "gas station").any { value.contains(it) } -> "fuel"
-        listOf("transport", "taxi", "cab", "car", "bike", "vehicle").any { value.contains(it) } -> "transport"
+        listOf("flight", "air travel", "airplane").any { value.contains(it) } -> "flight"
+        listOf("hotel", "stay", "accommodation").any { value.contains(it) } -> "hotel"
+        listOf("bus", "train", "metro", "transport", "taxi", "cab", "car", "bike", "vehicle").any { value.contains(it) } -> "transport"
         listOf("health", "medical", "medicine", "hospital", "doctor", "pharmacy").any { value.contains(it) } -> "health"
-        listOf("education", "school", "college", "course", "tuition").any { value.contains(it) } -> "education"
-        listOf("travel", "flight", "hotel", "trip", "vacation").any { value.contains(it) } -> "travel"
+        listOf("education", "school", "college", "course", "tuition", "books").any { value.contains(it) } -> "education"
+        listOf("travel", "trip", "vacation").any { value.contains(it) } -> "travel"
         listOf("home", "household", "rent", "furniture").any { value.contains(it) } -> "home"
         listOf("salary", "income", "payroll", "wages", "freelance").any { value.contains(it) } -> "income"
         listOf("bill", "utility", "electricity", "water", "internet", "phone").any { value.contains(it) } -> "bills"
-        listOf("shopping", "clothing", "online", "amazon", "supplies").any { value.contains(it) } -> "shopping"
+        listOf("shopping", "clothing", "online", "mall", "supplies").any { value.contains(it) } -> "shopping"
         listOf("credit", "debit", "card").any { value.contains(it) } -> "card"
         listOf("cash").any { value.contains(it) } -> "cash"
-        listOf("apple pay", "google pay", "paypal", "upi", "wallet").any { value.contains(it) } -> "payments"
+        listOf("upi", "wallet", "payment").any { value.contains(it) } -> "payments"
         listOf("bank", "loan", "emi", "repayment").any { value.contains(it) } -> "bank"
         listOf("work", "business", "office").any { value.contains(it) } -> "work"
         listOf("subscription", "membership").any { value.contains(it) } -> "subscription"
         listOf("gift", "donation").any { value.contains(it) } -> "gift"
         listOf("fitness", "gym", "sport").any { value.contains(it) } -> "fitness"
-        listOf("pet", "vet", "animal").any { value.contains(it) } -> "pets"
-        listOf("movie", "music", "entertainment", "game", "google play").any { value.contains(it) } -> "entertainment"
-        else -> "other"
+        listOf("movie", "music", "entertainment", "game").any { value.contains(it) } -> "entertainment"
+        else -> "app"
     }
 }
 
 private fun financeIcon(key: String): ImageVector = when (key) {
-    "food" -> Icons.Default.Restaurant
-    "groceries" -> Icons.Default.ShoppingCart
+    "food", "brand_swiggy", "brand_zomato" -> Icons.Default.Restaurant
+    "groceries", "shopping", "brand_amazon", "brand_flipkart", "brand_myntra" -> Icons.Default.ShoppingCart
     "fuel" -> Icons.Default.LocalGasStation
-    "transport" -> Icons.Default.DirectionsCar
+    "transport", "brand_uber", "brand_ola" -> Icons.Default.DirectionsCar
     "health" -> Icons.Default.LocalHospital
     "education" -> Icons.Default.School
-    "travel" -> Icons.Default.Flight
+    "flight" -> Icons.Default.Flight
+    "hotel" -> Icons.Default.Hotel
+    "travel" -> Icons.Default.Luggage
     "home" -> Icons.Default.Home
     "income" -> Icons.Default.Payments
     "bills" -> Icons.Default.Receipt
-    "shopping" -> Icons.Default.ShoppingCart
-    "card" -> Icons.Default.CreditCard
+    "card", "brand_cred" -> Icons.Default.CreditCard
     "cash" -> Icons.Default.AccountBalanceWallet
-    "payments" -> Icons.Default.Payments
+    "payments", "brand_google_pay", "brand_phonepe", "brand_paytm" -> Icons.Default.Payments
+    "brand_apple_pay" -> Icons.Default.PhoneIphone
+    "brand_paypal" -> Icons.Default.AccountBalanceWallet
+    "brand_google_play" -> Icons.Default.PlayCircle
+    "brand_netflix", "brand_streaming" -> Icons.Default.Movie
+    "brand_spotify" -> Icons.Default.MusicNote
     "bank" -> Icons.Default.AccountBalance
     "work" -> Icons.Default.Work
     "subscription" -> Icons.Default.Subscriptions
@@ -175,7 +201,37 @@ private fun financeIcon(key: String): ImageVector = when (key) {
     "fitness" -> Icons.Default.FitnessCenter
     "pets" -> Icons.Default.Pets
     "entertainment" -> Icons.Default.Movie
-    else -> Icons.Default.Category
+    else -> Icons.Default.Apps
+}
+
+@Composable
+private fun FinanceIconDisplay(key: String, tint: Color, modifier: Modifier = Modifier) {
+    val brandMark = when (key) {
+        "brand_cred" -> "CRED" to Color(0xFF171717)
+        "brand_google_play" -> "▶" to Color(0xFF20A464)
+        "brand_amazon" -> "a" to Color(0xFF171717)
+        "brand_apple_pay" -> "Pay" to Color(0xFF171717)
+        "brand_google_pay" -> "G" to Color(0xFF4285F4)
+        "brand_paypal" -> "P" to Color(0xFF1769AA)
+        "brand_phonepe" -> "पे" to Color(0xFF5F259F)
+        "brand_paytm" -> "paytm" to Color(0xFF00A5E8)
+        "brand_swiggy" -> "S" to Color(0xFFFC8019)
+        "brand_zomato" -> "Z" to Color(0xFFE23744)
+        "brand_netflix", "brand_streaming" -> "N" to Color(0xFFE50914)
+        "brand_spotify" -> "≋" to Color(0xFF1DB954)
+        "brand_uber" -> "U" to Color(0xFF171717)
+        "brand_ola" -> "O" to Color(0xFF16A34A)
+        "brand_flipkart" -> "F" to Color(0xFFF7C600)
+        "brand_myntra" -> "M" to Color(0xFFFF3F6C)
+        else -> null
+    }
+    if (brandMark != null) {
+        Text(brandMark.first, modifier = modifier, color = brandMark.second,
+            fontSize = if (brandMark.first.length > 2) 11.sp else 21.sp,
+            fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center, maxLines = 1)
+    } else {
+        Icon(financeIcon(key), null, tint = tint, modifier = modifier)
+    }
 }
 
 private val FINANCE_ITEM_COLORS = listOf(Color(0xFF7048E8), Color(0xFFEF476F), Color(0xFFF28C28), Color(0xFFE9B824), Color(0xFF26A69A), Color(0xFF20B9C6), Color(0xFF2785E8), Color(0xFF16A34A))
@@ -188,7 +244,11 @@ private val FINANCE_ICON_OPTIONS = listOf(
     "food", "groceries", "fuel", "transport", "health", "education",
     "travel", "home", "income", "bills", "shopping", "card", "cash",
     "payments", "bank", "work", "subscription", "gift", "fitness",
-    "pets", "entertainment", "other"
+    "pets", "entertainment", "app", "flight", "hotel",
+    "brand_cred", "brand_google_play", "brand_amazon", "brand_apple_pay",
+    "brand_google_pay", "brand_paypal", "brand_phonepe", "brand_paytm",
+    "brand_swiggy", "brand_zomato", "brand_netflix", "brand_spotify",
+    "brand_uber", "brand_ola", "brand_flipkart", "brand_myntra", "brand_streaming"
 )
 
 private fun savedFinanceIconKey(context: Context, type: String, name: String): String {
@@ -203,9 +263,9 @@ private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, o
     var selectedGroup by remember { mutableStateOf("All") }
     val groups = listOf("All", "Food", "Travel", "Shopping", "Health", "Other")
     fun belongsToGroup(key: String): String = when (key) {
-        "food", "groceries" -> "Food"
-        "travel", "transport", "fuel" -> "Travel"
-        "shopping", "card", "cash", "payments" -> "Shopping"
+        "food", "groceries", "brand_swiggy", "brand_zomato" -> "Food"
+        "travel", "transport", "fuel", "flight", "hotel", "brand_uber", "brand_ola" -> "Travel"
+        "shopping", "card", "cash", "payments", "brand_cred", "brand_google_play", "brand_amazon", "brand_apple_pay", "brand_google_pay", "brand_paypal", "brand_phonepe", "brand_paytm", "brand_flipkart", "brand_myntra" -> "Shopping"
         "health", "fitness", "pets" -> "Health"
         else -> "Other"
     }
@@ -261,7 +321,7 @@ private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, o
                                     verticalArrangement = Arrangement.spacedBy(7.dp)
                                 ) {
                                     Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(categoryColor(key).copy(alpha = .13f)), contentAlignment = Alignment.Center) {
-                                        Icon(financeIcon(key), null, tint = categoryColor(key), modifier = Modifier.size(25.dp))
+                                        FinanceIconDisplay(key, categoryColor(key), Modifier.size(25.dp))
                                     }
                                     Text(key.replaceFirstChar { it.uppercase() }, color = Ink, fontSize = 10.sp, maxLines = 1)
                                 }
@@ -2561,7 +2621,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                     Row(Modifier.fillMaxWidth().padding(start = 13.dp, top = 10.dp, bottom = 10.dp, end = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                         Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(tint.copy(alpha = .13f)), contentAlignment = Alignment.Center) {
-                            Icon(financeIcon(savedFinanceIconKey(context, "category", category)), null, tint = tint, modifier = Modifier.size(22.dp))
+                            FinanceIconDisplay(savedFinanceIconKey(context, "category", category), tint, Modifier.size(22.dp))
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(category, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
@@ -2596,7 +2656,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                 leadingIcon = { Icon(Icons.Default.Category, null, tint = Color(0xFF5948F5)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp))
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF1EFFF)).padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFFE1DCFF)), contentAlignment = Alignment.Center) {
-                    Icon(financeIcon(selectedIconKey), null, tint = selectedColor, modifier = Modifier.size(23.dp))
+                    FinanceIconDisplay(selectedIconKey, selectedColor, Modifier.size(23.dp))
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Suggested icon", color = Color(0xFF252C50), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
@@ -2696,7 +2756,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                 Column(Modifier.fillMaxWidth().background(Color.Transparent)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(13.dp)) {
                         Box(Modifier.size(48.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFFF2F6FD)).border(1.dp, Color(0xFFE3ECF8), RoundedCornerShape(15.dp)), contentAlignment = Alignment.Center) {
-                            Icon(financeIcon(savedFinanceIconKey(context, "tag", tag)), null, tint = tint, modifier = Modifier.size(21.dp))
+                            FinanceIconDisplay(savedFinanceIconKey(context, "tag", tag), tint, Modifier.size(21.dp))
                         }
                         Text(tag, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         Text("$usage", color = Color(0xFF5C6B8B), fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.width(30.dp), textAlign = TextAlign.Center)
@@ -2731,7 +2791,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                             listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Online Shopping").forEach { name ->
                                 val tint = savedFinanceColor(context, "tag", name)
                                 Box(Modifier.size(46.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFFF4F7FC)).border(1.dp, Color(0xFFE3EAF5), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
-                                    Icon(financeIcon(financeIconKeyForName(name)), null, tint = tint, modifier = Modifier.size(25.dp))
+                                    FinanceIconDisplay(financeIconKeyForName(name), tint, Modifier.size(25.dp))
                                 }
                             }
                         }
@@ -2755,7 +2815,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                     label = { Text("Tag name") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                     leadingIcon = { Icon(Icons.Default.Tag, null, tint = Color(0xFF2878E8)) }, shape = RoundedCornerShape(14.dp))
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color(0xFFF0F5FF)).padding(11.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(financeIcon(selectedIconKey), null, tint = FINANCE_ITEM_COLORS[selectedColorIndex.coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)], modifier = Modifier.size(25.dp))
+                    FinanceIconDisplay(selectedIconKey, FINANCE_ITEM_COLORS[selectedColorIndex.coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)], Modifier.size(25.dp))
                     Spacer(Modifier.width(10.dp)); Text("Suggested icon · change anytime", Modifier.weight(1f), color = Muted, fontSize = 11.sp)
                     TextButton(onClick = { showIconPicker = true }) { Text("Change") }
                 }
@@ -4751,7 +4811,7 @@ private fun AddTransactionDialog(
                             Row(Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable).padding(vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                                 Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFFFE9E5)), contentAlignment = Alignment.Center) {
-                                    Icon(financeIcon(savedFinanceIconKey(context, "category", category)), null, tint = categoryColor(category))
+                                    FinanceIconDisplay(savedFinanceIconKey(context, "category", category), categoryColor(category))
                                 }
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text("Category", color = Color(0xFF66718F), fontSize = 10.sp)
@@ -4762,7 +4822,7 @@ private fun AddTransactionDialog(
                             ExposedDropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }) {
                                 transactionCategoryOptions.forEach { option ->
                                     DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                                        Icon(financeIcon(savedFinanceIconKey(context, "category", option)), null, tint = categoryColor(option)); Text(option)
+                                        FinanceIconDisplay(savedFinanceIconKey(context, "category", option), categoryColor(option)); Text(option)
                                     } }, onClick = { category = option; categoryMenuExpanded = false })
                                 }
                             }
