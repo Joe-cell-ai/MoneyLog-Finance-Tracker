@@ -9,7 +9,8 @@ class FinanceIconSuggestionsTest {
         val cases = mapOf(
             "CRED" to "brand_cred",
             "Google Play" to "brand_google_play",
-            "Amazon Pay" to "brand_amazon",
+            "Amazon" to "brand_amazon",
+            "Amazon Pay" to "brand_amazon_pay",
             "Apple Pay" to "brand_apple_pay",
             "GPay" to "brand_google_pay",
             "PhonePe" to "brand_phonepe",
