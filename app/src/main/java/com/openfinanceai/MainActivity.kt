@@ -4761,7 +4761,8 @@ private fun AddTransactionDialog(
                 val array = JSONArray(raw)
                 (0 until array.length()).map { array.getString(it).trim().removePrefix("#").trim() }.filter { it.isNotBlank() }
             }
-            (defaultTags + saved).distinctBy { it.lowercase(Locale.ROOT) }
+            val initialized = preferences.getBoolean("custom_tags_initialized", false)
+            (if (initialized) saved else defaultTags + saved).distinctBy { it.lowercase(Locale.ROOT) }
         }.getOrDefault(defaultTags))
     }
     var selectedTags by remember { mutableStateOf(listOf<String>()) }
@@ -5022,7 +5023,7 @@ private fun AddTransactionDialog(
                             tags = tags + name
                             val array = JSONArray()
                             tags.forEach { array.put(it) }
-                            preferences.edit().putString("custom_tags", array.toString()).apply()
+                            preferences.edit().putString("custom_tags", array.toString()).putBoolean("custom_tags_initialized", true).apply()
                             selectedTags = (selectedTags + name).distinct()
                         }
                         showCreateTag = false
