@@ -2750,9 +2750,9 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
         .border(1.dp, Color(0xFFDCE8F7), RoundedCornerShape(24.dp))) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Color(0xFF174A83), modifier = Modifier.size(25.dp)) }
-            Text("Tag Management", color = Color(0xFF17264D), fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            IconButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; selectedColorIndex = 6; showAdd = true }) {
-                Icon(Icons.Default.Add, "Add tag", tint = Color(0xFF174A83), modifier = Modifier.size(29.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Tag Management", color = Color(0xFF17264D), fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Text("Select and manage your transaction tags", color = Color(0xFF71809A), fontSize = 11.sp)
             }
         }
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
@@ -2790,32 +2790,6 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                         }
                     }
                     Divider(color = Color(0xFFE8EDF5), thickness = 1.dp)
-                }
-            }
-            item {
-                Spacer(Modifier.height(5.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFCFDFF)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2EAF6)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Suggested Icons", color = Color(0xFF17264D), fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                            listOf("Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play", "Debit Card", "PayPal", "Google Pay", "Online Shopping").forEach { name ->
-                                val tint = savedFinanceColor(context, "tag", name)
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                    Box(Modifier.size(46.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFFF4F7FC)).border(1.dp, Color(0xFFE3EAF5), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
-                                        FinanceIconDisplay(financeIconKeyForName(name), tint, Modifier.size(25.dp))
-                                    }
-                                    Text(name, color = Color(0xFF60708E), fontSize = 9.sp, maxLines = 1)
-                                }
-                            }
-                        }
-                        Text("The app suggests an icon based on the name.\nYou can change it anytime.", color = Color(0xFF60708E), fontSize = 12.sp, lineHeight = 17.sp)
-                    }
                 }
             }
         }
