@@ -234,7 +234,7 @@ private fun FinanceIconDisplay(key: String, tint: Color, modifier: Modifier = Mo
     }
 }
 
-private val FINANCE_ITEM_COLORS = listOf(Color(0xFF7048E8), Color(0xFFEF476F), Color(0xFFF28C28), Color(0xFFE9B824), Color(0xFF26A69A), Color(0xFF20B9C6), Color(0xFF2785E8), Color(0xFF16A34A))
+private val FINANCE_ITEM_COLORS = listOf(Color(0xFF7048E8), Color(0xFFEF476F), Color(0xFFF28C28), Color(0xFFE9B824), Color(0xFF26A69A), Color(0xFF20B9C6), Color(0xFF2785E8))
 private fun savedFinanceColor(context: Context, type: String, name: String): Color {
     val key = "${type}_color_index_${name.trim().lowercase(Locale.ROOT)}"
     val index = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).getInt(key, -1)
@@ -2651,7 +2651,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
                     Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Add Category")
                 }
                 Button(onClick = { persistCategories(categories); message = "Categories saved successfully." }, modifier = Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) {
-                    Text("Confirm", fontWeight = FontWeight.SemiBold)
+                    Text("Save", fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -2730,7 +2730,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
     var editing by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
     var selectedIconKey by remember { mutableStateOf("other") }
-    var selectedColorIndex by remember { mutableIntStateOf(7) }
+    var selectedColorIndex by remember { mutableIntStateOf(6) }
     var showIconPicker by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
     var menuTag by remember { mutableStateOf<String?>(null) }
@@ -2742,12 +2742,12 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
         preferences.edit().putString("custom_tags", array.toString()).putBoolean("custom_tags_initialized", true).apply()
     }
     Column(Modifier.fillMaxSize().background(Page).padding(horizontal = 10.dp, vertical = 8.dp)
-        .clip(RoundedCornerShape(24.dp)).background(Color.White)
+        .clip(RoundedCornerShape(24.dp)).background(Color(0xFFFCFBFF))
         .border(1.dp, Color(0xFFDCE8F7), RoundedCornerShape(24.dp))) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Color(0xFF174A83), modifier = Modifier.size(25.dp)) }
             Text("Tag Management", color = Color(0xFF17264D), fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            IconButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; selectedColorIndex = 7; showAdd = true }) {
+            IconButton(onClick = { draft = ""; editing = null; selectedIconKey = "other"; selectedColorIndex = 6; showAdd = true }) {
                 Icon(Icons.Default.Add, "Add tag", tint = Color(0xFF174A83), modifier = Modifier.size(29.dp))
             }
         }
@@ -2778,7 +2778,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
                                 DropdownMenuItem(text = { Text("Edit") }, onClick = {
                                     draft = tag; editing = tag
                                     selectedIconKey = savedFinanceIconKey(context, "tag", tag)
-                                    selectedColorIndex = preferences.getInt("tag_color_index_${tag.lowercase(Locale.ROOT)}", 7).coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)
+                                    selectedColorIndex = preferences.getInt("tag_color_index_${tag.lowercase(Locale.ROOT)}", 6).coerceIn(0, FINANCE_ITEM_COLORS.lastIndex)
                                     menuTag = null; showAdd = true
                                 })
                                 DropdownMenuItem(text = { Text("Delete", color = ExpenseRed) }, onClick = { menuTag = null; pendingDelete = tag })
@@ -4876,7 +4876,9 @@ private fun AddTransactionDialog(
                             Row(Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable).padding(vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                                 Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(Color(0xFFE5F6ED)), contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.LocalOffer, null, tint = Color(0xFF299B68))
+                                    val primaryTag = selectedTags.firstOrNull()
+                                    if (primaryTag != null) FinanceIconDisplay(savedFinanceIconKey(context, "tag", primaryTag), savedFinanceColor(context, "tag", primaryTag), Modifier.size(21.dp))
+                                    else Icon(Icons.Default.LocalOffer, null, tint = Color(0xFF299B68))
                                 }
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text("Tags", color = Color(0xFF66718F), fontSize = 10.sp)
@@ -4887,7 +4889,8 @@ private fun AddTransactionDialog(
                             ExposedDropdownMenu(expanded = tagMenuExpanded, onDismissRequest = { tagMenuExpanded = false }) {
                                 DropdownMenuItem(text = { Text("Clear tags") }, onClick = { selectedTags = emptyList(); tagMenuExpanded = false })
                                 tags.forEach { option ->
-                                    DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically) {
+                                    DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                        FinanceIconDisplay(savedFinanceIconKey(context, "tag", option), savedFinanceColor(context, "tag", option), Modifier.size(20.dp))
                                         Text(option, Modifier.weight(1f)); if (option in selectedTags) Icon(Icons.Default.Check, null, tint = Green)
                                     } }, onClick = { selectedTags = if (option in selectedTags) selectedTags - option else selectedTags + option })
                                 }
