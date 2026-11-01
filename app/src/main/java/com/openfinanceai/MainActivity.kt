@@ -265,6 +265,7 @@ private fun savedFinanceIconKey(context: Context, type: String, name: String): S
 @Composable
 private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, onClose: () -> Unit) {
     var query by remember { mutableStateOf("") }
+    var draftSelectedKey by remember(selectedKey) { mutableStateOf(selectedKey) }
     var selectedGroup by remember { mutableStateOf("All") }
     val groups = listOf("All", "Food", "Travel", "Shopping", "Health", "Other")
     fun belongsToGroup(key: String): String = when (key) {
@@ -316,12 +317,12 @@ private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, o
                     visibleIcons.chunked(4).forEach { rowKeys ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             rowKeys.forEach { key ->
-                                val selected = selectedKey == key
+                                val selected = draftSelectedKey == key
                                 Column(
                                     Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
                                         .background(if (selected) Color(0xFFECEAFF) else if (AppDarkTheme) Color(0xFF252E3D) else Color(0xFFF3F4FA))
                                         .border(if (selected) 2.dp else 1.dp, if (selected) Color(0xFF5948F5) else Color(0xFFE6E8F0), RoundedCornerShape(16.dp))
-                                        .clickable { onSelect(key) }.padding(vertical = 14.dp),
+                                        .clickable { draftSelectedKey = key }.padding(vertical = 14.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(7.dp)
                                 ) {
@@ -356,7 +357,7 @@ private fun FinanceIconPicker(selectedKey: String, onSelect: (String) -> Unit, o
                     if (visibleIcons.isEmpty()) Text("No matching icons", color = Muted, fontSize = 12.sp)
                 }
                 Button(
-                    onClick = onClose, modifier = Modifier.fillMaxWidth().height(52.dp),
+                    onClick = { onSelect(draftSelectedKey) }, modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1677EA))
                 ) { Text("Done", fontWeight = FontWeight.Bold) }
