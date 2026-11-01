@@ -130,6 +130,8 @@ private fun categoryTint(category: String): Color = categoryColor(category).copy
 private fun financeIconKeyForName(name: String): String {
     // Brand matches must run before broad category keywords (for example Google Play before "play"/entertainment).
     val value = name.trim().lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), " ").trim()
+    val words = value.split(' ').filter { it.isNotBlank() }.toSet()
+    fun hasToken(vararg candidates: String): Boolean = candidates.any { it in words }
     return when {
         listOf("cred", "cred app").any { value == it || value.startsWith("$it ") } -> "brand_cred"
         listOf("google play", "play store").any { value.contains(it) } -> "brand_google_play"
@@ -148,13 +150,13 @@ private fun financeIconKeyForName(name: String): String {
         listOf("flipkart").any { value.contains(it) } -> "brand_flipkart"
         listOf("myntra").any { value.contains(it) } -> "brand_myntra"
         listOf("hotstar", "jio cinema").any { value.contains(it) } -> "brand_streaming"
-        listOf("pet", "pets", "pet care", "vet", "animal").any { value.contains(it) } -> "pets"
+        (value == "pet" || value.contains("pet care") || hasToken("pets", "vet", "animal")) -> "pets"
         listOf("restaurant", "food", "dining", "coffee", "cafe").any { value.contains(it) } -> "food"
         listOf("grocery", "groceries", "supermarket").any { value.contains(it) } -> "groceries"
         listOf("fuel", "petrol", "diesel", "gas station").any { value.contains(it) } -> "fuel"
         listOf("flight", "air travel", "airplane").any { value.contains(it) } -> "flight"
         listOf("hotel", "stay", "accommodation").any { value.contains(it) } -> "hotel"
-        listOf("bus", "train", "metro", "transport", "taxi", "cab", "car", "bike", "vehicle").any { value.contains(it) } -> "transport"
+        (value.contains("public transit") || value.contains("transport") || hasToken("bus", "train", "metro", "taxi", "cab", "car", "bike", "vehicle")) -> "transport"
         listOf("health", "medical", "medicine", "hospital", "doctor", "pharmacy").any { value.contains(it) } -> "health"
         listOf("education", "school", "college", "course", "tuition", "books").any { value.contains(it) } -> "education"
         listOf("travel", "trip", "vacation").any { value.contains(it) } -> "travel"
