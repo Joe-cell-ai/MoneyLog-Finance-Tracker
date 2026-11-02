@@ -81,7 +81,7 @@ internal object LoanDocumentParser {
         val processingFee = amountOnLine(Regex("""Processing\s+Fees?\s*\(INR\)"""))
             ?: directAmount("""Processing\s+fees?.{0,100}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
         val totalInterest = directAmount("""Total\s+Interest\s+Amount\s+to\s+be\s+charged.{0,250}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
-        val declaredTotal = directAmount("""Total\s+amount\s+to\s+be\s+paid\s+by\s+the\s+borrower.{0,250}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
+        val declaredTotal = directAmount("""Total\s+amount\s+to\s+be\s+paid\s+by\s+the\s+borrower.{0,250}?\(in\s+Rupees\)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
 
         val scheduleHeader = Regex("""(?i)Illustrative\s+Repayment\s+Schedule""").find(text)
         val scheduleText = scheduleHeader?.let { text.substring(it.range.last + 1) }.orEmpty()
@@ -95,6 +95,12 @@ internal object LoanDocumentParser {
         }.toList()
 
         val warnings = mutableListOf<String>()
+        if (scheduleHeader != null && rows.isEmpty()) {
+            warnings += "A repayment schedule heading was found, but no complete five-column instalment rows could be read. No schedule rows were invented."
+        }
+        if (tenure != null && rows.isNotEmpty() && rows.size != tenure.toInt()) {
+            warnings += "The document states " + tenure + " instalments, but only " + rows.size + " complete schedule rows were extracted."
+        }
         if (rows.isNotEmpty()) {
             if (rows.map { it.installmentNumber } != (1..rows.size).toList()) {
                 warnings += "Repayment schedule instalment numbers are missing, duplicated or out of order."
@@ -118,6 +124,10 @@ internal object LoanDocumentParser {
             }
             if (totalInterest != null && scheduleInterest != totalInterest) {
                 warnings += "Schedule interest total " + scheduleInterest + " does not match stated total interest " + totalInterest + "."
+            }
+            val finalClosingBalance = rows.last().openingPrincipal - rows.last().principal
+            if (finalClosingBalance != 0L) {
+                warnings += "The final extracted schedule row leaves principal balance " + finalClosingBalance + "; the schedule does not close to zero."
             }
             if (emi != null && rows.any { it.installment != emi }) {
                 warnings += "Some schedule instalment amounts differ from the stated EMI " + emi + "; review the first and final instalments."
