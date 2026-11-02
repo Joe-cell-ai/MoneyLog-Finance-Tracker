@@ -3983,6 +3983,46 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
             JSONObject(schedulePrefs.getString("loan_document_metadata_${loan.lender}", "{}") ?: "{}")
         }.getOrDefault(JSONObject()))
     }
+    // Prefer the verified Room schedule; SharedPreferences remains a legacy fallback for existing installs.
+    LaunchedEffect(loan.lender) {
+        val persisted = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val dao = LoanScheduleDatabase.get(context).loanScheduleDao()
+            val latest = dao.latestDocument(loan.lender) ?: return@withContext null
+            latest to dao.installments(loan.lender, latest.documentId)
+        }
+        if (persisted != null) {
+            val (record, rows) = persisted
+            if (rows.isNotEmpty()) {
+                importedSchedule = rows.map { (it.dueDate ?: "") to it.installmentAmount }
+                val rowJson = JSONArray()
+                rows.forEach { row ->
+                    rowJson.put(JSONObject().put("number", row.installmentNumber)
+                        .put("openingPrincipal", row.openingBalance ?: JSONObject.NULL)
+                        .put("principal", row.principal).put("interest", row.interest)
+                        .put("installment", row.installmentAmount)
+                        .put("annualRate", JSONObject.NULL)
+                        .put("dueDate", row.dueDate ?: JSONObject.NULL)
+                        .put("closingPrincipal", row.closingBalance ?: JSONObject.NULL))
+                }
+                loanDocumentMetadata = JSONObject()
+                    .put("lender", record.lender ?: loan.lender)
+                    .put("borrowerName", record.borrowerName ?: JSONObject.NULL)
+                    .put("agreementNumber", record.agreementNumber ?: JSONObject.NULL)
+                    .put("principal", record.principal ?: JSONObject.NULL)
+                    .put("emi", rows.firstOrNull()?.installmentAmount ?: JSONObject.NULL)
+                    .put("annualInterestRate", record.annualRatePercent ?: JSONObject.NULL)
+                    .put("apr", record.aprPercent ?: JSONObject.NULL)
+                    .put("tenureMonths", record.tenureMonths ?: JSONObject.NULL)
+                    .put("repaymentStartDate", record.repaymentStartDate ?: JSONObject.NULL)
+                    .put("repaymentEndDate", record.repaymentEndDate ?: JSONObject.NULL)
+                    .put("totalInterest", record.declaredInterest ?: JSONObject.NULL)
+                    .put("scheduleInterestTotal", rows.sumOf { it.interest })
+                    .put("declaredTotalRepayment", record.declaredRepayment ?: JSONObject.NULL)
+                    .put("scheduleRows", rowJson)
+                    .put("roomDocumentId", record.documentId)
+            }
+        }
+    }
     val importedDocumentBreakdown = remember(loan.lender, loanDocumentMetadata.toString()) {
         runCatching {
             val rows = loanDocumentMetadata.optJSONArray("scheduleRows") ?: JSONArray()
@@ -4035,6 +4075,17 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 Triple(document, mappedRows, (document.warnings + pageExtraction.warnings + validation.warnings).distinct())
             }
             result.onSuccess { (document, mappedRows, sourceWarnings) ->
+                val financialRowsForRoom = document.scheduleRows.map { row ->
+                    FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal, row.installment,
+                        row.principal, row.interest, row.closingPrincipal)
+                }
+                val roomValidation = LoanFinancialValidator.validate(
+                    financialRowsForRoom, document.tenureMonths, document.principal,
+                    document.totalInterest, document.declaredTotalRepayment, document.processingFee
+                )
+                VerifiedLoanScheduleRepository(LoanScheduleDatabase.get(context).loanScheduleDao()).save(
+                    loan.lender, uri.lastPathSegment ?: "Loan PDF", document, financialRowsForRoom, roomValidation
+                )
                 val arr = JSONArray()
                 mappedRows.forEach { row ->
                     arr.put(JSONObject().put("date", row.date).put("amount", row.amount).put("installment", row.installmentNumber))
