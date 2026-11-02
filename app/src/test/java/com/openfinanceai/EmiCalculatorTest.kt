@@ -47,4 +47,34 @@ class EmiCalculatorTest {
         assertEquals(11_250L, calculatePendingEmiTotal(installments, emptySet(), alreadyPaidCount = 2L))
     }
 
+    @Test
+    fun pendingTotalUsesEveryVariablePdfInstallmentAmount() {
+        val installments = listOf(
+            "2026-11-05" to 4_842L,
+            "2026-12-05" to 3_550L,
+            "2027-01-05" to 3_550L,
+            "2027-02-05" to 3_485L
+        )
+        assertEquals(15_427L, calculatePendingEmiTotal(installments, emptySet()))
+    }
+
+    @Test
+    fun variablePdfPendingTotalExcludesPaidRowsAndHonoursThisInstallmentOverride() {
+        val installments = listOf(
+            "2026-11-05" to 4_842L,
+            "2026-12-05" to 3_550L,
+            "2027-01-05" to 3_550L,
+            "2027-02-05" to 3_485L
+        )
+        assertEquals(
+            10_335L,
+            calculatePendingEmiTotal(
+                installments = installments,
+                paidDates = setOf("2026-11-05"),
+                amountOverrides = mapOf("2027-01-05" to 3_300L)
+            )
+        )
+    }
+
+
 }

@@ -1,26 +1,21 @@
 package com.openfinanceai
 
-import android.content.Context
+import android.content.SharedPreferences
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 
-@RunWith(RobolectricTestRunner::class)
 class FinanceManagementStoreTest {
     private lateinit var store: FinanceManagementStore
+    private lateinit var preferences: SharedPreferences
     private val defaults = listOf("Food", "Transport")
     private val defaultTags = listOf("Credit Card", "Cash")
 
     @Before
     fun setUp() {
-        val context = RuntimeEnvironment.getApplication()
-        val preferences = context.getSharedPreferences("finance_management_test", Context.MODE_PRIVATE)
-        preferences.edit().clear().commit()
+        preferences = InMemorySharedPreferences()
         store = FinanceManagementStore(preferences, defaults, defaultTags)
     }
 
@@ -39,8 +34,6 @@ class FinanceManagementStoreTest {
         assertTrue(store.renameCategory("Fuel", "Petrol"))
         assertEquals(defaults + "Petrol", store.loadCategories())
 
-        val preferences = RuntimeEnvironment.getApplication()
-            .getSharedPreferences("finance_management_test", Context.MODE_PRIVATE)
         assertEquals("fuel", preferences.getString("category_icon_petrol", null))
         assertEquals(2, preferences.getInt("category_color_index_petrol", -1))
         assertFalse(preferences.contains("category_icon_fuel"))
@@ -66,8 +59,6 @@ class FinanceManagementStoreTest {
         assertTrue(store.renameTag("Amazon", "Amazon Pay"))
         assertEquals(defaultTags + "Amazon Pay", store.loadTags())
 
-        val preferences = RuntimeEnvironment.getApplication()
-            .getSharedPreferences("finance_management_test", Context.MODE_PRIVATE)
         assertEquals("brand_amazon", preferences.getString("tag_icon_amazon pay", null))
         assertEquals(4, preferences.getInt("tag_color_index_amazon pay", -1))
 
@@ -110,5 +101,46 @@ class FinanceManagementStoreTest {
         assertEquals(defaults, store.loadCategories())
         assertFalse(store.renameTag("Cash", "Credit Card"))
         assertEquals(defaultTags, store.loadTags())
+    }
+}
+
+
+/** Small deterministic SharedPreferences fake; these tests verify store semantics, not Android runtime behavior. */
+private class InMemorySharedPreferences : SharedPreferences {
+    private val values = mutableMapOf<String, Any?>()
+
+    override fun getAll(): MutableMap<String, *> = values.filterValues { it != null }.toMutableMap()
+    override fun getString(key: String?, defValue: String?): String? = (values[key] as? String) ?: defValue
+    @Suppress("UNCHECKED_CAST")
+    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? =
+        (values[key] as? Set<String>)?.toMutableSet() ?: defValues?.toMutableSet()
+    override fun getInt(key: String?, defValue: Int): Int = values[key] as? Int ?: defValue
+    override fun getLong(key: String?, defValue: Long): Long = values[key] as? Long ?: defValue
+    override fun getFloat(key: String?, defValue: Float): Float = values[key] as? Float ?: defValue
+    override fun getBoolean(key: String?, defValue: Boolean): Boolean = values[key] as? Boolean ?: defValue
+    override fun contains(key: String?): Boolean = values.containsKey(key)
+    override fun edit(): SharedPreferences.Editor = MemoryEditor()
+    override fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) = Unit
+    override fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) = Unit
+
+    private inner class MemoryEditor : SharedPreferences.Editor {
+        private val updates = mutableMapOf<String, Any?>()
+        private val removals = mutableSetOf<String>()
+        private var clearRequested = false
+
+        override fun putString(key: String?, value: String?): SharedPreferences.Editor = apply { updates[key!!] = value; removals.remove(key) }
+        override fun putStringSet(key: String?, values: MutableSet<String>?): SharedPreferences.Editor = apply { updates[key!!] = values?.toSet(); removals.remove(key) }
+        override fun putInt(key: String?, value: Int): SharedPreferences.Editor = apply { updates[key!!] = value; removals.remove(key) }
+        override fun putLong(key: String?, value: Long): SharedPreferences.Editor = apply { updates[key!!] = value; removals.remove(key) }
+        override fun putFloat(key: String?, value: Float): SharedPreferences.Editor = apply { updates[key!!] = value; removals.remove(key) }
+        override fun putBoolean(key: String?, value: Boolean): SharedPreferences.Editor = apply { updates[key!!] = value; removals.remove(key) }
+        override fun remove(key: String?): SharedPreferences.Editor = apply { key?.let { removals.add(it); updates.remove(it) } }
+        override fun clear(): SharedPreferences.Editor = apply { clearRequested = true; updates.clear(); removals.clear() }
+        override fun commit(): Boolean { apply(); return true }
+        override fun apply() {
+            if (clearRequested) values.clear()
+            removals.forEach(values::remove)
+            updates.forEach { (key, value) -> if (value == null) values.remove(key) else values[key] = value }
+        }
     }
 }

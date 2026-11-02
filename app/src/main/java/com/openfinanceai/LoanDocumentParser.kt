@@ -5,7 +5,9 @@ internal data class LoanDocumentScheduleRow(
     val openingPrincipal: Long,
     val principal: Long,
     val interest: Long,
-    val installment: Long
+    val installment: Long,
+    val annualRate: Double? = null,
+    val dueDate: String? = null
 )
 
 internal data class LoanDocumentExtraction(
@@ -36,6 +38,7 @@ internal object LoanDocumentParser {
 
     fun parse(sourceText: String): LoanDocumentExtraction {
         val text = sourceText.replace('\u00A0', ' ').replace('\u200B', ' ')
+            .replace("\uFB03", "ffi").replace("\uFB01", "fi").replace("\uFB02", "fl").replace("\uFB00", "ff")
         val lines = text.lines().map { it.trim().replace(Regex("""[ \t]+"""), " ") }
         fun number(raw: String?): Long? = raw?.replace(",", "")?.toDoubleOrNull()
             ?.takeIf { it >= 0.0 && it <= Long.MAX_VALUE.toDouble() }
@@ -66,27 +69,42 @@ internal object LoanDocumentParser {
 
         val lender = Regex("""(?im)^\s*Lender\s*:\s*(.+?)\s*$""").find(text)?.groupValues?.get(1)?.trim()
             ?: Regex("""(?im)^Name of the Regulated Entity\s*:\s*(.+?)\s*$""").find(text)?.groupValues?.get(1)?.trim()
-        val loanNumber = Regex("""(?i)(?:Loan\s*ID|Loan proposal\s*/\s*account\s*No\.?|Loan account\s*(?:number|no\.?))\s*[:.]?\s*([A-Z0-9/-]{5,40})""")
+            ?: Regex("""(?im)^Corporate\s*&\s*Registered\s+office\s*:\s*([A-Z][A-Z &]+Limited)\b""").find(text)?.groupValues?.get(1)?.trim()
+        val loanNumber = Regex("""(?i)(?:Loan\s*ID|Loan proposal\s*/\s*account\s*No\.?|Loan account\s*(?:number|no\.?)|Agreement\s*(?:No\.?|Number))\s*[:.]?\s*([A-Z0-9/-]{5,40})""")
             .find(text)?.groupValues?.get(1)
-        val borrowerName = Regex("""(?im)^\s*(?:Dear\s+|[0-9]{1,2}\s+Name\s+of\s+the\s+Borrower\s*\(\s*["']Borrower["']\s*\)\s+|Applicant\s+Name\s*[:：]?\s*)([A-Z][A-Z .'-]{2,80})\s*$""")
+        val borrowerName = Regex("""(?im)^\s*(?:Dear\s+|Customer\s+Name\s*[:：]?\s*|[0-9]{1,2}\s+Name\s+of\s+the\s+Borrower\s*\(\s*["']Borrower["']\s*\)\s+|Applicant\s+Name\s*[:：]?\s*)([A-Z][A-Z .'-]{2,80})\s*$""")
             .find(text)?.groupValues?.get(1)?.trim()
         val principal = directAmount("""Total\s+Loan\s+Amount\s*\(\s*Principal\s+Amount\s*\)\s*[:\-]?\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Sanctioned\s+Loan\s+amount\s*\(in\s+Rupees\)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
+            ?: directAmount("""Loan\s+Amount\s*\(\s*INR\s*\)\s*:\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
+            ?: directAmount("""Amount\s+Financed\s*:\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
         val emi = amountOnLine(Regex("""Amount\s+of\s+EMI\s+Payable"""))
+            ?: amountOnLine(Regex("""EMI\s+Amount"""))
             ?: Regex("""(?is)Amount\s+of\s+each\s+EPI.{0,350}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+nos\.?\s+of\s+EPIs""")
                 .find(text)?.groupValues?.get(1)?.let(::number)
         val fixedRate = directDecimal("""Fixed\s+Rate\s+of\s+Interest\s*[:\-]?\s*([0-9]+(?:\.[0-9]{1,4})?)""")
             ?: directDecimal("""Interest\s+Rate\s+per\s+annum\s*\(%\)\s*([0-9]+(?:\.[0-9]{1,4})?)""")
+            ?: directDecimal("""ROI\s*\(%\)\s*:?\s*([0-9]+(?:\.[0-9]{1,4})?)""")
         val apr = directDecimal("""Annual\s+Percentage\s+Rate\s*\(APR\)\s*\(%\)\s*([0-9]+(?:\.[0-9]{1,4})?)""")
             ?: directDecimal("""Annual\s+Percentage\s+Rate\s*[:(].{0,40}?([0-9]+(?:\.[0-9]{1,4})?)""")
         val tenure = directAmount("""Tenure\s*\(in\s+months\)\s*([0-9]{1,3})""")
             ?: directAmount("""Loan\s+term\s*\(months\)\s*([0-9]{1,3})""")
+            ?: directAmount("""Tenure\s*:\s*([0-9]{1,3})\s*Months?""")
+            ?: directAmount("""Total\s+Tenure\s*:?\s*([0-9]{1,3})""")
         val repaymentStartDate = Regex("""(?i)Commencement\s+of\s+repayments?.{0,250}?(\d{4}-\d{2}-\d{2})""", RegexOption.DOT_MATCHES_ALL)
             .find(text)?.groupValues?.get(1)
             ?: Regex("""(?i)(?:repayment|first\s*EMI)\s*(?:start|commencement)?\s*date\s*[:\-]?\s*(\d{4}-\d{2}-\d{2})""")
                 .find(text)?.groupValues?.get(1)
             ?: Regex("""(?i)Monthly\s+\d{1,3}\s+[0-9][0-9,]*(?:\.[0-9]{1,2})?\s+(\d{4}-\d{2}-\d{2})""")
                 .find(text)?.groupValues?.get(1)
+            ?: Regex("""(?i)(?:Repayment|Installment)\s+Start\s+Date\s*[:\-]?\s*(\d{1,2}[-/][A-Za-z0-9]{2,4}[-/]\d{2,4})""")
+                .find(text)?.groupValues?.get(1)?.let { raw ->
+                    val patterns = listOf("d-MMM-yy", "dd-MMM-yy", "d-MMM-yyyy", "dd-MMM-yyyy", "d/MM/yy", "dd/MM/yy", "d/MM/yyyy", "dd/MM/yyyy")
+                    patterns.firstNotNullOfOrNull { pattern ->
+                        runCatching { java.time.LocalDate.parse(raw, java.time.format.DateTimeFormatterBuilder()
+                            .parseCaseInsensitive().appendPattern(pattern).toFormatter(java.util.Locale.ENGLISH)).toString() }.getOrNull()
+                    }
+                }
         val processingFee = amountOnLine(Regex("""Processing\s+Fees?\s*\(INR\)"""))
             ?: directAmount("""Processing\s+fees?.{0,100}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
         val totalInterest = directAmount("""Total\s+Interest\s+Amount\s+to\s+be\s+charged[^\n]*\n\s*\d{1,3}\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
@@ -115,18 +133,56 @@ internal object LoanDocumentParser {
             }
         }
 
-        val scheduleHeader = Regex("""(?i)Illustrative\s+Repayment\s+Schedule""").find(text)
+        val scheduleHeader = Regex("""(?im)^\s*(?:[0-9]{1,2}\s+)?(?:Illustrative\s+)?Repayment\s+Schedule\s*$""").find(text)
         val scheduleText = scheduleHeader?.let { text.substring(it.range.last + 1) }.orEmpty()
-        val rowPattern = Regex(
-            """(?m)^\s*(\d{1,3})\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s*$"""
-        )
-        val rows = rowPattern.findAll(scheduleText).mapNotNull { m ->
-            val values = (2..5).map { number(m.groupValues[it]) ?: return@mapNotNull null }
-            val no = m.groupValues[1].toIntOrNull() ?: return@mapNotNull null
-            LoanDocumentScheduleRow(no, values[0], values[1], values[2], values[3])
+            .replace("₹", "").replace(Regex("""(?i)\bRs\.?\s*"""), "")
+        val scheduleHeaderLines = scheduleText.lines().take(30).joinToString(" ")
+        val hasScheduleRateColumn = Regex("""(?i)(?:interest\s+rate|rate\s+of\s+interest|rate\s*\(%\)|\bROI\b)""").containsMatchIn(scheduleHeaderLines)
+        val scheduleDatePattern = Regex("""(?i)\b(\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}[- ](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[- ,]+\d{2,4})\b""")
+        fun normalizedScheduleDate(raw: String): String? {
+            val value = raw.trim()
+            val patterns = listOf("yyyy-MM-dd", "d MMMM yyyy", "d MMM yyyy", "d-MMM-yyyy", "d-MMM-yy", "dd-MMM-yy", "d/MM/yyyy", "dd/MM/yyyy", "d/MM/yy", "dd/MM/yy", "d-MM-yyyy", "dd-MM-yyyy")
+            return patterns.firstNotNullOfOrNull { pattern ->
+                runCatching {
+                    java.time.LocalDate.parse(value, java.time.format.DateTimeFormatterBuilder()
+                        .parseCaseInsensitive().appendPattern(pattern).toFormatter(java.util.Locale.ENGLISH)).toString()
+                }.getOrNull()
+            }
+        }
+        val rowPattern = Regex("""(?m)^\s*(\d{1,3})\s+(.+?)\s*$""")
+        val rows = rowPattern.findAll(scheduleText).mapNotNull { match ->
+            val no = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
+            val rawValues = match.groupValues[2]
+            val dateMatch = scheduleDatePattern.find(rawValues)
+            val dueDate = dateMatch?.groupValues?.get(1)?.let(::normalizedScheduleDate)
+            if (dateMatch != null && dueDate == null) return@mapNotNull null
+            val numericSource = if (dateMatch != null) rawValues.removeRange(dateMatch.range) else rawValues
+            val tokens = Regex("""[0-9][0-9,]*(?:\.[0-9]{1,4})?""").findAll(numericSource).map { it.value }.toList()
+            if (hasScheduleRateColumn && tokens.size == 5) {
+                val rate = tokens[1].replace(",", "").toDoubleOrNull() ?: return@mapNotNull null
+                val amounts = listOf(0, 2, 3, 4).map { number(tokens[it]) ?: return@mapNotNull null }
+                if (rate !in 0.0..100.0) return@mapNotNull null
+                LoanDocumentScheduleRow(no, amounts[0], amounts[1], amounts[2], amounts[3], rate, dueDate)
+            } else if (!hasScheduleRateColumn && tokens.size == 5) {
+                // Standard bank statements: opening principal, installment, principal, interest, closing principal.
+                val amounts = tokens.map { number(it) ?: return@mapNotNull null }
+                val opening = amounts[0]
+                val installment = amounts[1]
+                val principalPaid = amounts[2]
+                val interestPaid = amounts[3]
+                val closing = amounts[4]
+                if (opening - principalPaid != closing || principalPaid + interestPaid != installment) return@mapNotNull null
+                LoanDocumentScheduleRow(no, opening, principalPaid, interestPaid, installment, null, dueDate)
+            } else if (!hasScheduleRateColumn && tokens.size == 4) {
+                val amounts = tokens.map { number(it) ?: return@mapNotNull null }
+                LoanDocumentScheduleRow(no, amounts[0], amounts[1], amounts[2], amounts[3], null, dueDate)
+            } else null
         }.toList()
 
         val warnings = mutableListOf<String>()
+        if (rows.any { it.dueDate != null } && rows.any { it.dueDate == null }) {
+            warnings += "Only some repayment rows contain readable due dates. MoneyLog will not invent dates for the remaining rows."
+        }
         if (rows.isEmpty() && tenure != null) {
             warnings += "No detailed monthly principal/interest schedule was extracted. MoneyLog will not invent a monthly split from the EMI and interest rate."
         }
@@ -188,10 +244,10 @@ internal object LoanDocumentParser {
             loanNumber = loanNumber,
             borrowerName = borrowerName,
             principal = principal,
-            emi = emi,
+            emi = emi ?: rows.firstOrNull()?.installment,
             annualInterestRate = fixedRate,
             apr = apr,
-            tenureMonths = tenure?.toInt(),
+            tenureMonths = tenure?.toInt() ?: rows.size.takeIf { it > 0 },
             repaymentStartDate = repaymentStartDate,
             processingFee = processingFee,
             totalInterest = totalInterest,
