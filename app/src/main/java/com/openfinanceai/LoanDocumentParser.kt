@@ -201,7 +201,9 @@ internal object LoanDocumentParser {
                 val principalPaid = if (principalBeforeInterest) amounts[2] else amounts[3]
                 val interestPaid = if (principalBeforeInterest) amounts[3] else amounts[2]
                 val closing = amounts[4]
-                if (opening - principalPaid != closing || principalPaid + interestPaid != installment) return@mapNotNull null
+                // Preserve the lender's literal row even when its columns do not reconcile.
+                // The financial validator reports the conflict; silently dropping this row
+                // would turn a source mismatch into a misleading "missing instalment" error.
                 LoanDocumentScheduleRow(no, opening, principalPaid, interestPaid, installment, null, dueDate, closing)
             } else if (!hasScheduleRateColumn && tokens.size == 4) {
                 val amounts = tokens.map { exactScheduleAmount(it) ?: return@mapNotNull null }
@@ -226,28 +228,31 @@ internal object LoanDocumentParser {
             if (rows.map { it.installmentNumber } != (1..rows.size).toList()) {
                 warnings += "Repayment schedule instalment numbers are missing, duplicated or out of order."
             }
-            rows.filter { it.principal + it.interest != it.installment }.forEach {
-                warnings += "Instalment " + it.installmentNumber + ": principal plus interest is " +
-                    (it.principal + it.interest) + ", but the document's instalment column says " + it.installment + "."
+            rows.forEach { row ->
+                val componentTotal = runCatching { Math.addExact(row.principal, row.interest) }.getOrNull()
+                if (componentTotal != null && componentTotal != row.installment) {
+                    warnings += "Instalment " + row.installmentNumber + ": principal plus interest is " +
+                        componentTotal + ", but the document's instalment column says " + row.installment + "."
+                }
             }
             rows.zipWithNext().forEach { (current, next) ->
-                val expectedNextOpening = current.openingPrincipal - current.principal
-                if (expectedNextOpening != next.openingPrincipal) {
+                val expectedNextOpening = runCatching { Math.subtractExact(current.openingPrincipal, current.principal) }.getOrNull()
+                if (expectedNextOpening != null && expectedNextOpening != next.openingPrincipal) {
                     warnings += "Balance mismatch between instalments " + current.installmentNumber + " and " +
                         next.installmentNumber + ": expected opening principal " + expectedNextOpening +
                         ", document shows " + next.openingPrincipal + "."
                 }
             }
-            val schedulePrincipal = rows.sumOf { it.principal }
-            val scheduleInterest = rows.sumOf { it.interest }
-            if (principal != null && schedulePrincipal != principal) {
+            val schedulePrincipal = runCatching { LoanMoney.sumPaise(rows.map { it.principal }) }.getOrNull()
+            val scheduleInterest = runCatching { LoanMoney.sumPaise(rows.map { it.interest }) }.getOrNull()
+            if (principal != null && schedulePrincipal != null && schedulePrincipal != principal) {
                 warnings += "Schedule principal total " + schedulePrincipal + " does not match loan principal " + principal + "."
             }
-            if (totalInterest != null && scheduleInterest != totalInterest) {
+            if (totalInterest != null && scheduleInterest != null && scheduleInterest != totalInterest) {
                 warnings += "Schedule interest total " + scheduleInterest + " does not match stated total interest " + totalInterest + "."
             }
-            val finalClosingBalance = rows.last().openingPrincipal - rows.last().principal
-            if (finalClosingBalance != 0L) {
+            val finalClosingBalance = runCatching { Math.subtractExact(rows.last().openingPrincipal, rows.last().principal) }.getOrNull()
+            if (finalClosingBalance != null && finalClosingBalance != 0L) {
                 warnings += "The final extracted schedule row leaves principal balance " + finalClosingBalance + "; the schedule does not close to zero."
             }
             if (emi != null && rows.any { it.installment != emi }) {
@@ -261,8 +266,8 @@ internal object LoanDocumentParser {
             warnings += "The sanction section lists prepayment charges as NA, while the KFS lists foreclosure charges as " + foreclosureCharge + "; confirm which term applies."
         }
         if (principal != null && totalInterest != null && processingFee != null && declaredTotal != null) {
-            val calculated = principal + totalInterest + processingFee
-            if (calculated != declaredTotal) {
+            val calculated = runCatching { Math.addExact(Math.addExact(principal, totalInterest), processingFee) }.getOrNull()
+            if (calculated != null && calculated != declaredTotal) {
                 warnings += "APR total repayment mismatch: principal + stated interest + processing fee is " +
                     calculated + ", but the document declares " + declaredTotal + "."
             }
