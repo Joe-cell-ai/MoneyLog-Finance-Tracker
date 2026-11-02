@@ -188,7 +188,6 @@ class LoanDocumentParserTest {
             Agreement No : PLN002202247931
             Repayment Start Date : 04-FEB-26
             Repayment End Date : 04-JAN-31
-            ROI(%) : 12.00
             Loan Amount(INR) : INR 5,69,000.00
             Tenure : 60 Months
             Repayment Schedule
@@ -217,7 +216,6 @@ class LoanDocumentParserTest {
             Agreement No : PLN002202247931
             Repayment Start Date : 04-FEB-26
             Repayment End Date : 04-JAN-31
-            ROI(%) : 12.00
             Loan Amount(INR) : INR 5,69,000.00
             Tenure : 60 Months
             Repayment Schedule
@@ -290,6 +288,8 @@ class LoanDocumentParserTest {
         assertEquals(569000L, result.principal)
         assertEquals(12657L, result.emi)
         assertEquals(60, result.tenureMonths)
+        assertEquals(null, result.annualInterestRate) // Annual ROI is not stated in this source PDF.
+        assertEquals("2031-01-04", result.repaymentEndDate)
         assertEquals("2026-02-04", result.repaymentStartDate)
         assertEquals(60, result.scheduleRows.size)
         assertEquals((1..60).toList(), result.scheduleRows.map { it.installmentNumber })
