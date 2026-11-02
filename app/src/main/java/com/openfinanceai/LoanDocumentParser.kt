@@ -5,7 +5,8 @@ internal data class LoanDocumentScheduleRow(
     val openingPrincipal: Long,
     val principal: Long,
     val interest: Long,
-    val installment: Long
+    val installment: Long,
+    val annualRate: Double? = null
 )
 
 internal data class LoanDocumentExtraction(
@@ -117,13 +118,18 @@ internal object LoanDocumentParser {
 
         val scheduleHeader = Regex("""(?i)Illustrative\s+Repayment\s+Schedule""").find(text)
         val scheduleText = scheduleHeader?.let { text.substring(it.range.last + 1) }.orEmpty()
-        val rowPattern = Regex(
-            """(?m)^\s*(\d{1,3})\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s*$"""
-        )
-        val rows = rowPattern.findAll(scheduleText).mapNotNull { m ->
-            val values = (2..5).map { number(m.groupValues[it]) ?: return@mapNotNull null }
-            val no = m.groupValues[1].toIntOrNull() ?: return@mapNotNull null
-            LoanDocumentScheduleRow(no, values[0], values[1], values[2], values[3])
+        val hasScheduleRateColumn = Regex("""(?i)(?:interest\\s+rate|rate\\s*\\(%\\))""").containsMatchIn(scheduleText.take(1800))
+        val rowPattern = Regex("""(?m)^\\s*(\\d{1,3})\\s+((?:[0-9][0-9,]*(?:\\.[0-9]{1,4})?\\s+){3,4}[0-9][0-9,]*(?:\\.[0-9]{1,4})?)\\s*$""")
+        val rows = rowPattern.findAll(scheduleText).mapNotNull { match ->
+            val no = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
+            val values = amountToken.findAll(match.groupValues[2]).mapNotNull { number(it.groupValues[1]) }.toList()
+            if (hasScheduleRateColumn && values.size == 5) {
+                val rate = values[1].toDouble()
+                if (rate !in 0.0..100.0) return@mapNotNull null
+                LoanDocumentScheduleRow(no, values[0], values[2], values[3], values[4], rate)
+            } else if (!hasScheduleRateColumn && values.size == 4) {
+                LoanDocumentScheduleRow(no, values[0], values[1], values[2], values[3])
+            } else null
         }.toList()
 
         val warnings = mutableListOf<String>()
