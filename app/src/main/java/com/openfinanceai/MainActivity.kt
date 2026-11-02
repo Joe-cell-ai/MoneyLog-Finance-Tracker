@@ -4839,16 +4839,19 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     val actualStatementBalance = statementOutstanding.toDoubleOrNull()
     val scheduleBasedOutstanding = importedScheduleRows.takeIf { rows -> rows.isNotEmpty() && rows.map { it.installmentNumber } == (1..rows.size).toList() }?.let { rows ->
         when {
-            paid == 0 -> rows.first().openingPrincipal.toDouble()
-            paid in 1..rows.size -> (rows[paid - 1].openingPrincipal - rows[paid - 1].principal).coerceAtLeast(0L).toDouble()
+            paid == 0 -> rows.first().openingPrincipal
+            paid in 1..rows.size -> (rows[paid - 1].openingPrincipal - rows[paid - 1].principal).coerceAtLeast(0L)
             else -> null
         }
     }
-    val currentOutstanding = actualStatementBalance?.times(100.0) ?: scheduleBasedOutstanding ?: calculatedOutstanding * 100.0
+    val currentOutstandingPaise = if (actualStatementBalance != null) LoanMoney.parsePaise(statementOutstanding) ?: 0L
+        else scheduleBasedOutstanding ?: (LoanMoney.parsePaise(calculatedOutstanding.toString()) ?: 0L)
     val completePdfSchedule = importedScheduleRows.takeIf { rows -> rows.size == total && rows.map { it.installmentNumber } == (1..rows.size).toList() }
     val remainingPdfRows = completePdfSchedule?.drop(paid.coerceIn(0, completePdfSchedule.size))
-    val remainingPayments = remainingPdfRows?.let { rows -> LoanMoney.sumPaise(rows.map { it.installment }).toDouble() } ?: (monthly * 100.0 * remainingMonths)
-    val remainingInterest = remainingPdfRows?.let { rows -> LoanMoney.sumPaise(rows.map { it.interest }).toDouble() } ?: (remainingPayments - currentOutstanding).coerceAtLeast(0.0)
+    val remainingPaymentsPaise = remainingPdfRows?.let { rows -> LoanMoney.sumPaise(rows.map { it.installment }) }
+        ?: (LoanMoney.parsePaise(monthly.toString()) ?: 0L).let { Math.multiplyExact(it, remainingMonths.toLong()) }
+    val remainingInterestPaise = remainingPdfRows?.let { rows -> LoanMoney.sumPaise(rows.map { it.interest }) }
+        ?: (remainingPaymentsPaise - currentOutstandingPaise).coerceAtLeast(0L)
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -4952,10 +4955,10 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Text("Estimated loan summary", color = Green, fontWeight = FontWeight.Bold)
                                 Text("Original principal: ${Money.format(kotlin.math.round(originalPrincipal).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
-                                Text("Outstanding principal: ${LoanMoney.formatPaise(kotlin.math.round(currentOutstanding).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
+                                Text("Outstanding principal: ${LoanMoney.formatPaise(currentOutstandingPaise)}", color = Ink, fontWeight = FontWeight.SemiBold)
                                 Text("EMIs remaining: $remainingMonths", color = Ink)
-                                Text("Total remaining EMI payments: ${LoanMoney.formatPaise(kotlin.math.round(remainingPayments).toLong())}", color = Ink)
-                                Text("${if (remainingPdfRows != null) "Remaining interest from PDF" else "Estimated remaining interest"}: ${LoanMoney.formatPaise(kotlin.math.round(remainingInterest).toLong())}", color = Ink)
+                                Text("Total remaining EMI payments: ${LoanMoney.formatPaise(remainingPaymentsPaise)}", color = Ink)
+                                Text("${if (remainingPdfRows != null) "Remaining interest from PDF" else "Estimated remaining interest"}: ${LoanMoney.formatPaise(remainingInterestPaise)}", color = Ink)
                                 Text(if (actualStatementBalance != null) "Outstanding balance uses the imported statement value; verify its date." else if (scheduleBasedOutstanding != null) "Outstanding principal is derived from the lender's schedule and the paid-installment count above." else "Outstanding balance is an estimate for a fixed-rate reducing-balance loan.", color = Muted, fontSize = 10.sp)
                             }
                         }
@@ -4967,7 +4970,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     Button(onClick = {
                         val lenderName = lender.trim()
                         val original = kotlin.math.round(originalPrincipal).toLong()
-                        val balance = kotlin.math.round(currentOutstanding / 100.0).toLong()
+                        val balance = currentOutstandingPaise / 100L
                         val count = paid.toLong()
                         val monthlyEmi = kotlin.math.round(monthly).toLong()
                         if (lenderName.isBlank() || !validInputs || original <= 0L || balance < 0L || statementOutstanding.isNotBlank() && actualStatementBalance == null) {
