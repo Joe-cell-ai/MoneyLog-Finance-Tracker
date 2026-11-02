@@ -20,6 +20,10 @@ internal data class LoanDocumentExtraction(
     val processingFee: Long? = null,
     val totalInterest: Long? = null,
     val declaredTotalRepayment: Long? = null,
+    val netDisbursedAmount: Long? = null,
+    val prepaymentCharge: String? = null,
+    val foreclosureCharge: String? = null,
+    val bounceCharge: String? = null,
     val scheduleRows: List<LoanDocumentScheduleRow> = emptyList(),
     val illustrativeSchedule: Boolean = false,
     val warnings: List<String> = emptyList()
@@ -85,6 +89,17 @@ internal object LoanDocumentParser {
         val totalInterest = directAmount("""Total\s+Interest\s+Amount\s+to\s+be\s+charged[^\n]*\n\s*\d{1,3}\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Total\s+Interest\s+Amount\s+to\s+be\s+charged[^\n]*?([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
         val declaredTotal = directAmount("""Total\s+amount\s+to\s+be\s+paid\s+by\s+the\s+borrower.{0,250}?\(in\s+Rupees\)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
+        val netDisbursed = directAmount("""Net\s+Disbursed\s+amount\s*\(INR\)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
+        val prepaymentLabelIndex = lines.indexOfFirst { Regex("""Prepayment\s+Charges\s*\(INR\)""", RegexOption.IGNORE_CASE).containsMatchIn(it) }
+        val prepaymentCharge = if (prepaymentLabelIndex >= 0) {
+            val valueLine = lines.take(prepaymentLabelIndex).takeLast(3).lastOrNull { Regex("""\bNA\b|[0-9][0-9,]*(?:\.[0-9]{1,2})?""", RegexOption.IGNORE_CASE).containsMatchIn(it) }
+                ?: lines.drop(prepaymentLabelIndex + 1).firstOrNull { it.isNotBlank() }
+            valueLine?.let { Regex("""\bNA\b|[0-9][0-9,]*(?:\.[0-9]{1,2})?""", RegexOption.IGNORE_CASE).find(it)?.value }
+        } else null
+        val foreclosureCharge = Regex("""(?im)^\s*Foreclosure\s+charges,?\s*if\s+applicable\s*(.+?)\s*$""")
+            .find(text)?.groupValues?.get(1)?.trim()
+        val bounceCharge = Regex("""(?im)^\s*Bounce\s+Charges\s+(.+?)\s*$""")
+            .find(text)?.groupValues?.get(1)?.trim()
 
         val scheduleHeader = Regex("""(?i)Illustrative\s+Repayment\s+Schedule""").find(text)
         val scheduleText = scheduleHeader?.let { text.substring(it.range.last + 1) }.orEmpty()
@@ -142,6 +157,9 @@ internal object LoanDocumentParser {
                 warnings += "The first instalment includes an extra amount equal to the processing fee; the document does not explain whether this fee is collected with that instalment."
             }
         }
+        if (prepaymentCharge.equals("NA", ignoreCase = true) && !foreclosureCharge.isNullOrBlank()) {
+            warnings += "The sanction section lists prepayment charges as NA, while the KFS lists foreclosure charges as " + foreclosureCharge + "; confirm which term applies."
+        }
         if (principal != null && totalInterest != null && processingFee != null && declaredTotal != null) {
             val calculated = principal + totalInterest + processingFee
             if (calculated != declaredTotal) {
@@ -163,6 +181,10 @@ internal object LoanDocumentParser {
             processingFee = processingFee,
             totalInterest = totalInterest,
             declaredTotalRepayment = declaredTotal,
+            netDisbursedAmount = netDisbursed,
+            prepaymentCharge = prepaymentCharge,
+            foreclosureCharge = foreclosureCharge,
+            bounceCharge = bounceCharge,
             scheduleRows = rows,
             illustrativeSchedule = illustrative,
             warnings = warnings.distinct()
