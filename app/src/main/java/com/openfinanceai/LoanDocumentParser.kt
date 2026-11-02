@@ -178,7 +178,18 @@ internal object LoanDocumentParser {
             if (value.stripTrailingZeros().scale() > 0) null else value.longValueExact()
         }.getOrNull()
         val hasSubRupeeScheduleValues = rowPattern.findAll(scheduleText).any { match ->
-            Regex("""[0-9][0-9,]*\.[0-9]*[1-9][0-9]*""").containsMatchIn(match.groupValues[2])
+            val rowTokens = Regex("""[0-9][0-9,]*(?:\.[0-9]{1,4})?""")
+                .findAll(match.groupValues[2]).map { it.value }.toList()
+            // A rate such as 12.5% is not a monetary value. Exclude the rate
+            // column before checking whether the schedule needs paise precision.
+            val monetaryTokens = if (hasScheduleRateColumn && rowTokens.size == 5) {
+                listOf(rowTokens[0], rowTokens[2], rowTokens[3], rowTokens[4])
+            } else rowTokens
+            monetaryTokens.any { token ->
+                runCatching {
+                    java.math.BigDecimal(token.replace(",", "")).stripTrailingZeros().scale() > 0
+                }.getOrDefault(false)
+            }
         }
         val rows = if (hasSubRupeeScheduleValues) emptyList() else rowPattern.findAll(scheduleText).mapNotNull { match ->
             val no = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
