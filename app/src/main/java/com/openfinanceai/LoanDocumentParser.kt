@@ -102,7 +102,7 @@ internal object LoanDocumentParser {
         val foreclosureCharge = Regex("""(?im)^\s*(?:\([ivx]+\)\s*)?Foreclosure\s+charges,?\s*if\s+applicable\s*(.+?)\s*$""")
             .find(text)?.groupValues?.get(1)?.trim()
         val bounceCharge = run {
-            val index = lines.indexOfFirst { Regex("""^\s*Bounce\s+Charges?\b""", RegexOption.IGNORE_CASE).containsMatchIn(it) }
+            val index = lines.indexOfLast { Regex("""^\s*Bounce\s+Charges?\b""", RegexOption.IGNORE_CASE).containsMatchIn(it) }
             if (index < 0) null else {
                 val first = lines[index].replace(Regex("""^.*?Bounce\s+Charges?\b""", RegexOption.IGNORE_CASE), "").trim()
                 val details = mutableListOf<String>()
