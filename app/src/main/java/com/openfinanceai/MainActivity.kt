@@ -4427,7 +4427,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         }
                         val extractedLabelCount = Regex("(?i)\\b(?:loan\\s+amount|principal\\s+amount|amount\\s+of\\s+loan|emi|equated\\s+monthly|interest\\s+rate|tenure|loan\\s+term|borrower|applicant|repayment|sanctioned\\s+amount|agreement\\s+number)\\b").findAll(extracted).count()
                         // Scanned PDFs can have short text layers containing only logos or page footers.
-                        val hasReadableScheduleRows = Regex("(?m)^\\s*\\d{1,3}\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s*$").containsMatchIn(extracted)
+                        val hasReadableScheduleRows = Regex("(?m)^\\s*\\d{1,3}\\s+(?:[0-9][0-9,]*(?:\\.[0-9]{1,4})?\\s+){3,4}[0-9][0-9,]*(?:\\.[0-9]{1,4})?\\s*$").containsMatchIn(extracted)
                         if (extracted.trim().length < 40 || extractedLabelCount < 2 || !hasReadableScheduleRows) {
                             val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
                                 ?: throw IllegalArgumentException("Could not render this PDF for OCR.")
