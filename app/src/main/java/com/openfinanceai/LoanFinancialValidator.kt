@@ -39,23 +39,26 @@ internal object LoanFinancialValidator {
         if (rows.map { it.installmentNumber } != (1..rows.size).toList()) errors += "Instalment numbers are missing, duplicated or out of order."
         if (declaredTenure != null && rows.size != declaredTenure) errors += "Extracted ${rows.size} rows but the document declares $declaredTenure instalments."
         if (rows.any { it.installmentAmount <= 0L || it.principal < 0L || it.interest < 0L }) errors += "A row contains a zero/negative instalment or negative principal/interest."
+        fun differs(a: Long, b: Long): Boolean =
+            java.math.BigInteger.valueOf(a).subtract(java.math.BigInteger.valueOf(b)).abs()
+                .compareTo(java.math.BigInteger.valueOf(tolerancePaise.coerceAtLeast(0L))) > 0
         rows.forEachIndexed { index, row ->
             val componentTotal = runCatching { Math.addExact(row.principal, row.interest) }.getOrNull()
             val firstRowFeeExplainsDifference = index == 0 && processingFee != null && componentTotal != null &&
-                runCatching { Math.addExact(componentTotal, processingFee) }.getOrNull() == row.installmentAmount
-            if (componentTotal == null || (componentTotal != row.installmentAmount && !firstRowFeeExplainsDifference)) {
+                runCatching { Math.addExact(componentTotal, processingFee) }.getOrNull()?.let { !differs(it, row.installmentAmount) } == true
+            if (componentTotal == null || (differs(componentTotal, row.installmentAmount) && !firstRowFeeExplainsDifference)) {
                 errors += "Instalment ${row.installmentNumber}: principal + interest does not equal the instalment amount."
             } else if (firstRowFeeExplainsDifference) {
                 warnings += "Instalment 1 includes the separately stated processing fee; principal and interest remain unchanged."
             }
             if (row.openingBalance != null && row.closingBalance != null &&
-                runCatching { Math.subtractExact(row.openingBalance, row.principal) }.getOrNull() != row.closingBalance) {
+                runCatching { Math.subtractExact(row.openingBalance, row.principal) }.getOrNull()?.let { differs(it, row.closingBalance) } != false) {
                 errors += "Instalment ${row.installmentNumber}: opening balance minus principal does not equal closing balance."
             }
             if (index > 0) {
                 val previous = rows[index - 1]
                 if (previous.closingBalance != null && row.openingBalance != null &&
-                    previous.closingBalance != row.openingBalance) {
+                    differs(previous.closingBalance, row.openingBalance)) {
                     errors += "Balance continuity breaks between instalments ${previous.installmentNumber} and ${row.installmentNumber}."
                 }
                 if (previous.dueDate != null && row.dueDate != null && row.dueDate <= previous.dueDate) {
@@ -66,9 +69,6 @@ internal object LoanFinancialValidator {
         val principal = runCatching { LoanMoney.sumPaise(rows.map { it.principal }) }.getOrElse { errors += "Principal total exceeds supported exact-money range."; 0L }
         val interest = runCatching { LoanMoney.sumPaise(rows.map { it.interest }) }.getOrElse { errors += "Interest total exceeds supported exact-money range."; 0L }
         val repayment = runCatching { LoanMoney.sumPaise(rows.map { it.installmentAmount }) }.getOrElse { errors += "Repayment total exceeds supported exact-money range."; 0L }
-        fun differs(a: Long, b: Long): Boolean =
-            java.math.BigInteger.valueOf(a).subtract(java.math.BigInteger.valueOf(b)).abs()
-                .compareTo(java.math.BigInteger.valueOf(tolerancePaise.coerceAtLeast(0L))) > 0
         if (declaredPrincipal != null && differs(principal, declaredPrincipal)) errors += "Principal total $principal does not reconcile with declared principal $declaredPrincipal."
         if (declaredInterest != null && differs(interest, declaredInterest)) errors += "Interest total $interest does not reconcile with declared interest $declaredInterest."
         if (declaredRepayment != null && differs(repayment, declaredRepayment)) {
