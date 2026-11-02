@@ -4398,6 +4398,19 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
             pdfBusy = true
             error = ""
             saved = false
+            startDate = ""
+            importedScheduleRows = emptyList()
+            importedWarnings = emptyList()
+            importedApr = null
+            importedProcessingFee = null
+            importedTotalInterest = null
+            importedDeclaredTotal = null
+            importedNetDisbursed = null
+            importedDocumentLoanId = null
+            importedPrepaymentCharge = null
+            importedForeclosureCharge = null
+            importedBounceCharge = null
+            importedIllustrative = false
             pdfImportScope.launch {
                 val result = runCatching {
                     withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -4626,7 +4639,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     importedWarnings = fields.optJSONArray("auditWarnings")?.let { array -> (0 until array.length()).map { array.getString(it) } } ?: emptyList()
                     importedScheduleRows = fields.optJSONArray("auditScheduleRows")?.let { array ->
                         (0 until array.length()).map { index -> array.getJSONObject(index).let { row ->
-                            LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"))
+                            LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null)
                         } }
                     } ?: emptyList()
                     if (importedScheduleRows.isNotEmpty() && runCatching { java.time.LocalDate.parse(startDate) }.isFailure) {
