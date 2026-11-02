@@ -4137,8 +4137,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
             }.getOrNull()
         }
     } else null
-    val importedEmiPaise = importedSchedule.firstOrNull()?.second
-        ?: if (!loanDocumentMetadata.isNull("emi")) loanDocumentMetadata.optLong("emi") else null
+    val importedEmiPaise = if (!loanDocumentMetadata.isNull("emi")) loanDocumentMetadata.optLong("emi")
+        else importedSchedule.firstOrNull()?.second
     var pdfMessage by remember(loan.lender) { mutableStateOf("") }
     var pdfBusy by remember(loan.lender) { mutableStateOf(false) }
     val loanPdfScope = rememberCoroutineScope()
@@ -4766,13 +4766,22 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                 declaredTenure = auditedDocument.tenureMonths,
                                 declaredPrincipal = auditedDocument.principal,
                                 declaredInterest = auditedDocument.totalInterest,
-                                declaredRepayment = auditedDocument.declaredTotalRepayment,
+                                // An illustrative KFS may intentionally disagree with the final
+                                // disbursement schedule. Preserve and disclose that mismatch;
+                                // do not certify its declared repayment total as reconciled.
+                                declaredRepayment = auditedDocument.declaredTotalRepayment.takeUnless { auditedDocument.illustrativeSchedule },
                                 processingFee = auditedDocument.processingFee
                             )
                             if (!validation.accepted) {
                                 throw IllegalArgumentException("PDF schedule failed exact financial reconciliation. Nothing was imported: " + validation.errors.joinToString(" "))
                             }
                             auditValidationWarnings += validation.warnings
+                            if (auditedDocument.illustrativeSchedule && auditedDocument.declaredTotalRepayment != null) {
+                                val scheduleTotal = LoanMoney.sumPaise(auditedDocument.scheduleRows.map { it.installment })
+                                if (scheduleTotal != auditedDocument.declaredTotalRepayment) {
+                                    auditValidationWarnings += "Illustrative schedule instalments total ${LoanMoney.formatPaise(scheduleTotal)}, while the KFS declares ${LoanMoney.formatPaise(auditedDocument.declaredTotalRepayment)}. Both source figures are preserved; this is not a verified final repayment schedule."
+                                }
+                            }
                         }
                         // Use the document's own section headings rather than assuming that values
                         // always appear on page 1. PDFTextStripper separates pages with form feeds.
