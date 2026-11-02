@@ -55,6 +55,9 @@ internal object LoanDocumentParser {
         fun directAmount(pattern: String): Long? =
             Regex(pattern, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                 .find(text)?.groupValues?.getOrNull(1)?.let(::number)
+        fun directDecimal(pattern: String): Double? =
+            Regex(pattern, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                .find(text)?.groupValues?.getOrNull(1)?.replace(",", "")?.toDoubleOrNull()
 
         val lender = Regex("""(?im)^\s*Lender\s*:\s*(.+?)\s*$""").find(text)?.groupValues?.get(1)?.trim()
             ?: Regex("""(?im)^Name of the Regulated Entity\s*:\s*(.+?)\s*$""").find(text)?.groupValues?.get(1)?.trim()
@@ -65,10 +68,10 @@ internal object LoanDocumentParser {
         val emi = amountOnLine(Regex("""Amount\s+of\s+EMI\s+Payable"""))
             ?: Regex("""(?is)Amount\s+of\s+each\s+EPI.{0,350}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+nos\.?\s+of\s+EPIs""")
                 .find(text)?.groupValues?.get(1)?.let(::number)
-        val fixedRate = directAmount("""Fixed\s+Rate\s+of\s+Interest\s*[:\-]?\s*([0-9]+(?:\.[0-9]{1,4})?)""")
-            ?: directAmount("""Interest\s+Rate\s+per\s+annum\s*\(%\)\s*([0-9]+(?:\.[0-9]{1,4})?)""")
-        val apr = directAmount("""Annual\s+Percentage\s+Rate\s*\(APR\)\s*\(%\)\s*([0-9]+(?:\.[0-9]{1,4})?)""")
-            ?: directAmount("""Annual\s+Percentage\s+Rate\s*[:(].{0,40}?([0-9]+(?:\.[0-9]{1,4})?)""")
+        val fixedRate = directDecimal("""Fixed\s+Rate\s+of\s+Interest\s*[:\-]?\s*([0-9]+(?:\.[0-9]{1,4})?)""")
+            ?: directDecimal("""Interest\s+Rate\s+per\s+annum\s*\(%\)\s*([0-9]+(?:\.[0-9]{1,4})?)""")
+        val apr = directDecimal("""Annual\s+Percentage\s+Rate\s*\(APR\)\s*\(%\)\s*([0-9]+(?:\.[0-9]{1,4})?)""")
+            ?: directDecimal("""Annual\s+Percentage\s+Rate\s*[:(].{0,40}?([0-9]+(?:\.[0-9]{1,4})?)""")
         val tenure = directAmount("""Tenure\s*\(in\s+months\)\s*([0-9]{1,3})""")
             ?: directAmount("""Loan\s+term\s*\(months\)\s*([0-9]{1,3})""")
         val repaymentStartDate = Regex("""(?i)Commencement\s+of\s+repayments?.{0,250}?(\d{4}-\d{2}-\d{2})""", RegexOption.DOT_MATCHES_ALL)
@@ -137,8 +140,8 @@ internal object LoanDocumentParser {
             loanNumber = loanNumber,
             principal = principal,
             emi = emi,
-            annualInterestRate = fixedRate?.toDouble(),
-            apr = apr?.toDouble(),
+            annualInterestRate = fixedRate,
+            apr = apr,
             tenureMonths = tenure?.toInt(),
             repaymentStartDate = repaymentStartDate,
             processingFee = processingFee,
