@@ -355,6 +355,27 @@ class LoanDocumentParserTest {
         assertTrue(result.warnings.none { it.contains("paise-level decimal amounts") })
     }
 
+    @Test fun illustrativeFinnableRowsValidateWithoutCertifyingConflictingDeclaredTotal() {
+        val result = LoanDocumentParser.parse(finnableKfs)
+        assertTrue(result.illustrativeSchedule)
+        val rows = result.scheduleRows.map { row ->
+            FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal,
+                row.installment, row.principal, row.interest, row.closingPrincipal)
+        }
+        val validation = LoanFinancialValidator.validate(
+            rows,
+            declaredTenure = result.tenureMonths,
+            declaredPrincipal = result.principal,
+            declaredInterest = result.totalInterest,
+            declaredRepayment = null,
+            processingFee = result.processingFee
+        )
+        assertTrue(validation.errors.joinToString("\n"), validation.accepted)
+        assertTrue(validation.warnings.any { it.contains("processing fee") })
+        assertEquals((33177L * 100L), validation.installmentTotal)
+        assertEquals((32980L * 100L), result.declaredTotalRepayment)
+    }
+
     @Test fun parsesAllSixtyRowsFromUploadedYesBankRepaymentStatement() {
         val statement = """
             Corporate & Registered oﬃce: YES BANK Limited, YES BANK House, Off Western Express Highway
