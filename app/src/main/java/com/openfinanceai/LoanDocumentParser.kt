@@ -145,11 +145,19 @@ internal object LoanDocumentParser {
             }
         }
 
-        val scheduleHeader = Regex("""(?im)^\s*(?:[0-9]{1,2}\s+)?(?:Illustrative\s+)?Repayment\s+Schedule\s*$""").find(text)
+        val scheduleHeader = Regex("""(?im)^\s*(?:[0-9]{1,2}\s+)?(?:Illustrative\s+)?(?:Repayment\s+Schedule|Amortization\s+(?:Timeline(?:\s+Statement)?|Schedule))\s*$""").find(text)
         val scheduleText = scheduleHeader?.let { text.substring(it.range.last + 1) }.orEmpty()
             .replace("₹", "").replace(Regex("""(?i)\bRs\.?\s*"""), "")
         val scheduleHeaderLines = scheduleText.lines().take(30).joinToString(" ")
         val hasScheduleRateColumn = Regex("""(?i)(?:interest\s+rate|rate\s+of\s+interest|rate\s*\(%\)|\bROI\b)""").containsMatchIn(scheduleHeaderLines)
+        // Column order differs between lenders. Read the component order from the table header
+        // instead of assuming every lender prints Principal before Interest.
+        val componentHeader = Regex("""(?i)(?:installment|instalment|emi|epi)[^\n]*""")
+            .find(scheduleHeaderLines)?.value.orEmpty()
+        val principalColumnIndex = componentHeader.indexOf("principal", ignoreCase = true)
+        val interestColumnIndex = componentHeader.indexOf("interest", ignoreCase = true)
+        val principalBeforeInterest = principalColumnIndex < 0 || interestColumnIndex < 0 ||
+            principalColumnIndex < interestColumnIndex
         val scheduleDatePattern = Regex("""(?i)\b(\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}[- ](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[- ,]+\d{2,4})\b""")
         fun normalizedScheduleDate(raw: String): String? {
             val value = raw.trim()
@@ -180,8 +188,8 @@ internal object LoanDocumentParser {
                 val amounts = tokens.map { number(it) ?: return@mapNotNull null }
                 val opening = amounts[0]
                 val installment = amounts[1]
-                val principalPaid = amounts[2]
-                val interestPaid = amounts[3]
+                val principalPaid = if (principalBeforeInterest) amounts[2] else amounts[3]
+                val interestPaid = if (principalBeforeInterest) amounts[3] else amounts[2]
                 val closing = amounts[4]
                 if (opening - principalPaid != closing || principalPaid + interestPaid != installment) return@mapNotNull null
                 LoanDocumentScheduleRow(no, opening, principalPaid, interestPaid, installment, null, dueDate, closing)
