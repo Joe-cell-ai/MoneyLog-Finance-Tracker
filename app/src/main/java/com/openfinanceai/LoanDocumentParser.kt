@@ -37,7 +37,8 @@ internal object LoanDocumentParser {
     private val amountToken = Regex("""([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
 
     fun parse(sourceText: String): LoanDocumentExtraction {
-        val text = sourceText.replace('\u00A0', ' ').replace('\u200B', ' ')\n            .replace('\uFB03', 'ffi').replace('\uFB01', 'fi').replace('\uFB02', 'fl').replace('\uFB00', 'ff')
+        val text = sourceText.replace('\u00A0', ' ').replace('\u200B', ' ')
+            .replace('\uFB03', 'ffi').replace('\uFB01', 'fi').replace('\uFB02', 'fl').replace('\uFB00', 'ff')
         val lines = text.lines().map { it.trim().replace(Regex("""[ \t]+"""), " ") }
         fun number(raw: String?): Long? = raw?.replace(",", "")?.toDoubleOrNull()
             ?.takeIf { it >= 0.0 && it <= Long.MAX_VALUE.toDouble() }
@@ -77,7 +78,8 @@ internal object LoanDocumentParser {
             ?: directAmount("""Sanctioned\s+Loan\s+amount\s*\(in\s+Rupees\)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Loan\s+Amount\s*\(\s*INR\s*\)\s*:\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Amount\s+Financed\s*:\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
-        val emi = amountOnLine(Regex("""Amount\s+of\s+EMI\s+Payable"""))\n            ?: amountOnLine(Regex("""EMI\s+Amount"""))
+        val emi = amountOnLine(Regex("""Amount\s+of\s+EMI\s+Payable"""))
+            ?: amountOnLine(Regex("""EMI\s+Amount"""))
             ?: Regex("""(?is)Amount\s+of\s+each\s+EPI.{0,350}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+nos\.?\s+of\s+EPIs""")
                 .find(text)?.groupValues?.get(1)?.let(::number)
         val fixedRate = directDecimal("""Fixed\s+Rate\s+of\s+Interest\s*[:\-]?\s*([0-9]+(?:\.[0-9]{1,4})?)""")
