@@ -39,7 +39,7 @@ internal object LoanDocumentParser {
             for (i in lines.indices) {
                 val match = label.find(lines[i]) ?: continue
                 val tail = lines[i].substring(match.range.last + 1)
-                amountToken.find(tail)?.let { return number(it.groupValues[1]) }
+                amountToken.findAll(tail).lastOrNull()?.let { return number(it.groupValues[1]) }
                 val standalone = Regex("""^(?:₹|Rs\.?|INR)?\s*[0-9][0-9,]*(?:\.[0-9]{1,2})?\s*$""", RegexOption.IGNORE_CASE)
                 val previous = lines.take(i).lastOrNull { it.isNotBlank() }
                 if (previous != null && standalone.matches(previous)) {
