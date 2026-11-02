@@ -3985,7 +3985,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         runCatching {
             val rows = loanDocumentMetadata.optJSONArray("scheduleRows") ?: JSONArray()
             (0 until rows.length()).map { index -> rows.getJSONObject(index).let { row ->
-                LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null)
+                LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null, if (row.has("dueDate") && !row.isNull("dueDate")) row.optString("dueDate") else null)
             } }
         }.getOrDefault(emptyList())
     }
@@ -4639,10 +4639,11 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     importedWarnings = fields.optJSONArray("auditWarnings")?.let { array -> (0 until array.length()).map { array.getString(it) } } ?: emptyList()
                     importedScheduleRows = fields.optJSONArray("auditScheduleRows")?.let { array ->
                         (0 until array.length()).map { index -> array.getJSONObject(index).let { row ->
-                            LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null)
+                            LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null, if (row.has("dueDate") && !row.isNull("dueDate")) row.optString("dueDate") else null)
                         } }
                     } ?: emptyList()
-                    if (importedScheduleRows.isNotEmpty() && runCatching { java.time.LocalDate.parse(startDate) }.isFailure) {
+                    if (startDate.isBlank()) importedScheduleRows.firstOrNull()?.dueDate?.let { startDate = it }
+                    if (importedScheduleRows.isNotEmpty() && runCatching { java.time.LocalDate.parse(startDate) }.isFailure && importedScheduleRows.any { it.dueDate.isNullOrBlank() }) {
                         importedWarnings = (importedWarnings + "The PDF contains monthly repayment rows but no reliable first repayment date. Enter the exact first due date from the lender document before saving the monthly schedule.").distinct()
                     }
                     warningsAcknowledged = false
@@ -4840,7 +4841,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                 importedScheduleRows.forEach { row -> savedRows.put(JSONObject().put("number", row.installmentNumber)
                                     .put("openingPrincipal", row.openingPrincipal).put("principal", row.principal)
                                     .put("interest", row.interest).put("installment", row.installment)
-                                    .put("annualRate", row.annualRate ?: JSONObject.NULL)) }
+                                    .put("annualRate", row.annualRate ?: JSONObject.NULL).put("dueDate", row.dueDate ?: JSONObject.NULL)) }
                                 val metadata = JSONObject().put("apr", importedApr ?: JSONObject.NULL)
                                     .put("processingFee", importedProcessingFee ?: JSONObject.NULL)
                                     .put("totalInterest", importedTotalInterest ?: JSONObject.NULL)
