@@ -14,9 +14,24 @@ class LoanFinancialValidatorTest {
         )
         val result = LoanFinancialValidator.validate(rows, 3, 10000, 900, 10900)
         assertTrue(result.accepted)
-        assertEquals(10000L, result.principalTotal)
-        assertEquals(900L, result.interestTotal)
-        assertEquals(10900L, result.installmentTotal)
+        assertEquals((10000L * 100L), result.principalTotal)
+        assertEquals((900L * 100L), result.interestTotal)
+        assertEquals((10900L * 100L), result.installmentTotal)
+    }
+
+    @Test fun validatesFractionalPaiseWithoutRupeeToleranceOrRounding() {
+        val rows = listOf(
+            FinancialScheduleRow(1, "2026-01-04", 1000000, 125000, 688062, 561938, 311938),
+            FinancialScheduleRow(2, "2026-02-04", 311938, 125000, 694943, 555057, 0)
+        )
+        val result = LoanFinancialValidator.validate(
+            rows, declaredTenure = 2, declaredPrincipal = 1383005,
+            declaredInterest = 1116995, declaredRepayment = 2500000
+        )
+        assertTrue(result.accepted)
+        assertEquals(1383005L, result.principalTotal)
+        assertEquals(1116995L, result.interestTotal)
+        assertEquals(2500000L, result.installmentTotal)
     }
 
     @Test fun rejectsPrincipalInterestMismatch() {
