@@ -78,6 +78,8 @@ internal object LoanDocumentParser {
             .find(text)?.groupValues?.get(1)
             ?: Regex("""(?i)(?:repayment|first\s*EMI)\s*(?:start|commencement)?\s*date\s*[:\-]?\s*(\d{4}-\d{2}-\d{2})""")
                 .find(text)?.groupValues?.get(1)
+            ?: Regex("""(?i)Monthly\s+\d{1,3}\s+[0-9][0-9,]*(?:\.[0-9]{1,2})?\s+(\d{4}-\d{2}-\d{2})""")
+                .find(text)?.groupValues?.get(1)
         val processingFee = amountOnLine(Regex("""Processing\s+Fees?\s*\(INR\)"""))
             ?: directAmount("""Processing\s+fees?.{0,100}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
         val totalInterest = directAmount("""Total\s+Interest\s+Amount\s+to\s+be\s+charged[^\n]*\n\s*\d{1,3}\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
