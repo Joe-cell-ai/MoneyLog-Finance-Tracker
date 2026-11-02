@@ -4122,6 +4122,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                         if (!loanDocumentMetadata.isNull("apr")) LoanOverviewRow("Document APR", loanDocumentMetadata.optDouble("apr").toString() + "%")
                         if (!loanDocumentMetadata.isNull("processingFee")) LoanOverviewRow("Document processing fee", Money.format(loanDocumentMetadata.optLong("processingFee")))
                         if (!loanDocumentMetadata.isNull("totalInterest")) LoanOverviewRow("Document total interest", Money.format(loanDocumentMetadata.optLong("totalInterest")))
+                        if (!loanDocumentMetadata.isNull("declaredTotalRepayment")) LoanOverviewRow("Document-declared total repayment", Money.format(loanDocumentMetadata.optLong("declaredTotalRepayment")))
                         if (importedDocumentBreakdown.isNotEmpty()) {
                             HorizontalDivider(color = page)
                             Text("Repayment breakdown extracted from PDF", color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
