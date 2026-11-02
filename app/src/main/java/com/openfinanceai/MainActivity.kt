@@ -4004,7 +4004,13 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     }
                 }
                 saved.put("moneyUnit", "PAISE")
-                schedulePrefs.edit().putString("loan_document_metadata_${loan.lender}", saved.toString()).apply()
+                val migrationEditor = schedulePrefs.edit()
+                schedulePrefs.all.forEach { (key, value) ->
+                    if (key.startsWith("emi_amount_${loan.lender}_") && value is Long) {
+                        migrationEditor.putLong(key, LoanMoney.rupeesToPaise(value))
+                    }
+                }
+                migrationEditor.putString("loan_document_metadata_${loan.lender}", saved.toString()).apply()
             }
             saved
         }.getOrDefault(JSONObject()))
@@ -4948,7 +4954,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Text("Estimated loan summary", color = Green, fontWeight = FontWeight.Bold)
                                 Text("Original principal: ${Money.format(kotlin.math.round(originalPrincipal).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
-                                Text("Outstanding principal: ${Money.format(kotlin.math.round(currentOutstanding).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
+                                Text("Outstanding principal: ${LoanMoney.formatPaise(kotlin.math.round(currentOutstanding).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
                                 Text("EMIs remaining: $remainingMonths", color = Ink)
                                 Text("Total remaining EMI payments: ${LoanMoney.formatPaise(kotlin.math.round(remainingPayments).toLong())}", color = Ink)
                                 Text("${if (remainingPdfRows != null) "Remaining interest from PDF" else "Estimated remaining interest"}: ${LoanMoney.formatPaise(kotlin.math.round(remainingInterest).toLong())}", color = Ink)
