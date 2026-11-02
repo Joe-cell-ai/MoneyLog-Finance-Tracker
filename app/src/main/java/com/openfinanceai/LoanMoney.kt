@@ -38,6 +38,8 @@ internal object LoanMoney {
         return paise / PAISE_PER_RUPEE
     }
 
+    fun decimalString(paise: Long): String = BigDecimal.valueOf(paise, 2).toPlainString()
+
     fun formatPaise(paise: Long): String {
         val amount = BigDecimal.valueOf(paise, 2)
         return NumberFormat.getCurrencyInstance(Locale("en", "IN")).apply {
