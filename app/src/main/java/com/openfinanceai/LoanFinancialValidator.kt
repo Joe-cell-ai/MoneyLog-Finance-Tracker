@@ -41,8 +41,12 @@ internal object LoanFinancialValidator {
         if (rows.any { it.installmentAmount <= 0L || it.principal < 0L || it.interest < 0L }) errors += "A row contains a zero/negative instalment or negative principal/interest."
         rows.forEachIndexed { index, row ->
             val componentTotal = runCatching { Math.addExact(row.principal, row.interest) }.getOrNull()
-            if (componentTotal == null || componentTotal != row.installmentAmount) {
+            val firstRowFeeExplainsDifference = index == 0 && processingFee != null && componentTotal != null &&
+                runCatching { Math.addExact(componentTotal, processingFee) }.getOrNull() == row.installmentAmount
+            if (componentTotal == null || (componentTotal != row.installmentAmount && !firstRowFeeExplainsDifference)) {
                 errors += "Instalment ${row.installmentNumber}: principal + interest does not equal the instalment amount."
+            } else if (firstRowFeeExplainsDifference) {
+                warnings += "Instalment 1 includes the separately stated processing fee; principal and interest remain unchanged."
             }
             if (row.openingBalance != null && row.closingBalance != null &&
                 runCatching { Math.subtractExact(row.openingBalance, row.principal) }.getOrNull() != row.closingBalance) {
