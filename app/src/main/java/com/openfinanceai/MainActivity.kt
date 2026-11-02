@@ -3641,6 +3641,19 @@ private fun parseScheduleDate(raw: String): java.time.LocalDate? {
     return null
 }
 
+internal fun calculateLoanEmi(principal: Double, annualRatePercent: Double, months: Int): Long? {
+    if (!principal.isFinite() || !annualRatePercent.isFinite() ||
+        principal <= 0.0 || annualRatePercent < 0.0 || months !in 1..600) return null
+    val monthlyRate = annualRatePercent / 1200.0
+    val emi = if (monthlyRate == 0.0) principal / months else {
+        val denominator = 1.0 - Math.pow(1.0 + monthlyRate, -months.toDouble())
+        if (denominator <= 0.0) return null
+        principal * monthlyRate / denominator
+    }
+    if (!emi.isFinite() || emi <= 0.0 || emi > Long.MAX_VALUE.toDouble()) return null
+    return kotlin.math.round(emi).toLong().coerceAtLeast(1L)
+}
+
 private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.LocalDate.now()): java.time.LocalDate? {
     val raw = due.trim()
     if (raw.isBlank() || raw.equals("Set due date", ignoreCase = true) || raw.equals("Not set", ignoreCase = true)) return null
@@ -3686,17 +3699,21 @@ private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.
 
 @Composable
 private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String) -> Unit) {
-    val firstDueDate = parseScheduleDate(loan.due) ?: runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due)
+    val firstDueDate = (parseScheduleDate(loan.due) ?: runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due))
+        ?.plusMonths(loan.paymentsMade.coerceAtLeast(0L))
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
     val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
-    // Generate the full contractual schedule, including paid installments. The payment count
-    // controls each row's status; it must not shrink the schedule itself to zero.
-    val scheduleMonths = if (loan.totalPayments in 1L..600L) loan.totalPayments.toInt() else 60
+    // The remaining schedule starts at today's outstanding principal and contains only
+    // installments not already counted as paid. This prevents past installments being counted twice.
+    val scheduleMonths = if (loan.totalPayments in 1L..600L)
+        (loan.totalPayments - loan.paymentsMade).coerceIn(0L, 600L).toInt()
+    else 60
     val schedule = (0 until scheduleMonths).map { index ->
-        val interest = scheduleBalance * monthlyRate
-        val principalPart = (loan.emi.toDouble() - interest).coerceAtLeast(0.0).coerceAtMost(scheduleBalance)
+        val interest = kotlin.math.round(scheduleBalance * monthlyRate).toLong()
+        val scheduledPayment = minOf(loan.emi, kotlin.math.ceil(scheduleBalance + interest).toLong())
+        val principalPart = (scheduledPayment - interest).coerceAtLeast(0L).coerceAtMost(scheduleBalance.toLong())
         val closingBalance = (scheduleBalance - principalPart).coerceAtLeast(0.0)
-        val row = Triple(interest.toLong(), principalPart.toLong(), closingBalance.toLong())
+        val row = Triple(interest, principalPart, closingBalance.toLong())
         scheduleBalance = closingBalance
         row
     }
@@ -3749,6 +3766,26 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 (0 until arr.length()).map { n -> arr.getJSONObject(n).getString("date") to arr.getJSONObject(n).getLong("amount") }
             }
         }.getOrDefault(emptyList()))
+    }
+    val totalPendingEmiAmount = if (importedSchedule.isNotEmpty()) {
+        importedSchedule.withIndex().sumOf { indexed ->
+            val (date, importedAmount) = indexed.value
+            val explicitPaid = schedulePrefs.getString("emi_status_${loan.lender}_${date}", null) == "Paid"
+            val countedPaid = indexed.index < loan.paymentsMade
+            if (explicitPaid || countedPaid) 0L
+            else schedulePrefs.getLong("emi_amount_${loan.lender}_${date}", importedAmount).coerceAtLeast(0L)
+        }
+    } else {
+        schedule.indices.sumOf { index ->
+            val date = firstDueDate?.plusMonths(index.toLong())
+                ?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+            val explicitPaid = date?.let { schedulePrefs.getString("emi_status_${loan.lender}_${it}", null) == "Paid" } == true
+            if (explicitPaid) 0L else {
+                val (interest, principalPart, _) = schedule[index]
+                val computedAmount = interest + principalPart
+                if (date == null) computedAmount else schedulePrefs.getLong("emi_amount_${loan.lender}_${date}", computedAmount).coerceAtLeast(0L)
+            }
+        }
     }
     var pdfMessage by remember(loan.lender) { mutableStateOf("") }
     var pdfBusy by remember(loan.lender) { mutableStateOf(false) }
@@ -3833,9 +3870,9 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     }
                     Box(Modifier.width(1.dp).height(42.dp).background(page))
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("TOTAL REPAYMENT*", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
+                        Text("TOTAL PENDING EMI", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
                         Spacer(Modifier.height(7.dp))
-                        Text(if (estimateValid) Money.format(totalRepaymentEstimate) else "—", color = forest, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
+                        Text(Money.format(totalPendingEmiAmount), color = forest, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
                     }
                 }
             }
@@ -4009,13 +4046,11 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 val installmentLabelOriginal = installmentLabel
                 val displayInstallmentLabel = schedulePrefs.getString("emi_rescheduled_${loan.lender}_${installmentLabelOriginal}", installmentLabelOriginal) ?: installmentLabelOriginal
                 val savedInstallmentStatus = schedulePrefs.getString("emi_status_${loan.lender}_${installmentLabelOriginal}", null)
-                val installmentAmount = schedulePrefs.getLong("emi_amount_${loan.lender}_${installmentLabelOriginal}", loan.emi)
+                val computedInstallmentAmount = interest + principalPart
+                val installmentAmount = schedulePrefs.getLong("emi_amount_${loan.lender}_${installmentLabelOriginal}", computedInstallmentAmount)
                 val statusDate = parseScheduleDate(displayInstallmentLabel) ?: installmentDate
                 val today = java.time.LocalDate.now()
-                // Keep explicit installment payment records, but don't let the aggregate count
-                // turn future-dated installments into Paid.
-                val paid = savedInstallmentStatus == "Paid" ||
-                    (index < loan.paymentsMade && (statusDate == null || !statusDate.isAfter(today)))
+                val paid = savedInstallmentStatus == "Paid"
                 val overdue = !paid && statusDate != null && statusDate.isBefore(today)
                 val installmentStatus = if (paid) "Paid" else if (overdue) "Overdue" else "Upcoming"
                 val installmentStatusColor = if (paid) Color(0xFF0E7490) else if (overdue) Color(0xFFEF4444) else upcomingAmber
@@ -4110,6 +4145,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     var statementOutstanding by remember { mutableStateOf("") }
     var statementDate by remember { mutableStateOf("") }
     var importedPrincipal by remember { mutableStateOf("") }
+    var calculatorLoanAmount by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var pdfBusy by remember { mutableStateOf(false) }
@@ -4278,6 +4314,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     if (fields.has("statementOutstanding")) statementOutstanding = fields.getString("statementOutstanding")
                     if (fields.has("statementDate")) statementDate = fields.getString("statementDate")
                     importedPrincipal = if (fields.has("principal")) fields.getString("principal") else ""
+                    calculatorLoanAmount = importedPrincipal
                     if (fields.has("lender")) lender = fields.getString("lender")
                     if (fields.has("borrowerName")) borrowerName = fields.getString("borrowerName")
                     if (fields.has("agreementNumber")) agreementNumber = fields.getString("agreementNumber")
@@ -4340,6 +4377,46 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     OutlinedTextField(emi, { emi = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(totalPayments, { totalPayments = it.filter(Char::isDigit); importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Total tenure (months)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    val calculatorEmi = calculateLoanEmi(
+                        calculatorLoanAmount.toDoubleOrNull() ?: 0.0,
+                        rate.toDoubleOrNull() ?: -1.0,
+                        totalPayments.toIntOrNull() ?: 0
+                    )
+                    Card(colors = CardDefaults.cardColors(containerColor = Mint), shape = RoundedCornerShape(16.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                            Text("EMI Calculator", color = Green, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("Enter the principal, annual interest rate and tenure to calculate the monthly EMI.", color = Muted, fontSize = 11.sp)
+                            OutlinedTextField(
+                                value = calculatorLoanAmount,
+                                onValueChange = { calculatorLoanAmount = it.filter { c -> c.isDigit() || c == '.' }; saved = false },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Loan amount (₹)") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("Calculated monthly EMI", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(calculatorEmi?.let { Money.format(it) } ?: "—", color = Green, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Text("Rate and tenure use the fields above. Calculation uses the reducing-balance EMI formula.", color = Muted, fontSize = 10.sp)
+                            OutlinedButton(
+                                onClick = {
+                                    calculatorEmi?.let { result ->
+                                        emi = result.toString()
+                                        importedPrincipal = calculatorLoanAmount
+                                        error = ""
+                                        saved = false
+                                    }
+                                },
+                                enabled = calculatorEmi != null,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Calculate, null)
+                                Spacer(Modifier.width(7.dp))
+                                Text("Use calculated EMI")
+                            }
+                        }
+                    }
                     OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(statementOutstanding, { statementOutstanding = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Statement outstanding principal (optional, ₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     if (statementDate.isNotBlank()) Text("Statement date: $statementDate", color = Muted, fontSize = 11.sp)
