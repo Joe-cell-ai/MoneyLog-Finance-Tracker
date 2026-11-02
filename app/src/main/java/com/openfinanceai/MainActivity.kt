@@ -1234,7 +1234,7 @@ private fun FinanceApp() {
                             val amount = LoanMoney.parsePaise(emiAmountText)
                             if (amount != null && amount > 0L) {
                                 context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
-                                    .putLong("emi_amount_${action.lender}_${action.originalDate}", amount).apply()
+                                    .putLong("emi_amount_paise_${action.lender}_${action.originalDate}", amount).apply()
                                 emiAmountEdit = null
                             }
                         }) { Text("Save amount") }
@@ -3973,12 +3973,12 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         date.takeIf { it.isNotBlank() && schedulePrefs.getString("emi_status_${loan.lender}_${it}", null) == "Paid" }
     }.toSet()
     val pendingAmountOverrides = pendingScheduleRows.mapNotNull { (date, amount) ->
-        if (date.isNotBlank() && schedulePrefs.contains("emi_amount_${loan.lender}_${date}")) {
-            val savedAmount = schedulePrefs.getLong("emi_amount_${loan.lender}_${date}", amount)
-            date to if (importedSchedule.isNotEmpty()) {
-                val storedUnit = runCatching { JSONObject(schedulePrefs.getString("loan_document_metadata_${loan.lender}", "{}") ?: "{}").optString("moneyUnit") }.getOrDefault("")
-                if (storedUnit == "PAISE") savedAmount else LoanMoney.rupeesToPaise(savedAmount)
-            } else savedAmount
+        if (date.isNotBlank() && (schedulePrefs.contains("emi_amount_paise_${loan.lender}_${date}") || schedulePrefs.contains("emi_amount_${loan.lender}_${date}"))) {
+            val paiseKey = "emi_amount_paise_${loan.lender}_${date}"
+            val legacyKey = "emi_amount_${loan.lender}_${date}"
+            val savedAmount = if (schedulePrefs.contains(paiseKey)) schedulePrefs.getLong(paiseKey, amount)
+                else LoanMoney.rupeesToPaise(schedulePrefs.getLong(legacyKey, 0L))
+            date to savedAmount
         }
         else null
     }.toMap()
@@ -4004,13 +4004,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     }
                 }
                 saved.put("moneyUnit", "PAISE")
-                val migrationEditor = schedulePrefs.edit()
-                schedulePrefs.all.forEach { (key, value) ->
-                    if (key.startsWith("emi_amount_${loan.lender}_") && value is Long) {
-                        migrationEditor.putLong(key, LoanMoney.rupeesToPaise(value))
-                    }
-                }
-                migrationEditor.putString("loan_document_metadata_${loan.lender}", saved.toString()).apply()
+                schedulePrefs.edit().putString("loan_document_metadata_${loan.lender}", saved.toString()).apply()
             }
             saved
         }.getOrDefault(JSONObject()))
@@ -4385,7 +4379,10 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     val row = importedSchedule[index]
                     val originalDateLabel = row.first
                     val dateLabel = schedulePrefs.getString("emi_rescheduled_${loan.lender}_${originalDateLabel}", originalDateLabel) ?: originalDateLabel
-                    val amount = schedulePrefs.getLong("emi_amount_${loan.lender}_${originalDateLabel}", row.second)
+                    val paiseOverrideKey = "emi_amount_paise_${loan.lender}_${originalDateLabel}"
+                    val legacyOverrideKey = "emi_amount_${loan.lender}_${originalDateLabel}"
+                    val amount = if (schedulePrefs.contains(paiseOverrideKey)) schedulePrefs.getLong(paiseOverrideKey, row.second)
+                        else if (schedulePrefs.contains(legacyOverrideKey)) LoanMoney.rupeesToPaise(schedulePrefs.getLong(legacyOverrideKey, 0L)) else row.second
                     val actualDate = parseScheduleDate(dateLabel)
                     val savedStatus = schedulePrefs.getString("emi_status_${loan.lender}_${originalDateLabel}", null)
                     // Explicit per-installment payment records remain authoritative.
