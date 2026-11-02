@@ -4267,10 +4267,10 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(if (selectedSection == "Bank Verify") "Bank Schedule Verify" else "EMI Schedule", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text(if (selectedSection == "Bank Schedule") "Compare your lender statement" else "All installments · estimate", color = Muted, fontSize = 11.sp)
+                        Text(if (selectedSection == "Bank Verify") "Compare your lender statement" else if (importedSchedule.isNotEmpty()) "All installments · exact PDF values" else "All installments · estimate", color = Muted, fontSize = 11.sp)
                     }
                     Box(Modifier.clip(RoundedCornerShape(50)).background(mint).padding(horizontal = 10.dp, vertical = 7.dp)) {
-                        Text(if (selectedSection == "Bank Schedule") "VERIFY" else "ESTIMATE", color = forest, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        Text(if (selectedSection == "Bank Verify") "VERIFY" else if (importedSchedule.isNotEmpty()) "PDF SOURCE" else "ESTIMATE", color = forest, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -4370,7 +4370,14 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                             Text(dateLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
                             val displayedRate = breakdown?.annualRate ?: loan.annualRate.takeIf { it > 0.0 }
                             val rateLabel = displayedRate?.let { "Rate $it%" } ?: "Rate not stated"
-                            Text(if (breakdown != null) "P ${Money.format(breakdown.principal)} · I ${Money.format(breakdown.interest)} · $rateLabel" else "PDF EMI · $rateLabel", color = Muted, fontSize = 9.sp)
+                            if (breakdown != null) {
+                                Text("Principal ${Money.format(breakdown.principal)} · Interest ${Money.format(breakdown.interest)}", color = Muted, fontSize = 9.sp)
+                                val balances = listOfNotNull(
+                                    breakdown.openingPrincipal.takeIf { it > 0L }?.let { "Opening ${Money.format(it)}" },
+                                    breakdown.closingPrincipal?.let { "Closing ${Money.format(it)}" }
+                                )
+                                Text((balances + rateLabel).joinToString(" · "), color = Muted, fontSize = 8.sp)
+                            } else Text("PDF EMI · $rateLabel", color = Muted, fontSize = 9.sp)
                         }
                         Column(Modifier.weight(1f), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(Money.format(amount), color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -4420,7 +4427,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 InfoCard("EMI may not cover interest", "At the entered interest rate, the EMI is not greater than the estimated monthly interest. The balance may not reduce unless the EMI or rate changes.", Icons.Default.Warning)
             }
             item {
-                Text(if (selectedSection == "Bank Schedule") "Bank Schedule is a comparison view, not a bank feed. Dates and amounts shown here are MoneyLog estimates; verify every installment against your lender's official statement." else "Schedule is estimated from the current outstanding balance, entered EMI and interest rate. Paid labels reflect only the payment count you entered; verify dates and amounts against your lender statement.", color = Muted, fontSize = 10.sp)
+                Text(if (selectedSection == "Bank Verify") "Bank Schedule is a manual comparison, not a bank feed. Verify every value against your lender statement." else if (importedSchedule.isNotEmpty()) "Instalment dates, EMI amounts, principal and interest shown here are copied from the imported PDF. Values not stated in the PDF are not calculated or filled in." else "Schedule is estimated from the current outstanding balance, entered EMI and interest rate. Verify dates and amounts against your lender statement.", color = Muted, fontSize = 10.sp)
             }
         }
     }
