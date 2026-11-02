@@ -118,4 +118,43 @@ class LoanDocumentParserTest {
         assertEquals(null, result.annualInterestRate)
         assertEquals(31.65, result.apr!!, 0.0)
     }
+    @Test fun extractsVariableMonthlyEmiAndChangingAnnualRateWithoutFlatteningRows() {
+        val statement = """
+            Lender: Floating Rate Finance
+            Total Loan Amount (Principal Amount): 30000
+            Amount of EMI Payable (INR) 10500
+            Fixed Rate of Interest: 12.0
+            Tenure (in months) 3
+            Illustrative Repayment Schedule
+            Instalment No. Outstanding Principal Interest Rate (%) Principal Interest Installment
+            1 30000 12.0 10000 300 10300
+            2 20000 13.5 10000 225 10225
+            3 10000 14.0 10000 117 10117
+        """.trimIndent()
+        val result = LoanDocumentParser.parse(statement)
+        assertEquals(3, result.scheduleRows.size)
+        assertEquals(listOf(10300L, 10225L, 10117L), result.scheduleRows.map { it.installment })
+        assertEquals(listOf(300L, 225L, 117L), result.scheduleRows.map { it.interest })
+        assertEquals(listOf(12.0, 13.5, 14.0), result.scheduleRows.map { it.annualRate })
+        assertEquals(30642L, result.scheduleRows.sumOf { it.installment })
+    }
+
+    @Test fun retainsDifferentMonthlyInstallmentAmountsAndInterestValues() {
+        val statement = """
+            Lender: Step EMI Finance
+            Total Loan Amount (Principal Amount): 20000
+            Amount of EMI Payable (INR) 7000
+            Fixed Rate of Interest: 12.0
+            Tenure (in months) 3
+            Illustrative Repayment Schedule
+            Instalment No. Outstanding Principal Principal Interest Installment
+            1 20000 6500 200 6700
+            2 13500 6600 135 6735
+            3 6900 6900 69 6969
+        """.trimIndent()
+        val result = LoanDocumentParser.parse(statement)
+        assertEquals(listOf(6700L, 6735L, 6969L), result.scheduleRows.map { it.installment })
+        assertEquals(listOf(200L, 135L, 69L), result.scheduleRows.map { it.interest })
+    }
+
 }
