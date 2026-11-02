@@ -4710,10 +4710,6 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         val fields = JSONObject()
                         val auditedDocument = LoanDocumentParser.parse(extracted)
                         if (auditedDocument.scheduleRows.isNotEmpty()) {
-                            val mappedForValidation = LoanDocumentScheduleMapper.map(auditedDocument.scheduleRows, auditedDocument.repaymentStartDate)
-                            if (mappedForValidation.size != auditedDocument.scheduleRows.size) {
-                                throw IllegalArgumentException("The PDF schedule contains missing, invalid or unordered dates. No schedule was imported.")
-                            }
                             val financialRows = auditedDocument.scheduleRows.map { row ->
                                 FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal,
                                     row.installment, row.principal, row.interest, row.closingPrincipal)
@@ -5028,12 +5024,16 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         val balance = currentOutstandingPaise / 100L
                         val count = paid.toLong()
                         val monthlyEmi = kotlin.math.round(monthly).toLong()
-                        if (lenderName.isBlank() || !validInputs || original <= 0L || balance < 0L || statementOutstanding.isNotBlank() && actualStatementBalance == null) {
-                            error = "Check lender, EMI, interest rate, tenure and EMIs paid. Confirm the statement balance if provided."
+                        val datedPdfSchedule = LoanDocumentScheduleMapper.map(importedScheduleRows, startDate)
+                        if (lenderName.isBlank() || !validInputs || original <= 0L || balance < 0L ||
+                            statementOutstanding.isNotBlank() && actualStatementBalance == null ||
+                            importedScheduleRows.isNotEmpty() && datedPdfSchedule.size != importedScheduleRows.size) {
+                            error = if (importedScheduleRows.isNotEmpty() && datedPdfSchedule.size != importedScheduleRows.size) {
+                                "Enter the exact first EMI date from the lender PDF, or correct the incomplete date column. The schedule was not saved."
+                            } else "Check lender, EMI, interest rate, tenure and EMIs paid. Confirm the statement balance if provided."
                             saved = false
                         } else {
                             onSave(lenderName, original, balance, count, annualRate, monthlyEmi, total.toLong(), borrowerName.trim(), agreementNumber.trim(), "", startDate)
-                            val datedPdfSchedule = LoanDocumentScheduleMapper.map(importedScheduleRows, startDate)
                             if (datedPdfSchedule.isNotEmpty()) {
                                 val liveSchedule = JSONArray()
                                 datedPdfSchedule.forEach { row -> liveSchedule.put(JSONObject().put("date", row.date).put("amount", row.amount).put("installment", row.installmentNumber)) }
