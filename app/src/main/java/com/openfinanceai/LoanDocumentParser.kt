@@ -6,7 +6,8 @@ internal data class LoanDocumentScheduleRow(
     val principal: Long,
     val interest: Long,
     val installment: Long,
-    val annualRate: Double? = null
+    val annualRate: Double? = null,
+    val dueDate: String? = null
 )
 
 internal data class LoanDocumentExtraction(
@@ -118,19 +119,36 @@ internal object LoanDocumentParser {
 
         val scheduleHeader = Regex("""(?im)^\s*(?:Illustrative\s+)?Repayment\s+Schedule\s*$""").find(text)
         val scheduleText = scheduleHeader?.let { text.substring(it.range.last + 1) }.orEmpty()
-        val hasScheduleRateColumn = Regex("""(?i)(?:interest\s+rate|rate\s+of\s+interest|rate\s*\(%\)|\bROI\b)""").containsMatchIn(scheduleText.take(1800))
-        val rowPattern = Regex("""(?m)^\s*(\d{1,3})\s+((?:[0-9][0-9,]*(?:\.[0-9]{1,4})?\s+){3,4}[0-9][0-9,]*(?:\.[0-9]{1,4})?)\s*$""")
+            .replace("₹", "").replace(Regex("""(?i)\\bRs\\.?\\s*"""), "")
+        val scheduleHeaderLines = scheduleText.lines().take(30).joinToString(" ")
+        val hasScheduleRateColumn = Regex("""(?i)(?:interest\\s+rate|rate\\s+of\\s+interest|rate\\s*\\(%\\)|\\bROI\\b)""").containsMatchIn(scheduleHeaderLines)
+        val scheduleDatePattern = Regex("""(?i)\\b(\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|\\d{1,2}[- ](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[- ,]+\\d{2,4})\\b""")
+        fun normalizedScheduleDate(raw: String): String? {
+            val value = raw.trim()
+            val patterns = listOf("yyyy-MM-dd", "d MMMM yyyy", "d MMM yyyy", "d-MMM-yyyy", "d/MM/yyyy", "dd/MM/yyyy", "d-MM-yyyy", "dd-MM-yyyy")
+            return patterns.firstNotNullOfOrNull { pattern ->
+                runCatching {
+                    java.time.LocalDate.parse(value, java.time.format.DateTimeFormatterBuilder()
+                        .parseCaseInsensitive().appendPattern(pattern).toFormatter(java.util.Locale.ENGLISH)).toString()
+                }.getOrNull()
+            }
+        }
+        val rowPattern = Regex("""(?m)^\\s*(\\d{1,3})\\s+(.+?)\\s*$""")
         val rows = rowPattern.findAll(scheduleText).mapNotNull { match ->
             val no = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
-            val tokens = Regex("""[0-9][0-9,]*(?:\.[0-9]{1,4})?""").findAll(match.groupValues[2]).map { it.value }.toList()
+            val rawValues = match.groupValues[2]
+            val dateMatch = scheduleDatePattern.find(rawValues)
+            val dueDate = dateMatch?.groupValues?.get(1)?.let(::normalizedScheduleDate)
+            val numericSource = if (dateMatch != null) rawValues.removeRange(dateMatch.range) else rawValues
+            val tokens = Regex("""[0-9][0-9,]*(?:\\.[0-9]{1,4})?""").findAll(numericSource).map { it.value }.toList()
             if (hasScheduleRateColumn && tokens.size == 5) {
                 val rate = tokens[1].replace(",", "").toDoubleOrNull() ?: return@mapNotNull null
                 val amounts = listOf(0, 2, 3, 4).map { number(tokens[it]) ?: return@mapNotNull null }
                 if (rate !in 0.0..100.0) return@mapNotNull null
-                LoanDocumentScheduleRow(no, amounts[0], amounts[1], amounts[2], amounts[3], rate)
+                LoanDocumentScheduleRow(no, amounts[0], amounts[1], amounts[2], amounts[3], rate, dueDate)
             } else if (!hasScheduleRateColumn && tokens.size == 4) {
                 val amounts = tokens.map { number(it) ?: return@mapNotNull null }
-                LoanDocumentScheduleRow(no, amounts[0], amounts[1], amounts[2], amounts[3])
+                LoanDocumentScheduleRow(no, amounts[0], amounts[1], amounts[2], amounts[3], null, dueDate)
             } else null
         }.toList()
 
