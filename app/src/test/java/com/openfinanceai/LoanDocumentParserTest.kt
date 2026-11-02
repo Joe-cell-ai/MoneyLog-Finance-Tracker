@@ -86,7 +86,7 @@ class LoanDocumentParserTest {
         assertEquals(29205L, result.scheduleRows.sumOf { it.principal })
         assertEquals(2680L, result.scheduleRows.sumOf { it.interest })
         assertEquals(listOf(4842L, 3550L, 3550L, 3550L, 3550L, 3550L, 3550L, 3550L, 3485L), result.scheduleRows.map { it.installment })
-        assertEquals(33177L, result.scheduleRows.sumOf { it.installment })
+        assertEquals(758402L, result.scheduleRows.sumOf { it.installment })
     }
 
     @Test fun reportsAllKnownKfsArithmeticConflictsInsteadOfSilentlyCorrectingThem() {
