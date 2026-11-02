@@ -23,10 +23,16 @@ internal object LoanDocumentScheduleMapper {
         firstDueDate: String?
     ): List<LoanDatedInstallment> {
         if (rows.isEmpty() || rows.size > 600) return emptyList()
-        val firstDate = runCatching { LocalDate.parse(firstDueDate?.trim(), iso) }.getOrNull()
-            ?: return emptyList()
         if (rows.map { it.installmentNumber } != (1..rows.size).toList()) return emptyList()
         if (rows.any { it.installment <= 0L || it.principal < 0L || it.interest < 0L }) return emptyList()
+        val hasExplicitDates = rows.any { !it.dueDate.isNullOrBlank() }
+        if (hasExplicitDates) {
+            val dates = rows.map { raw -> runCatching { LocalDate.parse(raw.dueDate?.trim(), iso) }.getOrNull() ?: return emptyList() }
+            if (dates.distinct().size != dates.size || dates.zipWithNext().any { (a, b) -> !b.isAfter(a) }) return emptyList()
+            return rows.mapIndexed { index, row -> LoanDatedInstallment(dates[index].format(iso), row.installment, row.installmentNumber) }
+        }
+        val firstDate = runCatching { LocalDate.parse(firstDueDate?.trim(), iso) }.getOrNull()
+            ?: return emptyList()
         return rows.mapIndexed { index, row ->
             val month = YearMonth.from(firstDate).plusMonths(index.toLong())
             val dueDate = month.atDay(minOf(firstDate.dayOfMonth, month.lengthOfMonth()))
