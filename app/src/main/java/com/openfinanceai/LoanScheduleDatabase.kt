@@ -12,10 +12,13 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
+/** Monetary columns are integer paise. Migration 1->2 converts the old whole-rupee values. */
 @Entity(tableName = "loan_document_imports", indices = [Index("loanId")])
 internal data class LoanDocumentRecord(
     @PrimaryKey val documentId: String,
@@ -37,6 +40,7 @@ internal data class LoanDocumentRecord(
     val verified: Boolean
 )
 
+/** Monetary columns are integer paise. */
 @Entity(
     tableName = "loan_schedule_installments",
     primaryKeys = ["documentId", "installmentNumber"],
@@ -90,15 +94,27 @@ internal interface LoanScheduleDao {
     }
 }
 
-@Database(entities = [LoanDocumentRecord::class, LoanScheduleRecord::class], version = 1, exportSchema = false)
+@Database(entities = [LoanDocumentRecord::class, LoanScheduleRecord::class], version = 2, exportSchema = false)
 internal abstract class LoanScheduleDatabase : RoomDatabase() {
     abstract fun loanScheduleDao(): LoanScheduleDao
 
     companion object {
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Version 1 stored whole rupees. Convert existing values exactly once to paise.
+                listOf("principal", "declaredInterest", "declaredRepayment").forEach { column ->
+                    db.execSQL("UPDATE loan_document_imports SET $column = $column * 100 WHERE $column IS NOT NULL")
+                }
+                listOf("openingBalance", "installmentAmount", "principal", "interest", "closingBalance").forEach { column ->
+                    db.execSQL("UPDATE loan_schedule_installments SET $column = $column * 100 WHERE $column IS NOT NULL")
+                }
+            }
+        }
+
         @Volatile private var instance: LoanScheduleDatabase? = null
         fun get(context: Context): LoanScheduleDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, LoanScheduleDatabase::class.java, "moneylog_loan_schedules.db")
-                .build().also { instance = it }
+                .addMigrations(MIGRATION_1_2).build().also { instance = it }
         }
     }
 }

@@ -60,16 +60,16 @@ class LoanDocumentParserTest {
         assertEquals("Finnable Credit Private Limited", result.lender)
         assertEquals("CL491032662", result.loanNumber)
         assertEquals("VIJAY KUMAR REDDY NELATOORI", result.borrowerName)
-        assertEquals(29205L, result.principal)
-        assertEquals(3550L, result.emi)
+        assertEquals((29205L * 100L), result.principal)
+        assertEquals((3550L * 100L), result.emi)
         assertEquals(22.0, result.annualInterestRate!!, 0.0)
         assertEquals(31.65, result.apr!!, 0.0)
         assertEquals(9, result.tenureMonths)
         assertEquals("2026-11-05", result.repaymentStartDate)
-        assertEquals(1292L, result.processingFee)
-        assertEquals(2680L, result.totalInterest)
-        assertEquals(32980L, result.declaredTotalRepayment)
-        assertEquals(29205L, result.netDisbursedAmount)
+        assertEquals((1292L * 100L), result.processingFee)
+        assertEquals((2680L * 100L), result.totalInterest)
+        assertEquals((32980L * 100L), result.declaredTotalRepayment)
+        assertEquals((29205L * 100L), result.netDisbursedAmount)
         assertEquals("NA", result.prepaymentCharge)
         assertTrue(result.foreclosureCharge!!.contains("4.0%"))
         assertTrue(result.bounceCharge!!.contains("300"))
@@ -80,13 +80,13 @@ class LoanDocumentParserTest {
     @Test fun extractsEveryScheduleRowAndPreservesConflictingSourceAmount() {
         val result = LoanDocumentParser.parse(finnableKfs)
         assertEquals(9, result.scheduleRows.size)
-        assertEquals(4842L, result.scheduleRows.first().installment)
-        assertEquals(3550L, result.scheduleRows.first().principal + result.scheduleRows.first().interest)
-        assertEquals(3485L, result.scheduleRows.last().installment)
-        assertEquals(29205L, result.scheduleRows.sumOf { it.principal })
-        assertEquals(2680L, result.scheduleRows.sumOf { it.interest })
-        assertEquals(listOf(4842L, 3550L, 3550L, 3550L, 3550L, 3550L, 3550L, 3550L, 3485L), result.scheduleRows.map { it.installment })
-        assertEquals(33177L, result.scheduleRows.sumOf { it.installment })
+        assertEquals((4842L * 100L), result.scheduleRows.first().installment)
+        assertEquals((3550L * 100L), result.scheduleRows.first().principal + result.scheduleRows.first().interest)
+        assertEquals((3485L * 100L), result.scheduleRows.last().installment)
+        assertEquals((29205L * 100L), result.scheduleRows.sumOf { it.principal })
+        assertEquals((2680L * 100L), result.scheduleRows.sumOf { it.interest })
+        assertEquals(listOf((4842L * 100L), (3550L * 100L), (3550L * 100L), (3550L * 100L), (3550L * 100L), (3550L * 100L), (3550L * 100L), (3550L * 100L), (3485L * 100L)), result.scheduleRows.map { it.installment })
+        assertEquals((33177L * 100L), result.scheduleRows.sumOf { it.installment })
     }
 
     @Test fun reportsAllKnownKfsArithmeticConflictsInsteadOfSilentlyCorrectingThem() {
@@ -135,10 +135,10 @@ class LoanDocumentParserTest {
         """.trimIndent()
         val result = LoanDocumentParser.parse(statement)
         assertEquals(3, result.scheduleRows.size)
-        assertEquals(listOf(10300L, 10225L, 10117L), result.scheduleRows.map { it.installment })
-        assertEquals(listOf(300L, 225L, 117L), result.scheduleRows.map { it.interest })
+        assertEquals(listOf((10300L * 100L), (10225L * 100L), (10117L * 100L)), result.scheduleRows.map { it.installment })
+        assertEquals(listOf((300L * 100L), (225L * 100L), (117L * 100L)), result.scheduleRows.map { it.interest })
         assertEquals(listOf(12.0, 13.5, 14.0), result.scheduleRows.map { it.annualRate })
-        assertEquals(30642L, result.scheduleRows.sumOf { it.installment })
+        assertEquals((30642L * 100L), result.scheduleRows.sumOf { it.installment })
     }
 
     @Test fun retainsDifferentMonthlyInstallmentAmountsAndInterestValues() {
@@ -155,8 +155,8 @@ class LoanDocumentParserTest {
             3 6900 6900 69 6969
         """.trimIndent()
         val result = LoanDocumentParser.parse(statement)
-        assertEquals(listOf(6700L, 6735L, 6969L), result.scheduleRows.map { it.installment })
-        assertEquals(listOf(200L, 135L, 69L), result.scheduleRows.map { it.interest })
+        assertEquals(listOf((6700L * 100L), (6735L * 100L), (6969L * 100L)), result.scheduleRows.map { it.installment })
+        assertEquals(listOf((200L * 100L), (135L * 100L), (69L * 100L)), result.scheduleRows.map { it.interest })
     }
 
     @Test fun extractsExplicitIrregularDatesAcrossMultiplePdfPages() {
@@ -177,7 +177,7 @@ class LoanDocumentParserTest {
         assertEquals(2, result.scheduleRows.size)
         assertEquals("2026-11-05", result.scheduleRows[0].dueDate)
         assertEquals("2026-12-07", result.scheduleRows[1].dueDate)
-        assertEquals(listOf(9200L, 9110L), result.scheduleRows.map { it.installment })
+        assertEquals(listOf((9200L * 100L), (9110L * 100L)), result.scheduleRows.map { it.installment })
     }
 
 
@@ -199,13 +199,13 @@ class LoanDocumentParserTest {
         val result = LoanDocumentParser.parse(statement)
         assertEquals(3, result.scheduleRows.size)
         assertEquals("2026-02-04", result.scheduleRows[0].dueDate)
-        assertEquals(569000L, result.scheduleRows[0].openingPrincipal)
-        assertEquals(7536L, result.scheduleRows[0].principal)
-        assertEquals(5121L, result.scheduleRows[0].interest)
-        assertEquals(12657L, result.scheduleRows[0].installment)
+        assertEquals((569000L * 100L), result.scheduleRows[0].openingPrincipal)
+        assertEquals((7536L * 100L), result.scheduleRows[0].principal)
+        assertEquals((5121L * 100L), result.scheduleRows[0].interest)
+        assertEquals((12657L * 100L), result.scheduleRows[0].installment)
         assertEquals("2026-04-04", result.scheduleRows[2].dueDate)
-        assertEquals(554422L, result.scheduleRows[2].openingPrincipal)
-        assertEquals(547309L, result.scheduleRows[2].openingPrincipal - result.scheduleRows[2].principal)
+        assertEquals((554422L * 100L), result.scheduleRows[2].openingPrincipal)
+        assertEquals((547309L * 100L), result.scheduleRows[2].openingPrincipal - result.scheduleRows[2].principal)
     }
 
 
@@ -228,15 +228,15 @@ class LoanDocumentParserTest {
         """.trimIndent()
         val result = LoanDocumentParser.parse(statement)
         assertEquals(3, result.scheduleRows.size)
-        assertEquals(10000L, result.principal)
-        assertEquals(4000L, result.emi)
+        assertEquals((10000L * 100L), result.principal)
+        assertEquals((4000L * 100L), result.emi)
         assertEquals(12.0, result.annualInterestRate!!, 0.0)
-        assertEquals(listOf(1000L, 900L, 100L), result.scheduleRows.map { it.interest })
-        assertEquals(listOf(3000L, 3100L, 3900L), result.scheduleRows.map { it.principal })
-        assertEquals(listOf(7000L, 3900L, 0L), result.scheduleRows.map { it.closingPrincipal })
+        assertEquals(listOf((1000L * 100L), (900L * 100L), (100L * 100L)), result.scheduleRows.map { it.interest })
+        assertEquals(listOf((3000L * 100L), (3100L * 100L), (3900L * 100L)), result.scheduleRows.map { it.principal })
+        assertEquals(listOf((7000L * 100L), (3900L * 100L), (0L * 100L)), result.scheduleRows.map { it.closingPrincipal })
     }
 
-    @Test fun blocksPaisePrecisionSchedulesInsteadOfRoundingSourceValues() {
+    @Test fun preservesEveryPaiseInDecimalAmortizationSchedule() {
         val statement = """
             APEX NATIONAL BANK
             Loan Amount: INR 561938.00
@@ -249,8 +249,131 @@ class LoanDocumentParserTest {
             3 548107.95 12500.00 5481.08 7018.92 541089.03
         """.trimIndent()
         val result = LoanDocumentParser.parse(statement)
-        assertTrue(result.scheduleRows.isEmpty())
-        assertTrue(result.warnings.any { it.contains("paise-level decimal amounts") })
+        assertEquals(3, result.scheduleRows.size)
+        assertEquals(56193800L, result.principal)
+        assertEquals(56193800L, result.scheduleRows.first().openingPrincipal)
+        assertEquals(561938L, result.scheduleRows.first().interest)
+        assertEquals(688062L, result.scheduleRows.first().principal)
+        assertEquals(1250000L, result.scheduleRows.first().installment)
+        assertEquals(55505738L, result.scheduleRows.first().closingPrincipal)
+        assertEquals(54108903L, result.scheduleRows.last().closingPrincipal)
+        assertFalse(result.warnings.any { it.contains("paise-level decimal amounts") })
+    }
+
+    @Test fun parsesAllSixtyRowsFromUploadedApexDecimalPaiseStatement() {
+        val statement = """
+            APEX NATIONAL BANK
+            Customer Name: Sample Borrower
+            Loan Amount: INR 5,61,938.00
+            Agreement No: TEST-APEX-60
+            Tenure: 60 Months
+            Repayment Start Date: 10-Nov-2026
+            Repayment End Date: 10-Oct-2031
+            Monthly EMI: INR 12,500.00
+            Interest Rate: 12.00% p.a. (Reducing)
+            Official Amortization Timeline Statement
+            Opening Principal Monthly EMI Interest Component Principal Component Closing Balance
+            1            561,938.00           12,500.00          5,619.38               6,880.62            555,057.38
+            2            555,057.38           12,500.00          5,550.57               6,949.43            548,107.95
+            3            548,107.95           12,500.00          5,481.08               7,018.92            541,089.03
+            4            541,089.03           12,500.00          5,410.89               7,089.11            533,999.92
+            5            533,999.92           12,500.00          5,340.00               7,160.00            526,839.92
+            6            526,839.92           12,500.00          5,268.40               7,231.60            519,608.32
+            7            519,608.32           12,500.00          5,196.08               7,303.92            512,304.40
+            8            512,304.40           12,500.00          5,123.04               7,376.96            504,927.44
+            9            504,927.44           12,500.00          5,049.27               7,450.73            497,476.71
+            10            497,476.71           12,500.00          4,974.77               7,525.23            489,951.48
+            11            489,951.48           12,500.00          4,899.51               7,600.49            482,350.99
+            12            482,350.99           12,500.00          4,823.51               7,676.49            474,674.50
+            13            474,674.50           12,500.00          4,746.74               7,753.26            466,921.24
+            14            466,921.24           12,500.00          4,669.21               7,830.79            459,090.45
+            15            459,090.45           12,500.00          4,590.90               7,909.10            451,181.35
+            16            451,181.35           12,500.00          4,511.81               7,988.19            443,193.16
+            17            443,193.16           12,500.00          4,431.93               8,068.07            435,125.09
+            18            435,125.09           12,500.00          4,351.25               8,148.75            426,976.34
+            19            426,976.34           12,500.00          4,269.76               8,230.24            418,746.10
+            20            418,746.10           12,500.00          4,187.46               8,312.54            410,433.56
+            21            410,433.56           12,500.00          4,104.34               8,395.66            402,037.90
+            22            402,037.90           12,500.00          4,020.38               8,479.62            393,558.28
+            23            393,558.28           12,500.00          3,935.58               8,564.42            384,993.86
+            24            384,993.86           12,500.00          3,849.94               8,650.06            376,343.80
+            25            376,343.80           12,500.00          3,763.44               8,736.56            367,607.24
+            26        367,607.24        12,500.00         3,676.07              8,823.93          358,783.31
+            27        358,783.31        12,500.00         3,587.83              8,912.17          349,871.14
+            28        349,871.14        12,500.00         3,498.71              9,001.29          340,869.85
+            29        340,869.85        12,500.00         3,408.70              9,091.30          331,778.55
+            30        331,778.55        12,500.00         3,317.79              9,182.21          322,596.34
+            31        322,596.34        12,500.00         3,225.96              9,274.04          313,322.30
+            32        313,322.30        12,500.00         3,133.22              9,366.78          303,955.52
+            33        303,955.52        12,500.00         3,039.56              9,460.44          294,495.08
+            34        294,495.08        12,500.00         2,944.95              9,555.05          284,940.03
+            35        284,940.03        12,500.00         2,849.40              9,650.60          275,289.43
+            36        275,289.43        12,500.00         2,752.89              9,747.11          265,542.32
+            37        265,542.32        12,500.00         2,655.42              9,844.58          255,697.74
+            38        255,697.74        12,500.00         2,556.98              9,943.02          245,754.72
+            39        245,754.72        12,500.00         2,457.55             10,042.45          235,712.27
+            40        235,712.27        12,500.00         2,357.12             10,142.88          225,569.39
+            41        225,569.39        12,500.00         2,255.69             10,244.31          215,325.08
+            42        215,325.08        12,500.00         2,153.25             10,346.75          204,978.33
+            43        204,978.33        12,500.00         2,049.78             10,450.22          194,528.11
+            44        194,528.11        12,500.00         1,945.28             10,554.72          183,973.39
+            45        183,973.39        12,500.00         1,839.73             10,660.27          173,313.12
+            46        173,313.12        12,500.00         1,733.13             10,766.87          162,546.25
+            47        162,546.25        12,500.00         1,625.46             10,874.54          151,671.71
+            48        151,671.71        12,500.00         1,516.72             10,983.28          140,688.43
+            49        140,688.43        12,500.00         1,406.88             11,093.12          129,595.31
+            50        129,595.31        12,500.00         1,295.95             11,204.05          118,391.26
+            51        118,391.26        12,500.00         1,183.91             11,316.09          107,075.17
+            52        107,075.17        12,500.00         1,070.75             11,429.25           95,645.92
+            53         95,645.92        12,500.00          956.46              11,543.54           84,102.38
+            54         84,102.38        12,500.00          841.02              11,658.98           72,443.40
+            55         72,443.40        12,500.00          724.43              11,775.57           60,667.83
+            56         60,667.83        12,500.00          606.68              11,893.32           48,774.51
+            57         48,774.51        12,500.00          487.75              12,012.25           36,762.26
+            58         36,762.26        12,500.00          367.62              12,132.38           24,629.88
+            59         24,629.88        12,500.00          246.30              12,253.70           12,376.18
+            60         12,376.18        12,499.94          123.76              12,376.18             0.00
+        """.trimIndent()
+        val result = LoanDocumentParser.parse(statement)
+        assertEquals(60, result.scheduleRows.size)
+        assertEquals(56193800L, result.principal)
+        assertEquals(56193800L, result.scheduleRows.sumOf { it.principal })
+        assertEquals(0L, result.scheduleRows.last().closingPrincipal)
+        assertEquals(18806194L, result.scheduleRows.sumOf { it.interest })
+        assertEquals(74999994L, result.scheduleRows.sumOf { it.installment })
+        assertEquals(561938L, result.scheduleRows.first().interest)
+        assertEquals(688062L, result.scheduleRows.first().principal)
+        assertEquals(1250000L, result.scheduleRows.first().installment)
+        assertEquals(1249994L, result.scheduleRows.last().installment)
+        val dated = LoanDocumentScheduleMapper.map(result.scheduleRows, result.repaymentStartDate)
+        assertEquals(60, dated.size)
+        val validation = LoanFinancialValidator.validate(
+            dated.map { FinancialScheduleRow(it.installmentNumber, it.date, it.openingBalance, it.amount, it.principal, it.interest, it.closingBalance) },
+            declaredTenure = 60, declaredPrincipal = result.principal
+        )
+        assertTrue(validation.errors.joinToString("\n"), validation.accepted)
+        assertTrue(result.warnings.none { it.contains("paise-level decimal amounts") })
+    }
+
+    @Test fun illustrativeFinnableRowsValidateWithoutCertifyingConflictingDeclaredTotal() {
+        val result = LoanDocumentParser.parse(finnableKfs)
+        assertTrue(result.illustrativeSchedule)
+        val rows = result.scheduleRows.map { row ->
+            FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal,
+                row.installment, row.principal, row.interest, row.closingPrincipal)
+        }
+        val validation = LoanFinancialValidator.validate(
+            rows,
+            declaredTenure = result.tenureMonths,
+            declaredPrincipal = result.principal,
+            declaredInterest = result.totalInterest,
+            declaredRepayment = null,
+            processingFee = result.processingFee
+        )
+        assertTrue(validation.errors.joinToString("\n"), validation.accepted)
+        assertTrue(validation.warnings.any { it.contains("processing fee") })
+        assertEquals((33177L * 100L), validation.installmentTotal)
+        assertEquals((32980L * 100L), result.declaredTotalRepayment)
     }
 
     @Test fun parsesAllSixtyRowsFromUploadedYesBankRepaymentStatement() {
@@ -329,8 +452,8 @@ class LoanDocumentParserTest {
         assertEquals("YES BANK Limited", result.lender)
         assertEquals("PLN002202247931", result.loanNumber)
         assertEquals("NELATOORI VIJAY KUMAR REDDY", result.borrowerName)
-        assertEquals(569000L, result.principal)
-        assertEquals(12657L, result.emi)
+        assertEquals((569000L * 100L), result.principal)
+        assertEquals((12657L * 100L), result.emi)
         assertEquals(60, result.tenureMonths)
         assertEquals(null, result.annualInterestRate) // Annual ROI is not stated in this source PDF.
         assertEquals("2031-01-04", result.repaymentEndDate)
@@ -339,11 +462,19 @@ class LoanDocumentParserTest {
         assertEquals((1..60).toList(), result.scheduleRows.map { it.installmentNumber })
         assertEquals("2026-02-04", result.scheduleRows.first().dueDate)
         assertEquals("2031-01-04", result.scheduleRows.last().dueDate)
-        assertEquals(569000L, result.scheduleRows.first().openingPrincipal)
-        assertEquals(0L, result.scheduleRows.last().openingPrincipal - result.scheduleRows.last().principal)
-        assertEquals(758402L, result.scheduleRows.sumOf { it.installment })
-        assertEquals(569000L, result.scheduleRows.sumOf { it.principal })
-        assertEquals(189402L, result.scheduleRows.sumOf { it.interest })
+        assertEquals((569000L * 100L), result.scheduleRows.first().openingPrincipal)
+        assertEquals((0L * 100L), result.scheduleRows.last().openingPrincipal - result.scheduleRows.last().principal)
+        assertEquals((758402L * 100L), result.scheduleRows.sumOf { it.installment })
+        assertEquals((569000L * 100L), result.scheduleRows.sumOf { it.principal })
+        assertEquals((189402L * 100L), result.scheduleRows.sumOf { it.interest })
+        val dated = LoanDocumentScheduleMapper.map(result.scheduleRows, result.repaymentStartDate)
+        assertEquals(60, dated.size)
+        val validation = LoanFinancialValidator.validate(
+            dated.map { FinancialScheduleRow(it.installmentNumber, it.date, it.openingBalance, it.amount, it.principal, it.interest, it.closingBalance) },
+            declaredTenure = 60, declaredPrincipal = result.principal, declaredInterest = (189402L * 100L),
+            declaredRepayment = (758402L * 100L)
+        )
+        assertTrue(validation.errors.joinToString("\n"), validation.accepted)
     }
 
 
