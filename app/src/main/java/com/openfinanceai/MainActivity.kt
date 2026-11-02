@@ -3983,32 +3983,65 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
             JSONObject(schedulePrefs.getString("loan_document_metadata_${loan.lender}", "{}") ?: "{}")
         }.getOrDefault(JSONObject()))
     }
+    // Prefer the verified Room schedule; SharedPreferences remains a legacy fallback for existing installs.
+    LaunchedEffect(loan.lender) {
+        val persisted = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val dao = LoanScheduleDatabase.get(context).loanScheduleDao()
+            val latest = dao.latestDocument(loan.lender) ?: return@withContext null
+            latest to dao.installments(loan.lender, latest.documentId)
+        }
+        if (persisted != null) {
+            val (record, rows) = persisted
+            if (rows.isNotEmpty()) {
+                importedSchedule = rows.map { (it.dueDate ?: "") to it.installmentAmount }
+                val rowJson = JSONArray()
+                rows.forEach { row ->
+                    rowJson.put(JSONObject().put("number", row.installmentNumber)
+                        .put("openingPrincipal", row.openingBalance ?: JSONObject.NULL)
+                        .put("principal", row.principal).put("interest", row.interest)
+                        .put("installment", row.installmentAmount)
+                        .put("annualRate", JSONObject.NULL)
+                        .put("dueDate", row.dueDate ?: JSONObject.NULL)
+                        .put("closingPrincipal", row.closingBalance ?: JSONObject.NULL))
+                }
+                loanDocumentMetadata = JSONObject()
+                    .put("lender", record.lender ?: loan.lender)
+                    .put("borrowerName", record.borrowerName ?: JSONObject.NULL)
+                    .put("agreementNumber", record.agreementNumber ?: JSONObject.NULL)
+                    .put("principal", record.principal ?: JSONObject.NULL)
+                    .put("emi", rows.firstOrNull()?.installmentAmount ?: JSONObject.NULL)
+                    .put("annualInterestRate", record.annualRatePercent ?: JSONObject.NULL)
+                    .put("apr", record.aprPercent ?: JSONObject.NULL)
+                    .put("tenureMonths", record.tenureMonths ?: JSONObject.NULL)
+                    .put("repaymentStartDate", record.repaymentStartDate ?: JSONObject.NULL)
+                    .put("repaymentEndDate", record.repaymentEndDate ?: JSONObject.NULL)
+                    .put("totalInterest", record.declaredInterest ?: JSONObject.NULL)
+                    .put("scheduleInterestTotal", rows.sumOf { it.interest })
+                    .put("declaredTotalRepayment", record.declaredRepayment ?: JSONObject.NULL)
+                    .put("scheduleRows", rowJson)
+                    .put("roomDocumentId", record.documentId)
+            }
+        }
+    }
     val importedDocumentBreakdown = remember(loan.lender, loanDocumentMetadata.toString()) {
         runCatching {
             val rows = loanDocumentMetadata.optJSONArray("scheduleRows") ?: JSONArray()
             (0 until rows.length()).map { index -> rows.getJSONObject(index).let { row ->
-                LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null, if (row.has("dueDate") && !row.isNull("dueDate")) row.optString("dueDate") else null)
+                LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null, if (row.has("dueDate") && !row.isNull("dueDate")) row.optString("dueDate") else null, if (row.has("closingPrincipal") && !row.isNull("closingPrincipal")) row.optLong("closingPrincipal") else null)
             } }
         }.getOrDefault(emptyList())
     }
     var pdfMessage by remember(loan.lender) { mutableStateOf("") }
     var pdfBusy by remember(loan.lender) { mutableStateOf(false) }
+    val loanPdfScope = rememberCoroutineScope()
     val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             pdfBusy = true
             pdfMessage = ""
+            loanPdfScope.launch {
             val result = runCatching {
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: error("Could not read the selected PDF. Please choose it again.")
-                if (bytes.size < 8 || !bytes.copyOfRange(0, 5).toString(Charsets.US_ASCII).startsWith("%PDF-")) {
-                    error("Invalid PDF file. Choose a readable EMI schedule PDF.")
-                }
-                PDFBoxResourceLoader.init(context.applicationContext)
-                val extractedText = PDDocument.load(bytes.inputStream()).use { document ->
-                    if (document.isEncrypted) error("Password-protected PDFs are not supported. Upload an unlocked PDF.")
-                    if (document.numberOfPages !in 1..300) error("The PDF has an invalid or unsupported page count.")
-                    PDFTextStripper().apply { setSortByPosition(true) }.getText(document)
-                }
+                val pageExtraction = withContext(kotlinx.coroutines.Dispatchers.IO) { LoanPdfExtractionEngine(context).extract(uri) }
+                val extractedText = pageExtraction.combinedText
                 val document = LoanDocumentParser.parse(extractedText)
                 if (document.scheduleRows.isEmpty()) error("No complete monthly repayment rows could be read from this PDF. No data was saved.")
                 val mappedRows = LoanDocumentScheduleMapper.map(document.scheduleRows, document.repaymentStartDate)
@@ -4030,9 +4063,29 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 if (document.principal != null && loan.originalPrincipal > 0L && document.principal != loan.originalPrincipal) {
                     error("The PDF principal ${document.principal} does not match this loan's original principal ${loan.originalPrincipal}. No data was saved.")
                 }
-                Triple(document, mappedRows, document.warnings)
+                val financialRows = document.scheduleRows.map { row ->
+                    FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal, row.installment,
+                        row.principal, row.interest, row.closingPrincipal)
+                }
+                val validation = LoanFinancialValidator.validate(
+                    financialRows, document.tenureMonths, document.principal, document.totalInterest,
+                    document.declaredTotalRepayment, document.processingFee
+                )
+                if (!validation.accepted) error("Financial validation failed. Nothing was saved: " + validation.errors.joinToString(" "))
+                Triple(document, mappedRows, (document.warnings + pageExtraction.warnings + validation.warnings).distinct())
             }
             result.onSuccess { (document, mappedRows, sourceWarnings) ->
+                val financialRowsForRoom = document.scheduleRows.map { row ->
+                    FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal, row.installment,
+                        row.principal, row.interest, row.closingPrincipal)
+                }
+                val roomValidation = LoanFinancialValidator.validate(
+                    financialRowsForRoom, document.tenureMonths, document.principal,
+                    document.totalInterest, document.declaredTotalRepayment, document.processingFee
+                )
+                VerifiedLoanScheduleRepository(LoanScheduleDatabase.get(context).loanScheduleDao()).save(
+                    loan.lender, uri.lastPathSegment ?: "Loan PDF", document, financialRowsForRoom, roomValidation
+                )
                 val arr = JSONArray()
                 mappedRows.forEach { row ->
                     arr.put(JSONObject().put("date", row.date).put("amount", row.amount).put("installment", row.installmentNumber))
@@ -4043,7 +4096,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                         .put("openingPrincipal", row.openingPrincipal).put("principal", row.principal)
                         .put("interest", row.interest).put("installment", row.installment)
                         .put("annualRate", row.annualRate ?: JSONObject.NULL)
-                        .put("dueDate", row.dueDate ?: JSONObject.NULL))
+                        .put("dueDate", row.dueDate ?: JSONObject.NULL)
+                        .put("closingPrincipal", row.closingPrincipal ?: JSONObject.NULL))
                 }
                 val metadata = JSONObject()
                     .put("lender", document.lender ?: loan.lender)
@@ -4082,6 +4136,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 pdfMessage = error.message ?: "Could not validate this PDF. No schedule was saved."
             }
             pdfBusy = false
+            }
         }
     }
     LazyColumn(
