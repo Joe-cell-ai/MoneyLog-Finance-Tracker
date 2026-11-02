@@ -1226,7 +1226,7 @@ private fun FinanceApp() {
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("Only ${action.originalDate} will change. Other installments remain unchanged.", color = Muted, fontSize = 12.sp)
-                            OutlinedTextField(value = emiAmountText, onValueChange = { value -> emiAmountText = value.filter { it.isDigit() }.take(12) }, label = { Text("New amount (₹)") }, singleLine = true)
+                            OutlinedTextField(value = emiAmountText, onValueChange = { value -> emiAmountText = value.filter { it.isDigit() || it == '.' }.take(15) }, label = { Text("New amount (₹)") }, singleLine = true)
                         }
                     },
                     confirmButton = {
@@ -3976,7 +3976,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         if (date.isNotBlank() && (schedulePrefs.contains("emi_amount_paise_${loan.lender}_${date}") || schedulePrefs.contains("emi_amount_${loan.lender}_${date}"))) {
             val paiseKey = "emi_amount_paise_${loan.lender}_${date}"
             val legacyKey = "emi_amount_${loan.lender}_${date}"
-            val savedAmount = if (schedulePrefs.contains(paiseKey)) schedulePrefs.getLong(paiseKey, amount)
+            val savedAmount = if (importedSchedule.isEmpty()) schedulePrefs.getLong(legacyKey, amount)
+                else if (schedulePrefs.contains(paiseKey)) schedulePrefs.getLong(paiseKey, amount)
                 else LoanMoney.rupeesToPaise(schedulePrefs.getLong(legacyKey, 0L))
             date to savedAmount
         }
