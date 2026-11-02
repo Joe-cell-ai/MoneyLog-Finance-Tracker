@@ -4165,13 +4165,18 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                         LoanOverviewRow("Original principal", Money.format(loan.originalPrincipal))
                         LoanOverviewRow("Current outstanding", Money.format(loan.balance))
                         LoanOverviewRow("Monthly EMI", Money.format(loan.emi))
-                        LoanOverviewRow("Annual interest rate", "${loan.annualRate}%")
+                        LoanOverviewRow("Annual interest rate", if (loan.annualRate > 0.0) "${loan.annualRate}%" else "Not stated in source document")
                         LoanOverviewRow("Payments recorded", loan.paymentsMade.toString())
                         if (!loanDocumentMetadata.isNull("apr")) LoanOverviewRow("Document APR", loanDocumentMetadata.optDouble("apr").toString() + "%")
                         if (!loanDocumentMetadata.isNull("processingFee")) LoanOverviewRow("Document processing fee", Money.format(loanDocumentMetadata.optLong("processingFee")))
                         if (!loanDocumentMetadata.isNull("totalInterest")) LoanOverviewRow("Document total interest", Money.format(loanDocumentMetadata.optLong("totalInterest")))
                         if (!loanDocumentMetadata.isNull("declaredTotalRepayment")) LoanOverviewRow("Document-declared total repayment", Money.format(loanDocumentMetadata.optLong("declaredTotalRepayment")))
                         if (!loanDocumentMetadata.isNull("netDisbursedAmount")) LoanOverviewRow("Net disbursed amount", Money.format(loanDocumentMetadata.optLong("netDisbursedAmount")))
+                        if (!loanDocumentMetadata.isNull("borrowerName")) LoanOverviewRow("Document borrower", loanDocumentMetadata.optString("borrowerName"))
+                        if (!loanDocumentMetadata.isNull("agreementNumber")) LoanOverviewRow("Agreement number", loanDocumentMetadata.optString("agreementNumber"))
+                        if (!loanDocumentMetadata.isNull("principal")) LoanOverviewRow("Document principal", Money.format(loanDocumentMetadata.optLong("principal")))
+                        if (!loanDocumentMetadata.isNull("emi")) LoanOverviewRow("Document EMI", Money.format(loanDocumentMetadata.optLong("emi")))
+                        if (!loanDocumentMetadata.isNull("tenureMonths")) LoanOverviewRow("Document tenure", loanDocumentMetadata.optString("tenureMonths") + " months")
                         if (!loanDocumentMetadata.isNull("loanId")) LoanOverviewRow("Document loan ID", loanDocumentMetadata.optString("loanId"))
                         if (!loanDocumentMetadata.isNull("prepaymentCharge")) LoanOverviewRow("Prepayment charges", loanDocumentMetadata.optString("prepaymentCharge"))
                         if (!loanDocumentMetadata.isNull("foreclosureCharge")) LoanOverviewRow("Foreclosure charges", loanDocumentMetadata.optString("foreclosureCharge"))
@@ -4308,7 +4313,9 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }, onLongClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(dateLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
-                            Text(if (breakdown != null) "P ${Money.format(breakdown.principal)} · I ${Money.format(breakdown.interest)} · Rate ${breakdown.annualRate ?: loan.annualRate}%" else "PDF EMI · Rate ${loan.annualRate}%", color = Muted, fontSize = 9.sp)
+                            val displayedRate = breakdown?.annualRate ?: loan.annualRate.takeIf { it > 0.0 }
+                            val rateLabel = displayedRate?.let { "Rate $it%" } ?: "Rate not stated"
+                            Text(if (breakdown != null) "P ${Money.format(breakdown.principal)} · I ${Money.format(breakdown.interest)} · $rateLabel" else "PDF EMI · $rateLabel", color = Muted, fontSize = 9.sp)
                         }
                         Column(Modifier.weight(1f), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(Money.format(amount), color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -4844,7 +4851,8 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                         Text("EMI ${row.installmentNumber}${row.dueDate?.let { " · $it" } ?: ""}", color = Ink, fontSize = 10.sp, modifier = Modifier.weight(0.9f))
                                         Text("P ${Money.format(row.principal)}", color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
-                                        Text("I ${Money.format(row.interest)} · ${row.annualRate ?: rate}%", color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1.2f))
+                                        val displayedRate = row.annualRate ?: rate.toDoubleOrNull()
+                                        Text("I ${Money.format(row.interest)} · ${displayedRate?.let { "Rate $it%" } ?: "Rate not stated"}", color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1.2f))
                                         Text(Money.format(row.installment), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
@@ -4905,6 +4913,15 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                     .put("interest", row.interest).put("installment", row.installment)
                                     .put("annualRate", row.annualRate ?: JSONObject.NULL).put("dueDate", row.dueDate ?: JSONObject.NULL)) }
                                 val metadata = JSONObject().put("apr", importedApr ?: JSONObject.NULL)
+                                    .put("lender", lenderName)
+                                    .put("borrowerName", borrowerName.trim().takeIf { it.isNotBlank() } ?: JSONObject.NULL)
+                                    .put("agreementNumber", agreementNumber.trim().takeIf { it.isNotBlank() } ?: JSONObject.NULL)
+                                    .put("principal", original)
+                                    .put("emi", monthlyEmi)
+                                    .put("annualInterestRate", rate.toDoubleOrNull() ?: JSONObject.NULL)
+                                    .put("tenureMonths", total)
+                                    .put("repaymentStartDate", startDate.ifBlank { JSONObject.NULL.toString() })
+                                    .put("scheduleInterestTotal", importedScheduleRows.sumOf { it.interest })
                                     .put("processingFee", importedProcessingFee ?: JSONObject.NULL)
                                     .put("totalInterest", importedTotalInterest ?: JSONObject.NULL)
                                     .put("declaredTotalRepayment", importedDeclaredTotal ?: JSONObject.NULL)
