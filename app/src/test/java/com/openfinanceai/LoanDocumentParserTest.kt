@@ -21,6 +21,11 @@ class LoanDocumentParserTest {
         3550.0
         11 Amount of EMI Payable (INR)
         a Processing Fees (INR) (inclusive of 18% GST) 1292.0
+        b NA
+        Prepayment Charges (INR)
+        (iii) Foreclosure charges, if applicable 4.0% of the Principal Outstanding + GST
+        Bounce Charges Flat charge of INR 300
+        on every Mandate Bounce (Upto- 2 Times)
         Key Facts Statement
         Name of the Regulated Entity: Finnable Credit Private Limited
         5 Instalment details
@@ -59,6 +64,10 @@ class LoanDocumentParserTest {
         assertEquals(1292L, result.processingFee)
         assertEquals(2680L, result.totalInterest)
         assertEquals(32980L, result.declaredTotalRepayment)
+        assertEquals(29205L, result.netDisbursedAmount)
+        assertEquals("NA", result.prepaymentCharge)
+        assertTrue(result.foreclosureCharge!!.contains("4.0%"))
+        assertTrue(result.bounceCharge!!.contains("300"))
     }
 
     @Test fun extractsEveryScheduleRowAndPreservesConflictingSourceAmount() {
@@ -78,6 +87,7 @@ class LoanDocumentParserTest {
         assertTrue(warnings.contains("APR total repayment mismatch"))
         assertTrue(warnings.contains("illustrative schedule"))
         assertTrue(warnings.contains("Some schedule instalment amounts differ"))
+        assertTrue(warnings.contains("prepayment charges as NA"))
     }
 
     @Test fun incompleteScheduleDoesNotInventMissingRows() {
