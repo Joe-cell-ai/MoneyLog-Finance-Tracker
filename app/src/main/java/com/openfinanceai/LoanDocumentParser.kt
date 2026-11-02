@@ -117,7 +117,7 @@ internal object LoanDocumentParser {
             }
         }
 
-        val scheduleHeader = Regex("""(?im)^\s*(?:Illustrative\s+)?Repayment\s+Schedule\s*$""").find(text)
+        val scheduleHeader = Regex("""(?im)^\s*(?:[0-9]{1,2}\s+)?(?:Illustrative\s+)?Repayment\s+Schedule\s*$""").find(text)
         val scheduleText = scheduleHeader?.let { text.substring(it.range.last + 1) }.orEmpty()
             .replace("₹", "").replace(Regex("""(?i)\bRs\.?\s*"""), "")
         val scheduleHeaderLines = scheduleText.lines().take(30).joinToString(" ")
@@ -139,6 +139,7 @@ internal object LoanDocumentParser {
             val rawValues = match.groupValues[2]
             val dateMatch = scheduleDatePattern.find(rawValues)
             val dueDate = dateMatch?.groupValues?.get(1)?.let(::normalizedScheduleDate)
+            if (dateMatch != null && dueDate == null) return@mapNotNull null
             val numericSource = if (dateMatch != null) rawValues.removeRange(dateMatch.range) else rawValues
             val tokens = Regex("""[0-9][0-9,]*(?:\.[0-9]{1,4})?""").findAll(numericSource).map { it.value }.toList()
             if (hasScheduleRateColumn && tokens.size == 5) {
@@ -153,6 +154,9 @@ internal object LoanDocumentParser {
         }.toList()
 
         val warnings = mutableListOf<String>()
+        if (rows.any { it.dueDate != null } && rows.any { it.dueDate == null }) {
+            warnings += "Only some repayment rows contain readable due dates. MoneyLog will not invent dates for the remaining rows."
+        }
         if (rows.isEmpty() && tenure != null) {
             warnings += "No detailed monthly principal/interest schedule was extracted. MoneyLog will not invent a monthly split from the EMI and interest rate."
         }
