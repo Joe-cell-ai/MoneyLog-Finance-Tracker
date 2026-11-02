@@ -65,6 +65,10 @@ internal object LoanDocumentParser {
         fun directAmount(pattern: String): Long? =
             Regex(pattern, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                 .find(text)?.groupValues?.getOrNull(1)?.let(::number)
+
+        fun directInteger(pattern: String): Long? =
+            Regex(pattern, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                .find(text)?.groupValues?.getOrNull(1)?.replace(",", "")?.toLongOrNull()
         fun directDecimal(pattern: String): Double? =
             Regex(pattern, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                 .find(text)?.groupValues?.getOrNull(1)?.replace(",", "")?.toDoubleOrNull()
@@ -92,10 +96,10 @@ internal object LoanDocumentParser {
             ?: directDecimal("""ROI\s*\(%\)\s*:?\s*([0-9]+(?:\.[0-9]{1,4})?)""")
         val apr = directDecimal("""Annual\s+Percentage\s+Rate\s*\(APR\)\s*\(%\)\s*([0-9]+(?:\.[0-9]{1,4})?)""")
             ?: directDecimal("""Annual\s+Percentage\s+Rate\s*[:(].{0,40}?([0-9]+(?:\.[0-9]{1,4})?)""")
-        val tenure = directAmount("""Tenure\s*\(in\s+months\)\s*([0-9]{1,3})""")
-            ?: directAmount("""Loan\s+term\s*\(months\)\s*([0-9]{1,3})""")
-            ?: directAmount("""Tenure\s*:\s*([0-9]{1,3})\s*Months?""")
-            ?: directAmount("""Total\s+Tenure\s*:?\s*([0-9]{1,3})""")
+        val tenure = directInteger("""Tenure\s*\(in\s+months\)\s*([0-9]{1,3})""")
+            ?: directInteger("""Loan\s+term\s*\(months\)\s*([0-9]{1,3})""")
+            ?: directInteger("""Tenure\s*:\s*([0-9]{1,3})\s*Months?""")
+            ?: directInteger("""Total\s+Tenure\s*:?\s*([0-9]{1,3})""")
         val repaymentStartDate = Regex("""(?i)Commencement\s+of\s+repayments?.{0,250}?(\d{4}-\d{2}-\d{2})""", RegexOption.DOT_MATCHES_ALL)
             .find(text)?.groupValues?.get(1)
             ?: Regex("""(?i)(?:repayment|first\s*EMI)\s*(?:start|commencement)?\s*date\s*[:\-]?\s*(\d{4}-\d{2}-\d{2})""")
