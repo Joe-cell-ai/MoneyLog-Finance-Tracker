@@ -280,6 +280,13 @@ class LoanDocumentParserTest {
             60        04-JAN-31                11,524.00           11,639.00           11,524.00             115.00              0.00
         """.trimIndent()
         val result = LoanDocumentParser.parse(statement)
+        assertEquals("YES BANK Limited", result.lender)
+        assertEquals("PLN002202247931", result.loanNumber)
+        assertEquals("NELATOORI VIJAY KUMAR REDDY", result.borrowerName)
+        assertEquals(569000L, result.principal)
+        assertEquals(12657L, result.emi)
+        assertEquals(60, result.tenureMonths)
+        assertEquals("2026-02-04", result.repaymentStartDate)
         assertEquals(60, result.scheduleRows.size)
         assertEquals((1..60).toList(), result.scheduleRows.map { it.installmentNumber })
         assertEquals("2026-02-04", result.scheduleRows.first().dueDate)
