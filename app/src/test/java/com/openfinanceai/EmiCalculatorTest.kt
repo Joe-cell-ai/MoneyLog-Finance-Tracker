@@ -22,4 +22,29 @@ class EmiCalculatorTest {
         assertNull(calculateLoanEmi(100_000.0, 12.0, 0))
         assertNull(calculateLoanEmi(Double.NaN, 12.0, 12))
     }
+    @Test
+    fun pendingTotalSumsEveryUnpaidInstallment() {
+        val installments = (1..5).map { "date-$it" to 3_750L }
+        assertEquals(18_750L, calculatePendingEmiTotal(installments, emptySet()))
+    }
+
+    @Test
+    fun pendingTotalExcludesPaidRowsAndUsesEditedInstallmentAmounts() {
+        val installments = (1..5).map { "date-$it" to 3_750L }
+        assertEquals(
+            10_500L,
+            calculatePendingEmiTotal(
+                installments = installments,
+                paidDates = setOf("date-1"),
+                amountOverrides = mapOf("date-3" to 2_250L)
+            )
+        )
+    }
+
+    @Test
+    fun importedScheduleCanSkipAlreadyPaidSequentialRows() {
+        val installments = (1..5).map { "date-$it" to 3_750L }
+        assertEquals(11_250L, calculatePendingEmiTotal(installments, emptySet(), alreadyPaidCount = 2L))
+    }
+
 }
