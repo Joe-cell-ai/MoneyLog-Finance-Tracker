@@ -20,6 +20,7 @@ internal data class LoanDocumentExtraction(
     val apr: Double? = null,
     val tenureMonths: Int? = null,
     val repaymentStartDate: String? = null,
+    val repaymentEndDate: String? = null,
     val processingFee: Long? = null,
     val totalInterest: Long? = null,
     val declaredTotalRepayment: Long? = null,
@@ -105,6 +106,16 @@ internal object LoanDocumentParser {
                             .parseCaseInsensitive().appendPattern(pattern).toFormatter(java.util.Locale.ENGLISH)).toString() }.getOrNull()
                     }
                 }
+        val repaymentEndDate = Regex("""(?i)(?:repayment|installment|instalment)\\s+end\\s+date\\s*[:\\-]?\\s*(\\d{1,2}[-/][A-Za-z0-9]{2,4}[-/]\\d{2,4}|\\d{4}-\\d{2}-\\d{2})""")
+            .find(text)?.groupValues?.get(1)?.let { raw ->
+                val patterns = listOf("d-MMM-yy", "dd-MMM-yy", "d-MMM-yyyy", "dd-MMM-yyyy", "d/MM/yy", "dd/MM/yy", "d/MM/yyyy", "dd/MM/yyyy", "yyyy-MM-dd")
+                patterns.firstNotNullOfOrNull { pattern ->
+                    runCatching {
+                        java.time.LocalDate.parse(raw, java.time.format.DateTimeFormatterBuilder()
+                            .parseCaseInsensitive().appendPattern(pattern).toFormatter(java.util.Locale.ENGLISH)).toString()
+                    }.getOrNull()
+                }
+            }
         val processingFee = amountOnLine(Regex("""Processing\s+Fees?\s*\(INR\)"""))
             ?: directAmount("""Processing\s+fees?.{0,100}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
         val totalInterest = directAmount("""Total\s+Interest\s+Amount\s+to\s+be\s+charged[^\n]*\n\s*\d{1,3}\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
@@ -249,6 +260,7 @@ internal object LoanDocumentParser {
             apr = apr,
             tenureMonths = tenure?.toInt() ?: rows.size.takeIf { it > 0 },
             repaymentStartDate = repaymentStartDate,
+            repaymentEndDate = repaymentEndDate,
             processingFee = processingFee,
             totalInterest = totalInterest,
             declaredTotalRepayment = declaredTotal,
