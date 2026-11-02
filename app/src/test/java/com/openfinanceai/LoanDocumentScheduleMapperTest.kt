@@ -22,6 +22,15 @@ class LoanDocumentScheduleMapperTest {
         assertEquals(103100L, mapped.sumOf { it.amount })
     }
 
+    @Test fun doesNotInventClosingBalanceWhenPdfDoesNotStateIt() {
+        val rows = listOf(
+            LoanDocumentScheduleRow(1, 10000, 900, 100, 1000, null, "2026-11-05"),
+            LoanDocumentScheduleRow(2, 9100, 9100, 90, 9190, null, "2026-12-05")
+        )
+        val mapped = LoanDocumentScheduleMapper.map(rows, null)
+        assertEquals(listOf(null, null), mapped.map { it.closingBalance })
+    }
+
     @Test fun keepsSourceAnnualRateWhenPresentAndUnknownWhenAbsent() {
         val rows = listOf(
             LoanDocumentScheduleRow(1, 30000, 9000, 300, 9300, 12.0, "2026-11-05", 21000),
