@@ -4124,6 +4124,21 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
             } }
         }.getOrDefault(emptyList())
     }
+    val importedOriginalPrincipalPaise = if (!loanDocumentMetadata.isNull("principal")) loanDocumentMetadata.optLong("principal") else LoanMoney.rupeesToPaise(loan.originalPrincipal)
+    val leadingPaidScheduleCount = importedSchedule.takeWhile { it.first in pendingPaidDates }.size
+    val exactPaidScheduleCount = maxOf(leadingPaidScheduleCount, loan.paymentsMade.coerceAtLeast(0L).coerceAtMost(importedSchedule.size.toLong()).toInt())
+    val importedCurrentBalancePaise = if (importedDocumentBreakdown.isNotEmpty()) {
+        when {
+            exactPaidScheduleCount <= 0 -> importedDocumentBreakdown.first().openingPrincipal
+            exactPaidScheduleCount >= importedDocumentBreakdown.size -> 0L
+            else -> runCatching {
+                Math.subtractExact(importedDocumentBreakdown[exactPaidScheduleCount - 1].openingPrincipal,
+                    importedDocumentBreakdown[exactPaidScheduleCount - 1].principal).coerceAtLeast(0L)
+            }.getOrNull()
+        }
+    } else null
+    val importedEmiPaise = importedSchedule.firstOrNull()?.second
+        ?: if (!loanDocumentMetadata.isNull("emi")) loanDocumentMetadata.optLong("emi") else null
     var pdfMessage by remember(loan.lender) { mutableStateOf("") }
     var pdfBusy by remember(loan.lender) { mutableStateOf(false) }
     val loanPdfScope = rememberCoroutineScope()
@@ -4260,7 +4275,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("MONTHLY EMI", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                         Spacer(Modifier.height(7.dp))
-                        Text(Money.format(loan.emi), color = forest, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Text(importedEmiPaise?.let { LoanMoney.formatPaise(it) } ?: Money.format(loan.emi), color = forest, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     }
                     Box(Modifier.width(1.dp).height(42.dp).background(page))
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -4290,7 +4305,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     Spacer(Modifier.width(18.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Text("OUTSTANDING BALANCE", color = Color.White.copy(alpha = .78f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        Text(Money.format(loan.balance), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Text(importedCurrentBalancePaise?.let { LoanMoney.formatPaise(it) } ?: Money.format(loan.balance), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                         Text(if (loan.emi > 0L) "About $monthsRemaining EMI(s) remaining" else "Add an EMI to estimate remaining term", color = Color.White.copy(alpha = .85f), fontSize = 11.sp)
                         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = Color(0xFF34D399), trackColor = Color.White.copy(alpha = .2f))
                     }
@@ -4312,9 +4327,9 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
                     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("Loan overview", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                        LoanOverviewRow("Original principal", Money.format(loan.originalPrincipal))
-                        LoanOverviewRow("Current outstanding", Money.format(loan.balance))
-                        LoanOverviewRow("Monthly EMI", Money.format(loan.emi))
+                        LoanOverviewRow("Original principal", if (importedSchedule.isNotEmpty()) LoanMoney.formatPaise(importedOriginalPrincipalPaise) else Money.format(loan.originalPrincipal))
+                        LoanOverviewRow("Current outstanding", importedCurrentBalancePaise?.let { LoanMoney.formatPaise(it) } ?: Money.format(loan.balance))
+                        LoanOverviewRow("Monthly EMI", importedEmiPaise?.let { LoanMoney.formatPaise(it) } ?: Money.format(loan.emi))
                         LoanOverviewRow("Annual interest rate", if (loan.annualRate > 0.0) "${loan.annualRate}%" else "Not stated in source document")
                         LoanOverviewRow("Payments recorded", loan.paymentsMade.toString())
                         if (!loanDocumentMetadata.isNull("apr")) LoanOverviewRow("Document APR", loanDocumentMetadata.optDouble("apr").toString() + "%")
