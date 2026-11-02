@@ -3954,7 +3954,12 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
             val raw = schedulePrefs.getString("bank_schedule_${loan.lender}", null) ?: ""
             if (raw.isBlank()) emptyList() else {
                 val arr = JSONArray(raw)
-                (0 until arr.length()).map { n -> arr.getJSONObject(n).getString("date") to arr.getJSONObject(n).getLong("amount") }
+                val savedMetadata = runCatching { JSONObject(schedulePrefs.getString("loan_document_metadata_${loan.lender}", "{}") ?: "{}") }.getOrDefault(JSONObject())
+                val alreadyPaise = savedMetadata.optString("moneyUnit") == "PAISE"
+                (0 until arr.length()).map { n ->
+                    val amount = arr.getJSONObject(n).getLong("amount")
+                    arr.getJSONObject(n).getString("date") to if (alreadyPaise) amount else LoanMoney.rupeesToPaise(amount)
+                }
             }
         }.getOrDefault(emptyList()))
     }
@@ -4020,6 +4025,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     .put("declaredTotalRepayment", record.declaredRepayment ?: JSONObject.NULL)
                     .put("scheduleRows", rowJson)
                     .put("roomDocumentId", record.documentId)
+                    .put("moneyUnit", "PAISE")
             }
         }
     }
@@ -4060,8 +4066,9 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                         error("This PDF names ${documentLender}, but the selected loan is ${loan.lender}. Choose the matching loan before importing.")
                     }
                 }
-                if (document.principal != null && loan.originalPrincipal > 0L && document.principal != loan.originalPrincipal) {
-                    error("The PDF principal ${document.principal} does not match this loan's original principal ${loan.originalPrincipal}. No data was saved.")
+                if (document.principal != null && loan.originalPrincipal > 0L &&
+                    document.principal != LoanMoney.rupeesToPaise(loan.originalPrincipal)) {
+                    error("The PDF principal ${LoanMoney.formatPaise(document.principal)} does not match this loan's original principal ${Money.format(loan.originalPrincipal)}. No data was saved.")
                 }
                 val financialRows = document.scheduleRows.map { row ->
                     FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal, row.installment,
@@ -4121,16 +4128,17 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     .put("illustrativeSchedule", document.illustrativeSchedule)
                     .put("scheduleRows", savedRows)
                     .put("warnings", JSONArray(sourceWarnings))
+                    .put("moneyUnit", "PAISE")
                 schedulePrefs.edit()
                     .putString("bank_schedule_${loan.lender}", arr.toString())
                     .putString("loan_document_metadata_${loan.lender}", metadata.toString())
                     .apply()
                 importedSchedule = mappedRows.map { it.date to it.amount }
                 loanDocumentMetadata = metadata
-                val totalInstallments = mappedRows.sumOf { it.amount }
-                val totalPrincipal = document.scheduleRows.sumOf { it.principal }
-                val totalInterest = document.scheduleRows.sumOf { it.interest }
-                pdfMessage = "Imported ${mappedRows.size} installments · EMI total ${Money.format(totalInstallments)} · Principal ${Money.format(totalPrincipal)} · Interest ${Money.format(totalInterest)}. Source authenticity is not verified; confirm with your lender." +
+                val totalInstallments = LoanMoney.sumPaise(mappedRows.map { it.amount })
+                val totalPrincipal = LoanMoney.sumPaise(document.scheduleRows.map { it.principal })
+                val totalInterest = LoanMoney.sumPaise(document.scheduleRows.map { it.interest })
+                pdfMessage = "Imported ${mappedRows.size} installments · EMI total ${LoanMoney.formatPaise(totalInstallments)} · Principal ${LoanMoney.formatPaise(totalPrincipal)} · Interest ${LoanMoney.formatPaise(totalInterest)}. Source authenticity is not verified; confirm with your lender." +
                     if (sourceWarnings.isNotEmpty()) " Review ${sourceWarnings.size} document warning(s) in Loan Overview." else ""
             }.onFailure { error ->
                 pdfMessage = error.message ?: "Could not validate this PDF. No schedule was saved."
@@ -4171,7 +4179,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("TOTAL INTEREST*", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
                         Spacer(Modifier.height(7.dp))
-                        Text(if (importedDocumentBreakdown.isNotEmpty()) Money.format(importedDocumentBreakdown.drop(loan.paymentsMade.coerceIn(0L, importedDocumentBreakdown.size.toLong()).toInt()).sumOf { it.interest }) else if (estimateValid) Money.format(totalInterestEstimate) else "—", color = forest, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
+                        Text(if (importedDocumentBreakdown.isNotEmpty()) LoanMoney.formatPaise(LoanMoney.sumPaise(importedDocumentBreakdown.drop(loan.paymentsMade.coerceIn(0L, importedDocumentBreakdown.size.toLong()).toInt()).map { it.interest })) else if (estimateValid) Money.format(totalInterestEstimate) else "—", color = forest, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
                     }
                     Box(Modifier.width(1.dp).height(42.dp).background(page))
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -4223,14 +4231,14 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                         LoanOverviewRow("Annual interest rate", if (loan.annualRate > 0.0) "${loan.annualRate}%" else "Not stated in source document")
                         LoanOverviewRow("Payments recorded", loan.paymentsMade.toString())
                         if (!loanDocumentMetadata.isNull("apr")) LoanOverviewRow("Document APR", loanDocumentMetadata.optDouble("apr").toString() + "%")
-                        if (!loanDocumentMetadata.isNull("processingFee")) LoanOverviewRow("Document processing fee", Money.format(loanDocumentMetadata.optLong("processingFee")))
-                        if (!loanDocumentMetadata.isNull("totalInterest")) LoanOverviewRow("Document total interest", Money.format(loanDocumentMetadata.optLong("totalInterest")))
-                        if (!loanDocumentMetadata.isNull("declaredTotalRepayment")) LoanOverviewRow("Document-declared total repayment", Money.format(loanDocumentMetadata.optLong("declaredTotalRepayment")))
-                        if (!loanDocumentMetadata.isNull("netDisbursedAmount")) LoanOverviewRow("Net disbursed amount", Money.format(loanDocumentMetadata.optLong("netDisbursedAmount")))
+                        if (!loanDocumentMetadata.isNull("processingFee")) LoanOverviewRow("Document processing fee", LoanMoney.formatPaise(loanDocumentMetadata.optLong("processingFee")))
+                        if (!loanDocumentMetadata.isNull("totalInterest")) LoanOverviewRow("Document total interest", LoanMoney.formatPaise(loanDocumentMetadata.optLong("totalInterest")))
+                        if (!loanDocumentMetadata.isNull("declaredTotalRepayment")) LoanOverviewRow("Document-declared total repayment", LoanMoney.formatPaise(loanDocumentMetadata.optLong("declaredTotalRepayment")))
+                        if (!loanDocumentMetadata.isNull("netDisbursedAmount")) LoanOverviewRow("Net disbursed amount", LoanMoney.formatPaise(loanDocumentMetadata.optLong("netDisbursedAmount")))
                         if (!loanDocumentMetadata.isNull("borrowerName")) LoanOverviewRow("Document borrower", loanDocumentMetadata.optString("borrowerName"))
                         if (!loanDocumentMetadata.isNull("agreementNumber")) LoanOverviewRow("Agreement number", loanDocumentMetadata.optString("agreementNumber"))
-                        if (!loanDocumentMetadata.isNull("principal")) LoanOverviewRow("Document principal", Money.format(loanDocumentMetadata.optLong("principal")))
-                        if (!loanDocumentMetadata.isNull("emi")) LoanOverviewRow("Document EMI", Money.format(loanDocumentMetadata.optLong("emi")))
+                        if (!loanDocumentMetadata.isNull("principal")) LoanOverviewRow("Document principal", LoanMoney.formatPaise(loanDocumentMetadata.optLong("principal")))
+                        if (!loanDocumentMetadata.isNull("emi")) LoanOverviewRow("Document EMI", LoanMoney.formatPaise(loanDocumentMetadata.optLong("emi")))
                         if (!loanDocumentMetadata.isNull("tenureMonths")) LoanOverviewRow("Document tenure", loanDocumentMetadata.optString("tenureMonths") + " months")
                         if (!loanDocumentMetadata.isNull("loanId")) LoanOverviewRow("Document loan ID", loanDocumentMetadata.optString("loanId"))
                         if (!loanDocumentMetadata.isNull("prepaymentCharge")) LoanOverviewRow("Prepayment charges", loanDocumentMetadata.optString("prepaymentCharge"))
@@ -4238,7 +4246,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                         if (!loanDocumentMetadata.isNull("repaymentStartDate")) LoanOverviewRow("Repayment starts", loanDocumentMetadata.optString("repaymentStartDate"))
                         if (!loanDocumentMetadata.isNull("repaymentEndDate")) LoanOverviewRow("Repayment ends", loanDocumentMetadata.optString("repaymentEndDate"))
                         if (!loanDocumentMetadata.isNull("annualInterestRate")) LoanOverviewRow("Annual interest rate", loanDocumentMetadata.optString("annualInterestRate") + "%")
-                        if (!loanDocumentMetadata.isNull("scheduleInterestTotal")) LoanOverviewRow("Total schedule interest", Money.format(loanDocumentMetadata.optLong("scheduleInterestTotal")))
+                        if (!loanDocumentMetadata.isNull("scheduleInterestTotal")) LoanOverviewRow("Total schedule interest", LoanMoney.formatPaise(loanDocumentMetadata.optLong("scheduleInterestTotal")))
                         if (!loanDocumentMetadata.isNull("bounceCharge")) LoanOverviewRow("Bounce charges", loanDocumentMetadata.optString("bounceCharge"))
                         if (importedDocumentBreakdown.isNotEmpty()) {
                             HorizontalDivider(color = page)
@@ -4247,9 +4255,9 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                             importedDocumentBreakdown.forEach { row ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text("EMI " + row.installmentNumber, color = Ink, fontSize = 10.sp, modifier = Modifier.weight(.7f))
-                                    Text("P " + Money.format(row.principal), color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
-                                    Text("I " + Money.format(row.interest), color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
-                                    Text(Money.format(row.installment), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text("P " + LoanMoney.formatPaise(row.principal), color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                                    Text("I " + LoanMoney.formatPaise(row.interest), color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                                    Text(LoanMoney.formatPaise(row.installment), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -4313,7 +4321,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                                 importedSchedule.take(12).forEachIndexed { index, row ->
                                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFFF5F8F7)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Text("${index + 1}. ${row.first}", modifier = Modifier.weight(1f), color = Ink, fontSize = 11.sp)
-                                        Text(Money.format(row.second), color = forest, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text(LoanMoney.formatPaise(row.second), color = forest, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 if (importedSchedule.size > 12) Text("Showing first 12 rows. All ${importedSchedule.size} installments are saved.", color = Muted, fontSize = 10.sp)
@@ -4323,12 +4331,13 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                             LoanDateField("Bank EMI date", bankEmiDate, { bankEmiDate = it; bankCheckAttempted = false })
                             Button(onClick = { bankCheckAttempted = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = forest)) { Text("Compare installment") }
                             if (bankCheckAttempted) {
-                                val amount = bankEmiAmount.toDoubleOrNull()
+                                val amountPaise = LoanMoney.parsePaise(bankEmiAmount)
+                                val expectedAmountPaise = importedDocumentBreakdown.firstOrNull()?.installment ?: LoanMoney.rupeesToPaise(loan.emi)
                                 val formatter = java.time.format.DateTimeFormatterBuilder().parseCaseInsensitive().appendPattern("d MMM yyyy").toFormatter(Locale.ENGLISH)
                                 val bankDate = runCatching { java.time.LocalDate.parse(bankEmiDate.trim().take(10)) }.getOrElse { runCatching { java.time.LocalDate.parse(bankEmiDate.trim(), formatter) }.getOrNull() }
                                 val expectedDate = firstDueDate
-                                val validInput = amount != null && amount >= 0.0 && bankDate != null
-                                val amountMatches = amount != null && kotlin.math.abs(amount - loan.emi.toDouble()) < 0.5
+                                val validInput = amountPaise != null && bankDate != null
+                                val amountMatches = amountPaise != null && amountPaise == expectedAmountPaise
                                 val dateMatches = bankDate != null && expectedDate != null && bankDate == expectedDate
                                 Text(if (!validInput) "Unable to compare: enter a valid amount and date such as 5 Nov 2026." else if (amountMatches && dateMatches) "Amount and date match MoneyLog's current estimate." else "Difference found: " + listOfNotNull(if (!amountMatches) "bank amount differs from the EMI entered in MoneyLog" else null, if (!dateMatches) "bank date differs from MoneyLog's next due date" else null).joinToString("; ") + ".", color = if (validInput && amountMatches && dateMatches) forest else Color(0xFFB45309), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                 Text("This is a manual comparison, not bank verification. Confirm against the lender's official schedule.", color = Muted, fontSize = 10.sp)
@@ -4371,16 +4380,16 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                             val displayedRate = breakdown?.annualRate ?: loan.annualRate.takeIf { it > 0.0 }
                             val rateLabel = displayedRate?.let { "Rate $it%" } ?: "Rate not stated"
                             if (breakdown != null) {
-                                Text("Principal ${Money.format(breakdown.principal)} · Interest ${Money.format(breakdown.interest)}", color = Muted, fontSize = 9.sp)
+                                Text("Principal ${LoanMoney.formatPaise(breakdown.principal)} · Interest ${LoanMoney.formatPaise(breakdown.interest)}", color = Muted, fontSize = 9.sp)
                                 val balances = listOfNotNull(
-                                    breakdown.openingPrincipal.takeIf { it > 0L }?.let { "Opening ${Money.format(it)}" },
-                                    breakdown.closingPrincipal?.let { "Closing ${Money.format(it)}" }
+                                    breakdown.openingPrincipal.takeIf { it > 0L }?.let { "Opening ${LoanMoney.formatPaise(it)}" },
+                                    breakdown.closingPrincipal?.let { "Closing ${LoanMoney.formatPaise(it)}" }
                                 )
                                 Text((balances + rateLabel).joinToString(" · "), color = Muted, fontSize = 8.sp)
                             } else Text("PDF EMI · $rateLabel", color = Muted, fontSize = 9.sp)
                         }
                         Column(Modifier.weight(1f), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(Money.format(amount), color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(LoanMoney.formatPaise(amount), color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             Text(if (breakdown != null) "Principal + interest" else "Actual PDF amount", color = Muted, fontSize = 9.sp)
                         }
                         Box(Modifier.weight(.85f), contentAlignment = Alignment.CenterEnd) {
@@ -4810,11 +4819,11 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
             else -> null
         }
     }
-    val currentOutstanding = actualStatementBalance ?: scheduleBasedOutstanding ?: calculatedOutstanding
+    val currentOutstanding = actualStatementBalance?.times(100.0) ?: scheduleBasedOutstanding ?: calculatedOutstanding * 100.0
     val completePdfSchedule = importedScheduleRows.takeIf { rows -> rows.size == total && rows.map { it.installmentNumber } == (1..rows.size).toList() }
     val remainingPdfRows = completePdfSchedule?.drop(paid.coerceIn(0, completePdfSchedule.size))
-    val remainingPayments = remainingPdfRows?.sumOf { it.installment.toDouble() } ?: (monthly * remainingMonths)
-    val remainingInterest = remainingPdfRows?.sumOf { it.interest.toDouble() } ?: (remainingPayments - currentOutstanding).coerceAtLeast(0.0)
+    val remainingPayments = remainingPdfRows?.let { rows -> LoanMoney.sumPaise(rows.map { it.installment }).toDouble() } ?: (monthly * 100.0 * remainingMonths)
+    val remainingInterest = remainingPdfRows?.let { rows -> LoanMoney.sumPaise(rows.map { it.interest }).toDouble() } ?: (remainingPayments - currentOutstanding).coerceAtLeast(0.0)
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -4920,8 +4929,8 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                 Text("Original principal: ${Money.format(kotlin.math.round(originalPrincipal).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
                                 Text("Outstanding principal: ${Money.format(kotlin.math.round(currentOutstanding).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
                                 Text("EMIs remaining: $remainingMonths", color = Ink)
-                                Text("Total remaining EMI payments: ${Money.format(kotlin.math.round(remainingPayments).toLong())}", color = Ink)
-                                Text("${if (remainingPdfRows != null) "Remaining interest from PDF" else "Estimated remaining interest"}: ${Money.format(kotlin.math.round(remainingInterest).toLong())}", color = Ink)
+                                Text("Total remaining EMI payments: ${LoanMoney.formatPaise(kotlin.math.round(remainingPayments).toLong())}", color = Ink)
+                                Text("${if (remainingPdfRows != null) "Remaining interest from PDF" else "Estimated remaining interest"}: ${LoanMoney.formatPaise(kotlin.math.round(remainingInterest).toLong())}", color = Ink)
                                 Text(if (actualStatementBalance != null) "Outstanding balance uses the imported statement value; verify its date." else if (scheduleBasedOutstanding != null) "Outstanding principal is derived from the lender's schedule and the paid-installment count above." else "Outstanding balance is an estimate for a fixed-rate reducing-balance loan.", color = Muted, fontSize = 10.sp)
                             }
                         }
