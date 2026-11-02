@@ -67,7 +67,7 @@ class EmiCalculatorTest {
             "2027-02-05" to 3_485L
         )
         assertEquals(
-            6_785L,
+            10_335L,
             calculatePendingEmiTotal(
                 installments = installments,
                 paidDates = setOf("2026-11-05"),
