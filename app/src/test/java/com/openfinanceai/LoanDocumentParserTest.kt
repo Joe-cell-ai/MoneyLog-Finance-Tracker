@@ -157,4 +157,26 @@ class LoanDocumentParserTest {
         assertEquals(listOf(200L, 135L, 69L), result.scheduleRows.map { it.interest })
     }
 
+    @Test fun extractsExplicitIrregularDatesAcrossMultiplePdfPages() {
+        val statement = """
+            Lender: Date Specific Finance
+            Total Loan Amount (Principal Amount): 20000
+            Amount of EMI Payable (INR) 9000
+            Fixed Rate of Interest: 12.0
+            Tenure (in months) 2
+            Repayment Schedule
+            Instalment No. Due Date Outstanding Principal Principal Interest Installment
+            1 05-Nov-2026 20000 9000 200 9200
+        """.trimIndent() + '\u000C' + """
+            Continued schedule
+            2 07-Dec-2026 11000 9000 110 9110
+        """.trimIndent()
+        val result = LoanDocumentParser.parse(statement)
+        assertEquals(2, result.scheduleRows.size)
+        assertEquals("2026-11-05", result.scheduleRows[0].dueDate)
+        assertEquals("2026-12-07", result.scheduleRows[1].dueDate)
+        assertEquals(listOf(9200L, 9110L), result.scheduleRows.map { it.installment })
+    }
+
+
 }
