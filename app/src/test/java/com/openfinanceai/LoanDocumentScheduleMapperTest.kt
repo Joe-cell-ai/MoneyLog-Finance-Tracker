@@ -7,10 +7,10 @@ import org.junit.Test
 class LoanDocumentScheduleMapperTest {
     @Test fun preservesPdfFinancialBreakdownAndEachVariableInstallment() {
         val rows = listOf(
-            LoanDocumentScheduleRow(1, 100000, 7000, 1000, 8000, null, "2026-11-05", 93000),
-            LoanDocumentScheduleRow(2, 93000, 7100, 900, 8000, null, "2026-12-05", 85900),
-            LoanDocumentScheduleRow(3, 85900, 7300, 700, 8000, null, "2027-01-05", 78600),
-            LoanDocumentScheduleRow(4, 78600, 78600, 500, 79100, null, "2027-02-05", 0)
+            LoanDocumentScheduleRow(1, 10000000L, 700000L, 100000L, 800000L, null, "2026-11-05", 9300000L),
+            LoanDocumentScheduleRow(2, 9300000L, 710000L, 90000L, 800000L, null, "2026-12-05", 8590000L),
+            LoanDocumentScheduleRow(3, 8590000L, 730000L, 70000L, 800000L, null, "2027-01-05", 7860000L),
+            LoanDocumentScheduleRow(4, 7860000L, 7860000L, 50000L, 7910000L, null, "2027-02-05", 0L)
         )
         val mapped = LoanDocumentScheduleMapper.map(rows, null)
         assertEquals(listOf("2026-11-05", "2026-12-05", "2027-01-05", "2027-02-05"), mapped.map { it.date })
@@ -24,8 +24,8 @@ class LoanDocumentScheduleMapperTest {
 
     @Test fun doesNotInventClosingBalanceWhenPdfDoesNotStateIt() {
         val rows = listOf(
-            LoanDocumentScheduleRow(1, 10000, 900, 100, 1000, null, "2026-11-05"),
-            LoanDocumentScheduleRow(2, 9100, 9100, 90, 9190, null, "2026-12-05")
+            LoanDocumentScheduleRow(1, 1000000L, 90000L, 10000L, 100000L, null, "2026-11-05"),
+            LoanDocumentScheduleRow(2, 910000L, 910000L, 9000L, 919000L, null, "2026-12-05")
         )
         val mapped = LoanDocumentScheduleMapper.map(rows, null)
         assertEquals(listOf(null, null), mapped.map { it.closingBalance })
@@ -33,8 +33,8 @@ class LoanDocumentScheduleMapperTest {
 
     @Test fun keepsSourceAnnualRateWhenPresentAndUnknownWhenAbsent() {
         val rows = listOf(
-            LoanDocumentScheduleRow(1, 30000, 9000, 300, 9300, 12.0, "2026-11-05", 21000),
-            LoanDocumentScheduleRow(2, 21000, 9000, 210, 9210, null, "2026-12-07", 12000)
+            LoanDocumentScheduleRow(1, 3000000L, 900000L, 30000L, 930000L, 12.0, "2026-11-05", 2100000L),
+            LoanDocumentScheduleRow(2, 2100000L, 900000L, 21000L, 921000L, null, "2026-12-07", 1200000L)
         )
         val mapped = LoanDocumentScheduleMapper.map(rows, null)
         assertEquals(listOf(12.0, null), mapped.map { it.annualRatePercent })
@@ -47,24 +47,24 @@ class LoanDocumentScheduleMapperTest {
     }
 
     @Test fun refusesToInventDatesForMissingOrInvalidStartDate() {
-        val rows = listOf(LoanDocumentScheduleRow(1, 10000, 900, 100, 1000))
+        val rows = listOf(LoanDocumentScheduleRow(1, 1000000L, 90000L, 10000L, 100000L))
         assertTrue(LoanDocumentScheduleMapper.map(rows, null).isEmpty())
         assertTrue(LoanDocumentScheduleMapper.map(rows, "05/11/2026").isEmpty())
     }
 
     @Test fun refusesIncompleteOrOutOfOrderSchedules() {
         val rows = listOf(
-            LoanDocumentScheduleRow(1, 10000, 900, 100, 1000),
-            LoanDocumentScheduleRow(3, 9100, 900, 100, 1000)
+            LoanDocumentScheduleRow(1, 1000000L, 90000L, 10000L, 100000L),
+            LoanDocumentScheduleRow(3, 910000L, 90000L, 10000L, 100000L)
         )
         assertTrue(LoanDocumentScheduleMapper.map(rows, "2026-11-05").isEmpty())
     }
 
     @Test fun prefersExplicitIrregularDueDatesFromEachPdfRow() {
         val rows = listOf(
-            LoanDocumentScheduleRow(1, 30000, 9000, 300, 9300, 12.0, "2026-11-05"),
-            LoanDocumentScheduleRow(2, 21000, 9000, 210, 9210, 12.0, "2026-12-07"),
-            LoanDocumentScheduleRow(3, 12000, 9000, 120, 9120, 11.5, "2027-01-10")
+            LoanDocumentScheduleRow(1, 3000000L, 900000L, 30000L, 930000L, 12.0, "2026-11-05"),
+            LoanDocumentScheduleRow(2, 2100000L, 900000L, 21000L, 921000L, 12.0, "2026-12-07"),
+            LoanDocumentScheduleRow(3, 1200000L, 900000L, 12000L, 912000L, 11.5, "2027-01-10")
         )
         val mapped = LoanDocumentScheduleMapper.map(rows, null)
         assertEquals(listOf("2026-11-05", "2026-12-07", "2027-01-10"), mapped.map { it.date })
@@ -74,8 +74,8 @@ class LoanDocumentScheduleMapperTest {
 
     @Test fun refusesMixedExplicitAndMissingRowDatesRatherThanInventingDates() {
         val rows = listOf(
-            LoanDocumentScheduleRow(1, 20000, 9000, 200, 9200, null, "2026-11-05"),
-            LoanDocumentScheduleRow(2, 11000, 9000, 110, 9110)
+            LoanDocumentScheduleRow(1, 2000000L, 900000L, 20000L, 920000L, null, "2026-11-05"),
+            LoanDocumentScheduleRow(2, 1100000L, 900000L, 11000L, 911000L)
         )
         assertTrue(LoanDocumentScheduleMapper.map(rows, "2026-12-05").isEmpty())
     }
