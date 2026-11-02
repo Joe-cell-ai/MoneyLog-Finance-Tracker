@@ -4237,7 +4237,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     val row = importedSchedule[index]
                     val originalDateLabel = row.first
                     val dateLabel = schedulePrefs.getString("emi_rescheduled_${loan.lender}_${originalDateLabel}", originalDateLabel) ?: originalDateLabel
-                    val amount = row.second
+                    val amount = schedulePrefs.getLong("emi_amount_${loan.lender}_${originalDateLabel}", row.second)
                     val actualDate = parseScheduleDate(dateLabel)
                     val savedStatus = schedulePrefs.getString("emi_status_${loan.lender}_${originalDateLabel}", null)
                     // Explicit per-installment payment records remain authoritative.
