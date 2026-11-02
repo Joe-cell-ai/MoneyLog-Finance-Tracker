@@ -1,5 +1,6 @@
 package com.openfinanceai
 
+/** Every monetary field is stored as integer paise, never rounded rupees. */
 internal data class LoanDocumentScheduleRow(
     val installmentNumber: Int,
     val openingPrincipal: Long,
@@ -11,6 +12,7 @@ internal data class LoanDocumentScheduleRow(
     val closingPrincipal: Long? = null
 )
 
+/** Every monetary field is stored as integer paise, never rounded rupees. */
 internal data class LoanDocumentExtraction(
     val lender: String? = null,
     val loanNumber: String? = null,
@@ -42,9 +44,7 @@ internal object LoanDocumentParser {
         val text = sourceText.replace('\u00A0', ' ').replace('\u200B', ' ')
             .replace("\uFB03", "ffi").replace("\uFB01", "fi").replace("\uFB02", "fl").replace("\uFB00", "ff")
         val lines = text.lines().map { it.trim().replace(Regex("""[ \t]+"""), " ") }
-        fun number(raw: String?): Long? = raw?.replace(",", "")?.toDoubleOrNull()
-            ?.takeIf { it >= 0.0 && it <= Long.MAX_VALUE.toDouble() }
-            ?.let { kotlin.math.round(it).toLong() }
+        fun number(raw: String?): Long? = raw?.let(LoanMoney::parsePaise)
         fun amountOnLine(label: Regex): Long? {
             for (i in lines.indices) {
                 val match = label.find(lines[i]) ?: continue
@@ -173,25 +173,10 @@ internal object LoanDocumentParser {
             }
         }
         val rowPattern = Regex("""(?m)^\s*(\d{1,3})\s+(.+?)\s*$""")
-        fun exactScheduleAmount(raw: String): Long? = runCatching {
-            val value = java.math.BigDecimal(raw.replace(",", ""))
-            if (value.stripTrailingZeros().scale() > 0) null else value.longValueExact()
-        }.getOrNull()
-        val hasSubRupeeScheduleValues = rowPattern.findAll(scheduleText).any { match ->
-            val rowTokens = Regex("""[0-9][0-9,]*(?:\.[0-9]{1,4})?""")
-                .findAll(match.groupValues[2]).map { it.value }.toList()
-            // A rate such as 12.5% is not a monetary value. Exclude the rate
-            // column before checking whether the schedule needs paise precision.
-            val monetaryTokens = if (hasScheduleRateColumn && rowTokens.size == 5) {
-                listOf(rowTokens[0], rowTokens[2], rowTokens[3], rowTokens[4])
-            } else rowTokens
-            monetaryTokens.any { token ->
-                runCatching {
-                    java.math.BigDecimal(token.replace(",", "")).stripTrailingZeros().scale() > 0
-                }.getOrDefault(false)
-            }
-        }
-        val rows = if (hasSubRupeeScheduleValues) emptyList() else rowPattern.findAll(scheduleText).mapNotNull { match ->
+        fun exactScheduleAmount(raw: String): Long? = LoanMoney.parsePaise(raw)
+        // All lender amounts are parsed directly to paise. Interest-rate tokens are
+        // handled separately and never enter the monetary parser.
+        val rows = rowPattern.findAll(scheduleText).mapNotNull { match ->
             val no = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
             val rawValues = match.groupValues[2]
             val dateMatch = scheduleDatePattern.find(rawValues)
@@ -224,10 +209,7 @@ internal object LoanDocumentParser {
         if (rows.any { it.dueDate != null } && rows.any { it.dueDate == null }) {
             warnings += "Only some repayment rows contain readable due dates. MoneyLog will not invent dates for the remaining rows."
         }
-        if (hasSubRupeeScheduleValues) {
-            warnings += "The repayment schedule contains paise-level decimal amounts. This version of MoneyLog stores schedule amounts in whole rupees, so the PDF schedule was blocked rather than silently rounded. Import it only after paise-precision storage is supported."
-        }
-        if (rows.isEmpty() && tenure != null && !hasSubRupeeScheduleValues) {
+        if (rows.isEmpty() && tenure != null) {
             warnings += "No detailed monthly principal/interest schedule was extracted. MoneyLog will not invent a monthly split from the EMI and interest rate."
         }
         if (scheduleHeader != null && rows.isEmpty()) {
