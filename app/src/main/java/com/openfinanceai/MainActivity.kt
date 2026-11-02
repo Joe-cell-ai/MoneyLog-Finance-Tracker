@@ -4837,13 +4837,15 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         Spacer(Modifier.width(8.dp))
                         Text(if (pdfBusy) "Reading PDF…" else "Import Loan PDF")
                     }
-                    Text("Option 2 · Enter or correct the details manually", color = Muted, fontSize = 12.sp)
+                    Text("Review the extracted values. Only lender, principal, EMI and tenure are essential; rate and dates may remain unknown when the PDF provides exact monthly schedule rows.", color = Muted, fontSize = 12.sp)
                     OutlinedTextField(lender, { lender = it; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Lender / Bank") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(borrowerName, { borrowerName = it; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Borrower name (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(agreementNumber, { agreementNumber = it; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Agreement / Loan No. (primary identifier)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                    LoanDateField("Repayment start date", startDate, { startDate = it; saved = false })
+                    if (importedScheduleRows.isEmpty() || importedScheduleRows.any { it.dueDate.isNullOrBlank() }) {
+                        LoanDateField("First EMI date (required only if PDF has no row dates)", startDate, { startDate = it; saved = false })
+                    }
                     OutlinedTextField(emi, { emi = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%) · optional when PDF gives monthly interest") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     if (rate.isBlank() && importedScheduleRows.isNotEmpty()) Text("Annual rate is not stated in this PDF. MoneyLog keeps it unknown and uses the exact monthly principal and interest amounts from the lender schedule.", color = Muted, fontSize = 10.sp)
                     OutlinedTextField(totalPayments, { totalPayments = it.filter(Char::isDigit); importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Total tenure (months)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     val calculatorEmi = calculateLoanEmi(
@@ -4851,41 +4853,14 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         rate.toDoubleOrNull() ?: -1.0,
                         totalPayments.toIntOrNull() ?: 0
                     )
-                    Card(colors = CardDefaults.cardColors(containerColor = Mint), shape = RoundedCornerShape(16.dp)) {
-                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                            Text("EMI Calculator", color = Green, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("Enter the principal, annual interest rate and tenure to calculate the monthly EMI.", color = Muted, fontSize = 11.sp)
-                            OutlinedTextField(
-                                value = calculatorLoanAmount,
-                                onValueChange = { calculatorLoanAmount = it.filter { c -> c.isDigit() || c == '.' }; saved = false },
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Loan amount (₹)") },
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("Calculated monthly EMI", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                Text(calculatorEmi?.let { Money.format(it) } ?: "—", color = Green, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Text("Rate and tenure use the fields above. Calculation uses the reducing-balance EMI formula.", color = Muted, fontSize = 10.sp)
-                            OutlinedButton(
-                                onClick = {
-                                    calculatorEmi?.let { result ->
-                                        emi = result.toString()
-                                        importedPrincipal = calculatorLoanAmount
-                                        error = ""
-                                        saved = false
-                                    }
-                                },
-                                enabled = calculatorEmi != null,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(Icons.Default.Calculate, null)
-                                Spacer(Modifier.width(7.dp))
-                                Text("Use calculated EMI")
-                            }
-                        }
-                    }
+                    OutlinedTextField(
+                        value = calculatorLoanAmount,
+                        onValueChange = { calculatorLoanAmount = it.filter { c -> c.isDigit() || c == '.' }; saved = false; error = "" },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Loan principal (₹)") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp)
+                    )
                     OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(statementOutstanding, { statementOutstanding = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Statement outstanding principal (optional, ₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     if (statementDate.isNotBlank()) Text("Statement date: $statementDate", color = Muted, fontSize = 11.sp)
