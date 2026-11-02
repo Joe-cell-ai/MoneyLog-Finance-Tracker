@@ -7,7 +7,8 @@ internal data class LoanDocumentScheduleRow(
     val interest: Long,
     val installment: Long,
     val annualRate: Double? = null,
-    val dueDate: String? = null
+    val dueDate: String? = null,
+    val closingPrincipal: Long? = null
 )
 
 internal data class LoanDocumentExtraction(
@@ -183,7 +184,7 @@ internal object LoanDocumentParser {
                 val interestPaid = amounts[3]
                 val closing = amounts[4]
                 if (opening - principalPaid != closing || principalPaid + interestPaid != installment) return@mapNotNull null
-                LoanDocumentScheduleRow(no, opening, principalPaid, interestPaid, installment, null, dueDate)
+                LoanDocumentScheduleRow(no, opening, principalPaid, interestPaid, installment, null, dueDate, closing)
             } else if (!hasScheduleRateColumn && tokens.size == 4) {
                 val amounts = tokens.map { number(it) ?: return@mapNotNull null }
                 LoanDocumentScheduleRow(no, amounts[0], amounts[1], amounts[2], amounts[3], null, dueDate)
