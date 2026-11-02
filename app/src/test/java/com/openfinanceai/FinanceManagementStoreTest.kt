@@ -59,8 +59,6 @@ class FinanceManagementStoreTest {
         assertTrue(store.renameTag("Amazon", "Amazon Pay"))
         assertEquals(defaultTags + "Amazon Pay", store.loadTags())
 
-        val preferences = RuntimeEnvironment.getApplication()
-            .getSharedPreferences("finance_management_test", Context.MODE_PRIVATE)
         assertEquals("brand_amazon", preferences.getString("tag_icon_amazon pay", null))
         assertEquals(4, preferences.getInt("tag_color_index_amazon pay", -1))
 
