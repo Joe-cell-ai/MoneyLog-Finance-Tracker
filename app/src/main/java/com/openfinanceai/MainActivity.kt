@@ -4370,7 +4370,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     var startDate by remember { mutableStateOf("") }
     var paymentsMade by remember { mutableStateOf("0") }
     var totalPayments by remember { mutableStateOf("") }
-    var rate by remember { mutableStateOf("12") }
+    var rate by remember { mutableStateOf("") }
     var emi by remember { mutableStateOf("") }
     var statementOutstanding by remember { mutableStateOf("") }
     var statementDate by remember { mutableStateOf("") }
@@ -4546,10 +4546,10 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         val aprTenure = Regex("(?i)Loan Term \\(in years/ months/ days\\).*?Part 1\\)\\s*([0-9]{1,3})").find(aprNormalized)?.groupValues?.get(1)
                         val aprEmi = Regex("(?i)Amount of each EPI.*?([0-9][0-9,]*(?:\\.[0-9]{1,2})?)\\s+nos\\.\\s+of EPIs").find(aprNormalized)?.groupValues?.get(1)?.replace(",", "")
                         val aprStartDate = Regex("(?i)Commencement of repayments?, post sanction.*?\\b([0-9]{4}-[0-9]{2}-[0-9]{2})\\b").find(aprNormalized)?.groupValues?.get(1)
-                        (captureLabeled(emiLabel) ?: captureLabeledNearby(emiLabel) ?: aprEmi ?: recurringScheduleEmi)
+                        (captureLabeled(emiLabel) ?: captureLabeledNearby(emiLabel) ?: aprEmi ?: recurringScheduleEmi ?: scheduleRows.firstOrNull()?.second?.toString())
                             ?.let { fields.put("emi", it.substringBefore(".")) }
                         val rateLabel = "(?:annual\\s+)?(?:interest\\s+rate(?:\\s+per\\s+annum)?|fixed\\s+rate\\s+of\\s+interest|rate\\s+of\\s+interest|roi)"
-                        (captureLabeled(rateLabel) ?: captureLabeledNearby(rateLabel))?.let { fields.put("rate", it) }
+                        (captureLabeled(rateLabel) ?: captureLabeledNearby(rateLabel) ?: auditedDocument.scheduleRows.firstNotNullOfOrNull { it.annualRate }?.toString())?.let { fields.put("rate", it) }
                         val tenureLabel = "(?:(?:total|loan|repayment)\\s+)*(?:tenure|term|period|duration|tenor)(?:\\s+in\\s+(?:months?|years?))?"
                         fun captureTenureMonths(): String? {
                             val labelRegex = Regex(tenureLabel, RegexOption.IGNORE_CASE)
@@ -4665,12 +4665,19 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     val total = totalPayments.toIntOrNull() ?: 0
     val paid = paymentsMade.toIntOrNull() ?: 0
     val validInputs = monthly > 0.0 && annualRate >= 0.0 && total > 0 && paid in 0..total
-    val originalEstimate = if (validInputs) loanPresentValue(monthly, annualRate, total) else 0.0
-    val originalPrincipal = importedPrincipal.toDoubleOrNull()?.takeIf { it > 0.0 } ?: originalEstimate
+    val originalPrincipal = importedPrincipal.toDoubleOrNull()?.takeIf { it > 0.0 }
+        ?: calculatorLoanAmount.toDoubleOrNull()?.takeIf { it > 0.0 } ?: 0.0
     val remainingMonths = (total - paid).coerceAtLeast(0)
     val calculatedOutstanding = if (validInputs) loanOutstandingEstimate(monthly, annualRate, remainingMonths) else 0.0
     val actualStatementBalance = statementOutstanding.toDoubleOrNull()
-    val currentOutstanding = actualStatementBalance ?: calculatedOutstanding
+    val scheduleBasedOutstanding = importedScheduleRows.takeIf { rows -> rows.isNotEmpty() && rows.map { it.installmentNumber } == (1..rows.size).toList() }?.let { rows ->
+        when {
+            paid == 0 -> rows.first().openingPrincipal.toDouble()
+            paid in 1..rows.size -> (rows[paid - 1].openingPrincipal - rows[paid - 1].principal).coerceAtLeast(0L).toDouble()
+            else -> null
+        }
+    }
+    val currentOutstanding = actualStatementBalance ?: scheduleBasedOutstanding ?: calculatedOutstanding
     val remainingPayments = monthly * remainingMonths
     val remainingInterest = (remainingPayments - currentOutstanding).coerceAtLeast(0.0)
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
