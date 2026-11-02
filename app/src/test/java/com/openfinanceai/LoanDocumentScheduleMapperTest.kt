@@ -37,4 +37,24 @@ class LoanDocumentScheduleMapperTest {
         )
         assertTrue(LoanDocumentScheduleMapper.map(rows, "2026-11-05").isEmpty())
     }
+    @Test fun prefersExplicitIrregularDueDatesFromEachPdfRow() {
+        val rows = listOf(
+            LoanDocumentScheduleRow(1, 30000, 9000, 300, 9300, 12.0, "2026-11-05"),
+            LoanDocumentScheduleRow(2, 21000, 9000, 210, 9210, 12.0, "2026-12-07"),
+            LoanDocumentScheduleRow(3, 12000, 9000, 120, 9120, 11.5, "2027-01-10")
+        )
+        val mapped = LoanDocumentScheduleMapper.map(rows, null)
+        assertEquals(listOf("2026-11-05", "2026-12-07", "2027-01-10"), mapped.map { it.date })
+        assertEquals(listOf(9300L, 9210L, 9120L), mapped.map { it.amount })
+    }
+
+    @Test fun refusesMixedExplicitAndMissingRowDatesRatherThanInventingDates() {
+        val rows = listOf(
+            LoanDocumentScheduleRow(1, 20000, 9000, 200, 9200, null, "2026-11-05"),
+            LoanDocumentScheduleRow(2, 11000, 9000, 110, 9110)
+        )
+        assertTrue(LoanDocumentScheduleMapper.map(rows, "2026-12-05").isEmpty())
+    }
+
+
 }
