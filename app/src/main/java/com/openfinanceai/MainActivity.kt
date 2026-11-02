@@ -421,7 +421,7 @@ private fun loanAccent(lender: String): Color = when {
 private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
 
 
-private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "")
+private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L)
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
@@ -488,6 +488,31 @@ private object AppLockRuntime {
     }.getOrDefault(false)
 }
 
+private fun scheduleAutomaticBackup(context: Context, updateExisting: Boolean = false): String {
+    val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+    val workManager = androidx.work.WorkManager.getInstance(context)
+    workManager.cancelUniqueWork("moneylog_drive_backup_daily")
+    val workName = "moneylog_automatic_backup"
+    if (!prefs.getBoolean("automatic_backup_enabled", false)) {
+        workManager.cancelUniqueWork(workName)
+        return "Automatic backup is off."
+    }
+    val destination = prefs.getString("automatic_backup_destination", "device") ?: "device"
+    val folderKey = if (destination == "drive") "drive_backup_tree_uri" else "device_backup_tree_uri"
+    if (prefs.getString(folderKey, null).isNullOrBlank()) {
+        workManager.cancelUniqueWork(workName)
+        return if (destination == "drive") "Connect a Google Drive folder to start automatic backup."
+            else "Choose a device backup folder to start automatic backup."
+    }
+    val frequency = prefs.getString("automatic_backup_frequency", "daily") ?: "daily"
+    val interval = when (frequency) { "weekly" -> 7L; "monthly" -> 30L; else -> 1L }
+    val request = androidx.work.PeriodicWorkRequestBuilder<GoogleDriveBackupWorker>(interval, java.util.concurrent.TimeUnit.DAYS).build()
+    val policy = if (updateExisting) androidx.work.ExistingPeriodicWorkPolicy.UPDATE else androidx.work.ExistingPeriodicWorkPolicy.KEEP
+    workManager.enqueueUniquePeriodicWork(workName, policy, request)
+    val destinationLabel = if (destination == "drive") "Google Drive" else "private device storage"
+    return "Automatic backup scheduled ${frequency} to $destinationLabel."
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -539,19 +564,30 @@ private fun FinanceApp() {
     var emiRescheduleDate by remember { mutableStateOf("") }
     var showEmiReschedule by remember { mutableStateOf<EmiQuickAction?>(null) }
     val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        androidx.work.WorkManager.getInstance(context).cancelUniqueWork("moneylog_drive_backup_daily")
+    }
     val drivePrefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
     var driveStatus by remember { mutableStateOf(drivePrefs.getString("drive_backup_status", "Google Drive backup is not connected") ?: "Google Drive backup is not connected") }
     val driveFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) runCatching {
             val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             context.contentResolver.takePersistableUriPermission(uri, flags)
-            drivePrefs.edit().putString("drive_backup_tree_uri", uri.toString()).putString("drive_backup_status", "Google Drive folder connected; daily backup scheduled").apply()
-            driveStatus = "Google Drive folder connected; daily backup scheduled"
-            androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                "moneylog_drive_backup_daily", androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
-                androidx.work.PeriodicWorkRequestBuilder<GoogleDriveBackupWorker>(24, java.util.concurrent.TimeUnit.HOURS).build()
-            )
+            drivePrefs.edit().putString("drive_backup_tree_uri", uri.toString()).apply()
+            val scheduleMessage = scheduleAutomaticBackup(context, updateExisting = true)
+            driveStatus = "Google Drive folder connected. $scheduleMessage"
+            drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
         }.onFailure { error -> driveStatus = "Could not connect folder: " + (error.message ?: "permission error") }
+    }
+    val deviceFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) runCatching {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            context.contentResolver.takePersistableUriPermission(uri, flags)
+            drivePrefs.edit().putString("device_backup_tree_uri", uri.toString()).apply()
+            val scheduleMessage = scheduleAutomaticBackup(context, updateExisting = true)
+            driveStatus = "Device backup folder connected. $scheduleMessage"
+            drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
+        }.onFailure { error -> driveStatus = "Could not connect device folder: " + (error.message ?: "permission error") }
     }
     // Open the actual Google Drive app first so users can sign in there. When they
     // return to MoneyLog, continue with Android's folder picker to grant folder access.
@@ -605,9 +641,26 @@ private fun FinanceApp() {
         ).also { saveLoans(context, it) })
     }
 
+    // Update the stack in the same event as navigation. LaunchedEffect-based
+    // history can lag behind a fast Back press and send the user to Home.
     var tabHistory by remember { mutableStateOf(listOf("Home")) }
-    LaunchedEffect(tab) {
-        if (tabHistory.lastOrNull() != tab) tabHistory = tabHistory + tab
+    fun navigateTo(destination: String) {
+        if (tab != destination) {
+            tabHistory = tabHistory + destination
+            tab = destination
+        }
+    }
+    fun replaceCurrentScreen(destination: String) {
+        tabHistory = tabHistory.dropLast(1).ifEmpty { listOf("Home") } + destination
+        tab = destination
+    }
+    fun navigateBack() {
+        if (tab != "Home") {
+            val leavingLoanDetails = tab == "Loan details"
+            tabHistory = tabHistory.dropLast(1).ifEmpty { listOf("Home") }
+            tab = tabHistory.last()
+            if (leavingLoanDetails) selectedLoan = null
+        }
     }
     BackHandler(
         enabled = tab != "Home" || showAdd || showAddAsIncome || transactionForActions != null ||
@@ -625,12 +678,7 @@ private fun FinanceApp() {
             transactionForActions != null -> transactionForActions = null
             showAddAsIncome -> showAddAsIncome = false
             showAdd -> showAdd = false
-            tab == "Loan details" -> { tab = "Loans"; selectedLoan = null }
-            tab != "Home" -> {
-                val previous = tabHistory.dropLast(1).lastOrNull() ?: "Home"
-                tabHistory = tabHistory.dropLast(1).ifEmpty { listOf("Home") }
-                tab = previous
-            }
+            tab != "Home" -> navigateBack()
         }
     }
 
@@ -833,7 +881,7 @@ private fun FinanceApp() {
                         }
                         NavigationBarItem(
                             selected = tab == name,
-                            onClick = { tab = name },
+                            onClick = { navigateTo(name) },
                             icon = { Icon(icon, name) },
                             label = { Text(name, fontSize = 10.sp) },
                             colors = NavigationBarItemDefaults.colors(selectedIconColor = Green, selectedTextColor = Green, unselectedIconColor = Muted, unselectedTextColor = Muted, indicatorColor = Mint)
@@ -851,14 +899,14 @@ private fun FinanceApp() {
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding).padding(top = 20.dp).offset { androidx.compose.ui.unit.IntOffset(0, -50) }) {
                 when (tab) {
-                    "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = "Activity" }, { isIncome -> showAddAsIncome = isIncome; showAdd = true }, { tab = it }, { transactionForActions = it })
+                    "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { navigateTo("Activity") }, { isIncome -> showAddAsIncome = isIncome; showAdd = true }, { navigateTo(it) }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
-                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { tab = it }, { transaction ->
-                        tab = "Activity"
+                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { navigateBack() }, { navigateTo(it) }, { transaction ->
+                        navigateTo("Activity")
                         transactionForActions = transaction
                     })
-                    "Loans" -> LoansScreen(loans, { tab = "Add loan" }, { loan -> selectedLoan = loan; tab = "Loan details" }, { loanForActions = it })
-                    "Settings" -> SettingsScreen { tab = it }
+                    "Loans" -> LoansScreen(loans, { navigateTo("Add loan") }, { loan -> selectedLoan = loan; navigateTo("Loan details") }, { loanForActions = it })
+                    "Settings" -> SettingsScreen { navigateTo(it) }
                     "Calendar" -> CalendarScreen(loans, transactions)
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance }, transactions)
                     "Budgets" -> BudgetsScreen(transactions)
@@ -868,9 +916,13 @@ private fun FinanceApp() {
                     "Backup & Export" -> BackupSecurityScreen(
                         onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
                         onConnectDrive = { openGoogleDriveForConnection() },
+                        onChooseDeviceFolder = { deviceFolderPicker.launch(null) },
                         onBackupNow = {
-                            if (drivePrefs.getString("drive_backup_tree_uri", null).isNullOrBlank()) driveStatus = "Connect a Google Drive folder first."
-                            else {
+                            val destination = drivePrefs.getString("automatic_backup_destination", "device") ?: "device"
+                            val folderKey = if (destination == "drive") "drive_backup_tree_uri" else "device_backup_tree_uri"
+                            if (drivePrefs.getString(folderKey, null).isNullOrBlank()) {
+                                driveStatus = if (destination == "drive") "Connect a Google Drive folder first." else "Choose a device backup folder first."
+                            } else {
                                 androidx.work.WorkManager.getInstance(context).enqueue(androidx.work.OneTimeWorkRequestBuilder<GoogleDriveBackupWorker>().build())
                                 driveStatus = "Backup queued. Check status again shortly."
                             }
@@ -893,14 +945,14 @@ private fun FinanceApp() {
                         onPreferenceChanged = { settingsRevision++ }
                     )
                     "About" -> AboutSettingsScreen()
-                    "Loan details" -> selectedLoan?.let { selected -> val loan = loans.firstOrNull { it.lender.equals(selected.lender, true) } ?: selected; LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: EmptyLoansScreen { tab = "Add loan" }
+                    "Loan details" -> selectedLoan?.let { selected -> val loan = loans.firstOrNull { it.lender.equals(selected.lender, true) } ?: selected; LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: loans.firstOrNull()?.let { loan -> LoanDetailsScreen(loan) { date, amount, status -> emiQuickAction = EmiQuickAction(loan.lender, date, amount, status) } } ?: EmptyLoansScreen { navigateTo("Add loan") }
                     "Add loan" -> AddLoanScreen { lender, originalPrincipal, balance, paymentsMade, rate, emi, totalPayments, borrowerName, agreementNumber, ignoredLoanNumber, startDate ->
                         val newLoan = Loan(lender, balance, emi, startDate.ifBlank { "Set due date" }, rate, originalPrincipal, paymentsMade, totalPayments, borrowerName, agreementNumber, "", startDate)
                         loans = listOf(newLoan) + loans
                         saveLoans(context, loans)
-                        tab = "Loans"
+                        replaceCurrentScreen("Loans")
                     }
-                    else -> SettingsScreen { tab = it }
+                    else -> SettingsScreen { navigateTo(it) }
                 }
             }
             transactionForActions?.let { transaction ->
@@ -910,15 +962,83 @@ private fun FinanceApp() {
                     onDismiss = { transactionForActions = null },
                     onEdit = { transactionToEdit = transaction; transactionForActions = null },
                     onDelete = {
-                        val index = transactions.indexOfFirst { it === transaction }
-                        if (index >= 0) {
-                            transactions = transactions.toMutableList().also { it.removeAt(index) }
-                            saveTransactions(context, transactions)
+                        var remainingTransactions = transactions.filterNot { it === transaction }
+                        val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+                        if (transaction.transactionKind == "Loan repayment / EMI") {
+                            val loan = loans.firstOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
+                            if (loan != null) {
+                                val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
+                                val estimatedLegacyReduction = if (monthlyRate <= 0.0) transaction.amount else
+                                    kotlin.math.round((transaction.amount - monthlyRate * loan.balance) / (1.0 + monthlyRate)).toLong()
+                                val storedOrEstimatedReduction = if (transaction.loanAllocationRecorded) transaction.loanPrincipalReduction else estimatedLegacyReduction
+                                val principalReduction = storedOrEstimatedReduction.coerceAtLeast(0L)
+                                    .coerceAtMost(loan.originalPrincipal.coerceAtLeast(loan.balance))
+                                val sameInstallment = remainingTransactions.filter {
+                                    it.transactionKind == "Loan repayment / EMI" &&
+                                        it.loanLender.equals(transaction.loanLender, ignoreCase = true) &&
+                                        it.emiInstallmentDate == transaction.emiInstallmentDate
+                                }
+                                val remainingAmount = sameInstallment.sumOf { it.amount }
+                                val scheduledAmount = prefs.getLong("emi_amount_${transaction.loanLender}_${transaction.emiInstallmentDate}", loan.emi)
+                                val installmentStillPaid = remainingAmount >= scheduledAmount
+                                val hadCountedPayment = transaction.loanPaymentCounted || sameInstallment.any { it.loanPaymentCounted }
+                                val shouldKeepCountedPayment = installmentStillPaid && hadCountedPayment
+                                loans = loans.map { existing ->
+                                    if (existing.lender.equals(loan.lender, true)) existing.copy(
+                                        balance = existing.balance + principalReduction,
+                                        paymentsMade = if (hadCountedPayment && !shouldKeepCountedPayment) (existing.paymentsMade - 1L).coerceAtLeast(0L) else existing.paymentsMade
+                                    ) else existing
+                                }
+                                if (!installmentStillPaid) {
+                                    prefs.edit().remove("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}").apply()
+                                } else {
+                                    prefs.edit().putString("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}", "Paid").apply()
+                                    if (transaction.loanPaymentCounted && sameInstallment.none { it.loanPaymentCounted } && sameInstallment.isNotEmpty()) {
+                                        val replacement = sameInstallment.first()
+                                        val replacementIndex = remainingTransactions.indexOfFirst { it === replacement }
+                                        if (replacementIndex >= 0) remainingTransactions = remainingTransactions.toMutableList().also { list ->
+                                            list[replacementIndex] = replacement.copy(loanPaymentCounted = true)
+                                        }
+                                    }
+                                }
+                                saveLoans(context, loans)
+                            } else {
+                                val remainingAmount = remainingTransactions.filter {
+                                    it.transactionKind == "Loan repayment / EMI" &&
+                                        it.loanLender.equals(transaction.loanLender, ignoreCase = true) &&
+                                        it.emiInstallmentDate == transaction.emiInstallmentDate
+                                }.sumOf { it.amount }
+                                val scheduledAmount = prefs.getLong("emi_amount_${transaction.loanLender}_${transaction.emiInstallmentDate}", transaction.amount)
+                                if (remainingAmount >= scheduledAmount) prefs.edit().putString("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}", "Paid").apply()
+                                else prefs.edit().remove("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}").apply()
+                            }
+                        } else if (transaction.transactionKind == "Loan received") {
+                            val loan = loans.firstOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
+                            if (loan != null) {
+                                val newBalance = (loan.balance - transaction.amount).coerceAtLeast(0L)
+                                val newPrincipal = (loan.originalPrincipal - transaction.loanReceiptPrincipalAdded).coerceAtLeast(newBalance)
+                                loans = loans.map { existing ->
+                                    if (existing.lender.equals(loan.lender, true)) existing.copy(balance = newBalance, originalPrincipal = newPrincipal) else existing
+                                }
+                                saveLoans(context, loans)
+                            }
                         }
+                        transactions = remainingTransactions
+                        saveTransactions(context, transactions)
                         transactionForActions = null
                     },
                     onDuplicate = {
-                        val copy = transaction.copy(title = if (transaction.title.endsWith(" (copy)")) transaction.title else "${transaction.title} (copy)")
+                        val copy = transaction.copy(
+                            title = if (transaction.title.endsWith(" (copy)")) transaction.title else "${transaction.title} (copy)",
+                            loanLender = "",
+                            emiInstallmentDate = "",
+                            transactionKind = "",
+                            loanPrincipalReduction = 0L,
+                            loanInterestPortion = 0L,
+                            loanPaymentCounted = false,
+                            loanAllocationRecorded = false,
+                            loanReceiptPrincipalAdded = 0L
+                        )
                         transactions = listOf(copy) + transactions
                         saveTransactions(context, transactions)
                         transactionForActions = null
@@ -995,30 +1115,23 @@ private fun FinanceApp() {
                                 EmiQuickActionRow(Icons.Default.CheckCircle, "Mark as paid", "Record this installment and update the loan balance", Color(0xFF10B981), Color(0xFF10B981), AppDarkTheme, dialogText, dialogMuted) {
                                     val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
                                     val loan = loans.firstOrNull { it.lender.equals(action.lender, ignoreCase = true) }
-                                    val recordedForInstallment = transactions
-                                        .filter { it.transactionKind == "Loan repayment / EMI" && it.loanLender.equals(action.lender, ignoreCase = true) && it.emiInstallmentDate == action.originalDate }
-                                        .sumOf { it.amount }
-                                    val remainingAmount = (action.amount - recordedForInstallment).coerceAtLeast(0L)
+                                    val recorded = transactions.filter {
+                                        it.transactionKind == "Loan repayment / EMI" &&
+                                            it.loanLender.equals(action.lender, ignoreCase = true) &&
+                                            it.emiInstallmentDate == action.originalDate
+                                    }
+                                    val recordedAmount = recorded.sumOf { it.amount }
+                                    val remainingAmount = (action.amount - recordedAmount).coerceAtLeast(0L)
                                     if (remainingAmount > 0L) {
-                                        val paidDate = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
-                                        transactions = listOf(
-                                            Transaction(
-                                                title = "EMI payment - ${action.lender}",
-                                                category = "Loan repayment",
-                                                date = paidDate,
-                                                amount = remainingAmount,
-                                                income = false,
-                                                paymentMethod = "Not set",
-                                                loanLender = action.lender,
-                                                emiInstallmentDate = action.originalDate,
-                                                transactionKind = "Loan repayment / EMI"
-                                            )
-                                        ) + transactions
-                                        saveTransactions(context, transactions)
-                                        if (loan != null) {
-                                            val monthlyInterest = kotlin.math.round(loan.balance.toDouble() * loan.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
-                                            val principalReduction = (remainingAmount - monthlyInterest).coerceAtLeast(0L).coerceAtMost(loan.balance)
-                                            val firstUnpaidDate = runCatching {
+                                        val recordedInterest = recorded.sumOf { it.loanInterestPortion }
+                                        val recordedPrincipal = recorded.sumOf { it.loanPrincipalReduction }
+                                        val monthlyInterest = loan?.let {
+                                            kotlin.math.round((it.balance + recordedPrincipal).toDouble() * it.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
+                                        } ?: 0L
+                                        val interestPortion = (monthlyInterest - recordedInterest).coerceAtLeast(0L).coerceAtMost(remainingAmount)
+                                        val principalReduction = (remainingAmount - interestPortion).coerceAtLeast(0L).coerceAtMost(loan?.balance ?: 0L)
+                                        val firstUnpaidDate = runCatching {
+                                            if (loan == null) null else {
                                                 val raw = prefs.getString("bank_schedule_${loan.lender}", null)
                                                 val dates = if (!raw.isNullOrBlank()) {
                                                     val rows = JSONArray(raw)
@@ -1029,8 +1142,27 @@ private fun FinanceApp() {
                                                     (0 until count).mapNotNull { i -> first?.plusMonths(i.toLong())?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)) }
                                                 }
                                                 dates.firstOrNull { prefs.getString("emi_status_${loan.lender}_${it}", null) != "Paid" }
-                                            }.getOrNull()
-                                            val sequentialPayment = firstUnpaidDate == action.originalDate
+                                            }
+                                        }.getOrNull()
+                                        val sequentialPayment = loan != null && firstUnpaidDate == action.originalDate
+                                        val payment = Transaction(
+                                            title = "EMI payment - ${action.lender}",
+                                            category = "Loan repayment",
+                                            date = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)),
+                                            amount = remainingAmount,
+                                            income = false,
+                                            paymentMethod = "Not set",
+                                            loanLender = action.lender,
+                                            emiInstallmentDate = action.originalDate,
+                                            transactionKind = "Loan repayment / EMI",
+                                            loanPrincipalReduction = principalReduction,
+                                            loanInterestPortion = interestPortion,
+                                            loanPaymentCounted = sequentialPayment,
+                                            loanAllocationRecorded = loan != null
+                                        )
+                                        transactions = listOf(payment) + transactions
+                                        saveTransactions(context, transactions)
+                                        if (loan != null) {
                                             loans = loans.map { existing ->
                                                 if (existing.lender.equals(loan.lender, true)) existing.copy(
                                                     balance = (existing.balance - principalReduction).coerceAtLeast(0L),
@@ -1040,7 +1172,9 @@ private fun FinanceApp() {
                                             saveLoans(context, loans)
                                         }
                                     }
-                                    prefs.edit().putString("emi_status_${action.lender}_${action.originalDate}", "Paid").apply()
+                                    if (recordedAmount + remainingAmount >= action.amount) {
+                                        prefs.edit().putString("emi_status_${action.lender}_${action.originalDate}", "Paid").apply()
+                                    }
                                     emiQuickAction = null
                                 }
                                 EmiQuickActionRow(Icons.Default.Edit, "Edit Amount", "Change only this installment", accent, accent, AppDarkTheme, dialogText, dialogMuted) {
@@ -1229,16 +1363,27 @@ private fun FinanceApp() {
                         val isLoanRepayment = kind == "Loan repayment / EMI"
                         val isIncome = kind == "Income" || isLoanReceipt
                         val loan = loans.firstOrNull { it.lender.equals(loanLender, ignoreCase = true) }
+                        var principalReductionForTransaction = 0L
+                        var interestPortionForTransaction = 0L
+                        var paymentCountedForTransaction = false
+                        var loanReceiptPrincipalAddedForTransaction = 0L
                         if (isLoanRepayment && loan != null) {
                             val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+                            val recorded = transactions.filter {
+                                it.transactionKind == "Loan repayment / EMI" &&
+                                    it.loanLender.equals(loan.lender, ignoreCase = true) &&
+                                    it.emiInstallmentDate == emiDate
+                            }
+                            val recordedAmount = recorded.sumOf { it.amount }
+                            val recordedInterest = recorded.sumOf { it.loanInterestPortion }
+                            val recordedPrincipal = recorded.sumOf { it.loanPrincipalReduction }
                             val importedAmount = runCatching {
                                 val raw = prefs.getString("bank_schedule_${loan.lender}", null) ?: return@runCatching loan.emi
                                 val rows = JSONArray(raw)
                                 (0 until rows.length()).firstNotNullOfOrNull { i -> rows.getJSONObject(i).takeIf { it.optString("date") == emiDate }?.optLong("amount") } ?: loan.emi
                             }.getOrDefault(loan.emi)
                             val scheduledAmount = prefs.getLong("emi_amount_${loan.lender}_${emiDate}", importedAmount)
-                            val fullPayment = amount >= scheduledAmount
-                            if (fullPayment) prefs.edit().putString("emi_status_${loan.lender}_${emiDate}", "Paid").apply()
+                            val fullPayment = recordedAmount + amount >= scheduledAmount
                             val firstUnpaidDate = runCatching {
                                 val raw = prefs.getString("bank_schedule_${loan.lender}", null)
                                 val installmentDates = if (!raw.isNullOrBlank()) {
@@ -1251,17 +1396,41 @@ private fun FinanceApp() {
                                 }
                                 installmentDates.firstOrNull { prefs.getString("emi_status_${loan.lender}_${it}", null) != "Paid" }
                             }.getOrNull()
-                            val sequentialPayment = fullPayment && firstUnpaidDate == emiDate
-                            val monthlyInterest = kotlin.math.round(loan.balance.toDouble() * loan.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
-                            val principalReduction = (amount - monthlyInterest).coerceAtLeast(0L).coerceAtMost(loan.balance)
-                            loans = loans.map { existing -> if (existing.lender.equals(loan.lender, true)) existing.copy(balance = (existing.balance - principalReduction).coerceAtLeast(0L), paymentsMade = if (sequentialPayment) existing.paymentsMade + 1 else existing.paymentsMade) else existing }
+                            paymentCountedForTransaction = fullPayment && firstUnpaidDate == emiDate
+                            val monthlyInterest = kotlin.math.round((loan.balance + recordedPrincipal).toDouble() * loan.annualRate.coerceAtLeast(0.0) / 1200.0).toLong()
+                            interestPortionForTransaction = (monthlyInterest - recordedInterest).coerceAtLeast(0L).coerceAtMost(amount)
+                            principalReductionForTransaction = (amount - interestPortionForTransaction).coerceAtLeast(0L).coerceAtMost(loan.balance)
+                            if (fullPayment) prefs.edit().putString("emi_status_${loan.lender}_${emiDate}", "Paid").apply()
+                            loans = loans.map { existing ->
+                                if (existing.lender.equals(loan.lender, true)) existing.copy(
+                                    balance = (existing.balance - principalReductionForTransaction).coerceAtLeast(0L),
+                                    paymentsMade = if (paymentCountedForTransaction) existing.paymentsMade + 1L else existing.paymentsMade
+                                ) else existing
+                            }
                             saveLoans(context, loans)
                         } else if (isLoanReceipt && loan != null) {
-                            loans = loans.map { existing -> if (existing.lender.equals(loan.lender, true)) { if (existing.balance == 0L) existing.copy(balance = amount, originalPrincipal = maxOf(existing.originalPrincipal, amount)) else existing.copy(balance = existing.balance + amount, originalPrincipal = existing.originalPrincipal + amount) } else existing }
+                            loans = loans.map { existing ->
+                                if (existing.lender.equals(loan.lender, true)) {
+                                    val updatedPrincipal = if (existing.balance == 0L) maxOf(existing.originalPrincipal, amount) else existing.originalPrincipal + amount
+                                    loanReceiptPrincipalAddedForTransaction = (updatedPrincipal - existing.originalPrincipal).coerceAtLeast(0L)
+                                    existing.copy(balance = existing.balance + amount, originalPrincipal = updatedPrincipal)
+                                } else existing
+                            }
                             saveLoans(context, loans)
                         }
                         val displayCategory = when (kind) { "Loan received" -> "Loan received"; "Loan repayment / EMI" -> "Loan repayment"; else -> category }
-                        transactions = listOf(Transaction(title, displayCategory, date, amount, isIncome, paymentMethod = paymentMethod, notes = notes, tag = tag, loanLender = loanLender, emiInstallmentDate = emiDate, transactionKind = kind)) + transactions
+                        transactions = listOf(
+                            Transaction(
+                                title, displayCategory, date, amount, isIncome,
+                                paymentMethod = paymentMethod, notes = notes, tag = tag,
+                                loanLender = loanLender, emiInstallmentDate = emiDate, transactionKind = kind,
+                                loanPrincipalReduction = principalReductionForTransaction,
+                                loanInterestPortion = interestPortionForTransaction,
+                                loanPaymentCounted = paymentCountedForTransaction,
+                                loanAllocationRecorded = isLoanRepayment && loan != null,
+                                loanReceiptPrincipalAdded = loanReceiptPrincipalAddedForTransaction
+                            )
+                        ) + transactions
                         saveTransactions(context, transactions)
                         showAdd = false
                     }
@@ -1616,6 +1785,7 @@ private fun ReportsScreen(
     transactions: List<Transaction>,
     selectedMonth: YearMonth,
     onMonthChange: (YearMonth) -> Unit,
+    onBack: () -> Unit,
     onOpen: (String) -> Unit,
     onTransactionClick: (Transaction) -> Unit
 ) {
@@ -1640,7 +1810,7 @@ private fun ReportsScreen(
     ) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink, modifier = Modifier.size(24.dp))
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Ink, modifier = Modifier.size(24.dp).clip(CircleShape).clickable(onClick = onBack).padding(2.dp))
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Monthly Report", fontSize = 23.sp, color = Ink, fontWeight = FontWeight.Bold)
@@ -3342,6 +3512,7 @@ private fun CreditHealthScreen() {
 private fun BackupSecurityScreen(
     onExportBackup: () -> Unit,
     onConnectDrive: () -> Unit,
+    onChooseDeviceFolder: () -> Unit,
     onBackupNow: () -> Unit,
     driveStatus: String,
     onRestoreBackup: () -> Unit,
@@ -3354,6 +3525,10 @@ private fun BackupSecurityScreen(
     var backupFrequency by remember { mutableStateOf(backupPreferences.getString("automatic_backup_frequency", "daily") ?: "daily") }
     var backupDestination by remember { mutableStateOf(backupPreferences.getString("automatic_backup_destination", "device") ?: "device") }
     var backupRetention by remember { mutableIntStateOf(backupPreferences.getInt("automatic_backup_retention", 30)) }
+    var backupScheduleMessage by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        if (automaticBackup) backupScheduleMessage = scheduleAutomaticBackup(backupContext)
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(Page),
         contentPadding = PaddingValues(16.dp),
@@ -3376,13 +3551,14 @@ private fun BackupSecurityScreen(
                         Switch(checked = automaticBackup, onCheckedChange = {
                             automaticBackup = it
                             backupPreferences.edit().putBoolean("automatic_backup_enabled", it).apply()
+                            backupScheduleMessage = scheduleAutomaticBackup(backupContext, updateExisting = true)
                         })
                     }
                     Text("Frequency", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                         listOf("daily" to "Daily", "weekly" to "Weekly", "monthly" to "Monthly").forEach { (value, label) ->
                             val selected = backupFrequency == value
-                            Surface(onClick = { backupFrequency = value; backupPreferences.edit().putString("automatic_backup_frequency", value).apply() },
+                            Surface(onClick = { backupFrequency = value; backupPreferences.edit().putString("automatic_backup_frequency", value).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext, updateExisting = true) },
                                 color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
                                 border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
                                 Text(label, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
@@ -3394,7 +3570,7 @@ private fun BackupSecurityScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("device" to "Device", "drive" to "Google Drive").forEach { (value, label) ->
                             val selected = backupDestination == value
-                            Surface(onClick = { backupDestination = value; backupPreferences.edit().putString("automatic_backup_destination", value).apply() },
+                            Surface(onClick = { backupDestination = value; backupPreferences.edit().putString("automatic_backup_destination", value).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext, updateExisting = true) },
                                 color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
                                 border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
                                 Text(label, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
@@ -3406,7 +3582,7 @@ private fun BackupSecurityScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf(7, 30, 90).forEach { count ->
                             val selected = backupRetention == count
-                            Surface(onClick = { backupRetention = count; backupPreferences.edit().putInt("automatic_backup_retention", count).apply() },
+                            Surface(onClick = { backupRetention = count; backupPreferences.edit().putInt("automatic_backup_retention", count).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext) },
                                 color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
                                 border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
                                 Text("$count files", modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -3416,7 +3592,7 @@ private fun BackupSecurityScreen(
                     }
                     Text(if (!automaticBackup) "Automatic backup is off." else "Enabled: ${backupFrequency} · ${if (backupDestination == "device") "Local device" else "Google Drive"} · Keep ${backupRetention} backups",
                         color = Muted, fontSize = 11.sp)
-                    Text("Schedule settings are saved; background file creation must be handled by the backup worker.", color = Muted, fontSize = 11.sp)
+                    Text(backupScheduleMessage.ifBlank { if (automaticBackup) "Automatic backup schedule is active." else "Enable automatic backup to create recurring backups." }, color = Muted, fontSize = 11.sp)
                 }
             }
         }
@@ -3427,12 +3603,16 @@ private fun BackupSecurityScreen(
                         Icon(Icons.Default.CloudSync, null, tint = IncomeGreen, modifier = Modifier.size(26.dp))
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Google Drive automatic backup", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(if (backupDestination == "drive") "Google Drive automatic backup" else "Device automatic backup", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             Text(driveStatus, color = Muted, fontSize = 12.sp)
                         }
                     }
-                    Text("Choose a private Google Drive folder. MoneyLog will create dated backups there daily. You can also run a backup manually.", color = Muted, fontSize = 12.sp)
-                    OutlinedButton(onClick = onConnectDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Connect Google Drive folder") }
+                    Text(if (backupDestination == "drive") "Choose a private Google Drive folder for cloud backups. The frequency selected above controls the schedule; retention keeps only the selected number of recent files." else "Choose a folder on this device. MoneyLog creates dated JSON backups there using your selected schedule and retention limit.", color = Muted, fontSize = 12.sp)
+                    if (backupDestination == "device") {
+                        OutlinedButton(onClick = onChooseDeviceFolder, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Choose device backup folder") }
+                    } else {
+                        OutlinedButton(onClick = onConnectDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Connect Google Drive folder") }
+                    }
                     Button(onClick = onBackupNow, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Icon(Icons.Default.CloudUpload, null); Spacer(Modifier.width(8.dp)); Text("Back up now") }
                 }
             }
@@ -3641,6 +3821,30 @@ private fun parseScheduleDate(raw: String): java.time.LocalDate? {
     return null
 }
 
+internal fun calculatePendingEmiTotal(
+    installments: List<Pair<String, Long>>,
+    paidDates: Set<String>,
+    amountOverrides: Map<String, Long> = emptyMap(),
+    alreadyPaidCount: Long = 0L
+): Long = installments.withIndex().sumOf { indexed ->
+    val (date, scheduledAmount) = indexed.value
+    if (indexed.index.toLong() < alreadyPaidCount || date in paidDates) 0L
+    else (amountOverrides[date] ?: scheduledAmount).coerceAtLeast(0L)
+}
+
+internal fun calculateLoanEmi(principal: Double, annualRatePercent: Double, months: Int): Long? {
+    if (!principal.isFinite() || !annualRatePercent.isFinite() ||
+        principal <= 0.0 || annualRatePercent < 0.0 || months !in 1..600) return null
+    val monthlyRate = annualRatePercent / 1200.0
+    val emi = if (monthlyRate == 0.0) principal / months else {
+        val denominator = 1.0 - Math.pow(1.0 + monthlyRate, -months.toDouble())
+        if (denominator <= 0.0) return null
+        principal * monthlyRate / denominator
+    }
+    if (!emi.isFinite() || emi <= 0.0 || emi > Long.MAX_VALUE.toDouble()) return null
+    return kotlin.math.round(emi).toLong().coerceAtLeast(1L)
+}
+
 private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.LocalDate.now()): java.time.LocalDate? {
     val raw = due.trim()
     if (raw.isBlank() || raw.equals("Set due date", ignoreCase = true) || raw.equals("Not set", ignoreCase = true)) return null
@@ -3686,17 +3890,21 @@ private fun nextLoanDueDate(due: String, today: java.time.LocalDate = java.time.
 
 @Composable
 private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String) -> Unit) {
-    val firstDueDate = parseScheduleDate(loan.due) ?: runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due)
+    val firstDueDate = (parseScheduleDate(loan.due) ?: runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due))
+        ?.plusMonths(loan.paymentsMade.coerceAtLeast(0L))
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
     val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
-    // Generate the full contractual schedule, including paid installments. The payment count
-    // controls each row's status; it must not shrink the schedule itself to zero.
-    val scheduleMonths = if (loan.totalPayments in 1L..600L) loan.totalPayments.toInt() else 60
+    // The remaining schedule starts at today's outstanding principal and contains only
+    // installments not already counted as paid. This prevents past installments being counted twice.
+    val scheduleMonths = if (loan.totalPayments in 1L..600L)
+        (loan.totalPayments - loan.paymentsMade).coerceIn(0L, 600L).toInt()
+    else 60
     val schedule = (0 until scheduleMonths).map { index ->
-        val interest = scheduleBalance * monthlyRate
-        val principalPart = (loan.emi.toDouble() - interest).coerceAtLeast(0.0).coerceAtMost(scheduleBalance)
+        val interest = kotlin.math.round(scheduleBalance * monthlyRate).toLong()
+        val scheduledPayment = minOf(loan.emi, kotlin.math.ceil(scheduleBalance + interest).toLong())
+        val principalPart = (scheduledPayment - interest).coerceAtLeast(0L).coerceAtMost(scheduleBalance.toLong())
         val closingBalance = (scheduleBalance - principalPart).coerceAtLeast(0.0)
-        val row = Triple(interest.toLong(), principalPart.toLong(), closingBalance.toLong())
+        val row = Triple(interest, principalPart, closingBalance.toLong())
         scheduleBalance = closingBalance
         row
     }
@@ -3750,6 +3958,26 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
             }
         }.getOrDefault(emptyList()))
     }
+    val pendingScheduleRows = if (importedSchedule.isNotEmpty()) importedSchedule else schedule.indices.map { index ->
+        val date = firstDueDate?.plusMonths(index.toLong())
+            ?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)).orEmpty()
+        val (interest, principalPart, _) = schedule[index]
+        date to (interest + principalPart)
+    }
+    val pendingPaidDates = pendingScheduleRows.mapNotNull { (date, _) ->
+        date.takeIf { it.isNotBlank() && schedulePrefs.getString("emi_status_${loan.lender}_${it}", null) == "Paid" }
+    }.toSet()
+    val pendingAmountOverrides = pendingScheduleRows.mapNotNull { (date, amount) ->
+        if (date.isNotBlank() && schedulePrefs.contains("emi_amount_${loan.lender}_${date}"))
+            date to schedulePrefs.getLong("emi_amount_${loan.lender}_${date}", amount)
+        else null
+    }.toMap()
+    val totalPendingEmiAmount = calculatePendingEmiTotal(
+        installments = pendingScheduleRows,
+        paidDates = pendingPaidDates,
+        amountOverrides = pendingAmountOverrides,
+        alreadyPaidCount = if (importedSchedule.isNotEmpty()) loan.paymentsMade else 0L
+    )
     var pdfMessage by remember(loan.lender) { mutableStateOf("") }
     var pdfBusy by remember(loan.lender) { mutableStateOf(false) }
     val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -3833,9 +4061,9 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     }
                     Box(Modifier.width(1.dp).height(42.dp).background(page))
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("TOTAL REPAYMENT*", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
+                        Text("TOTAL PENDING EMI", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
                         Spacer(Modifier.height(7.dp))
-                        Text(if (estimateValid) Money.format(totalRepaymentEstimate) else "—", color = forest, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
+                        Text(Money.format(totalPendingEmiAmount), color = forest, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
                     }
                 }
             }
@@ -4009,13 +4237,11 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 val installmentLabelOriginal = installmentLabel
                 val displayInstallmentLabel = schedulePrefs.getString("emi_rescheduled_${loan.lender}_${installmentLabelOriginal}", installmentLabelOriginal) ?: installmentLabelOriginal
                 val savedInstallmentStatus = schedulePrefs.getString("emi_status_${loan.lender}_${installmentLabelOriginal}", null)
-                val installmentAmount = schedulePrefs.getLong("emi_amount_${loan.lender}_${installmentLabelOriginal}", loan.emi)
+                val computedInstallmentAmount = interest + principalPart
+                val installmentAmount = schedulePrefs.getLong("emi_amount_${loan.lender}_${installmentLabelOriginal}", computedInstallmentAmount)
                 val statusDate = parseScheduleDate(displayInstallmentLabel) ?: installmentDate
                 val today = java.time.LocalDate.now()
-                // Keep explicit installment payment records, but don't let the aggregate count
-                // turn future-dated installments into Paid.
-                val paid = savedInstallmentStatus == "Paid" ||
-                    (index < loan.paymentsMade && (statusDate == null || !statusDate.isAfter(today)))
+                val paid = savedInstallmentStatus == "Paid"
                 val overdue = !paid && statusDate != null && statusDate.isBefore(today)
                 val installmentStatus = if (paid) "Paid" else if (overdue) "Overdue" else "Upcoming"
                 val installmentStatusColor = if (paid) Color(0xFF0E7490) else if (overdue) Color(0xFFEF4444) else upcomingAmber
@@ -4110,6 +4336,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     var statementOutstanding by remember { mutableStateOf("") }
     var statementDate by remember { mutableStateOf("") }
     var importedPrincipal by remember { mutableStateOf("") }
+    var calculatorLoanAmount by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var pdfBusy by remember { mutableStateOf(false) }
@@ -4133,7 +4360,9 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             require(document.numberOfPages in 1..300) { "The PDF has an unsupported page count." }
                             PDFTextStripper().apply { setSortByPosition(true) }.getText(document)
                         }
-                        if (extracted.trim().length < 40) {
+                        val extractedLabelCount = Regex("(?i)\\b(?:loan\\s+amount|principal\\s+amount|amount\\s+of\\s+loan|emi|equated\\s+monthly|interest\\s+rate|tenure|loan\\s+term|borrower|applicant|repayment|sanctioned\\s+amount|agreement\\s+number)\\b").findAll(extracted).count()
+                        // Scanned PDFs can have short text layers containing only logos or page footers.
+                        if (extracted.trim().length < 40 || extractedLabelCount < 2) {
                             val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
                                 ?: throw IllegalArgumentException("Could not render this PDF for OCR.")
                             descriptor.use { pfd ->
@@ -4151,7 +4380,9 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                                 bitmap.recycle()
                                             }
                                         }
-                                        extracted = ocrText.toString()
+                                        val recognizedText = ocrText.toString()
+                                        // Preserve selectable text alongside OCR for mixed scanned/text lender PDFs.
+                                        extracted = listOf(extracted, recognizedText).filter { it.isNotBlank() }.joinToString("\n")
                                     } finally { recognizer.close() }
                                 }
                             }
@@ -4249,24 +4480,41 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             ?.let { fields.put("emi", it.substringBefore(".")) }
                         val rateLabel = "(?:annual\\s+)?(?:interest\\s+rate(?:\\s+per\\s+annum)?|fixed\\s+rate\\s+of\\s+interest|rate\\s+of\\s+interest|roi)"
                         (captureLabeled(rateLabel) ?: captureLabeledNearby(rateLabel))?.let { fields.put("rate", it) }
-                        val tenureLabel = "(?:(?:total|loan)\\s+)*(?:tenure|term)(?:\\s+in\\s+months?)?"
-                        (captureLabeled(tenureLabel) ?: captureLabeledNearby(tenureLabel) ?: aprTenure ?: scheduleTenure)?.let { fields.put("totalPayments", it) }
+                        val tenureLabel = "(?:(?:total|loan|repayment)\\s+)*(?:tenure|term|period|duration|tenor)(?:\\s+in\\s+(?:months?|years?))?"
+                        fun captureTenureMonths(): String? {
+                            val labelRegex = Regex(tenureLabel, RegexOption.IGNORE_CASE)
+                            val valueRegex = Regex("(?:^|\\s)([0-9]{1,3})\\s*(years?|yrs?)(?:\\s+([0-9]{1,2})\\s*(months?|mos?))?|(?:^|\\s)([0-9]{1,3})\\s*(months?|mos?)", RegexOption.IGNORE_CASE)
+                            for (index in extractedLines.indices) {
+                                val labelMatch = labelRegex.find(extractedLines[index]) ?: continue
+                                val after = extractedLines[index].substring(labelMatch.range.last + 1).trim().trimStart(':', '-', ' ')
+                                val inline = valueRegex.find(after)
+                                val adjacent = if (inline == null) extractedLines.drop(index + 1).firstOrNull { it.isNotBlank() } else null
+                                val match = inline ?: adjacent?.let { valueRegex.find(it) } ?: continue
+                                val years = match.groupValues.getOrNull(1)?.takeIf { it.isNotBlank() }?.toIntOrNull()
+                                if (years != null) {
+                                    val extraMonths = match.groupValues.getOrNull(3)?.toIntOrNull() ?: 0
+                                    return (years * 12 + extraMonths).takeIf { it > 0 }?.toString()
+                                }
+                                val months = match.groupValues.getOrNull(5)?.takeIf { it.isNotBlank() }?.toIntOrNull()
+                                if (months != null) return months.takeIf { it > 0 }?.toString()
+                            }
+                            return null
+                        }
+                        (captureTenureMonths() ?: captureLabeled(tenureLabel) ?: captureLabeledNearby(tenureLabel) ?: aprTenure ?: scheduleTenure)?.let { fields.put("totalPayments", it) }
                             ?: captureLabeled("(?:total\\s+number\\s+of\\s+)?(?:emi|installments?|instalments?)(?:\\s+(?:count|tenure|months?))?")?.let { fields.put("totalPayments", it) }
                         captureLabeled("(?:number\\s+of\\s+)?(?:emi|installments?|instalments?)\\s+(?:paid|completed)")?.let { fields.put("paymentsMade", it) }
                         captureLabeled("(?:(?:current|total)\\s+)?(?:outstanding\\s+(?:principal|balance|amount)?|principal\\s+outstanding)")?.let { fields.put("statementOutstanding", it.substringBefore(".")) }
-                        val principalLabel = "(?:(?:sanctioned|approved|total)\\s+)?(?:loan\\s+amount|amount\\s+of\\s+loan|principal\\s+amount|loan\\s+principal|amount\\s+financed)"
+                        val principalLabel = "(?:(?:sanctioned|approved|total|original)\\s+)?(?:loan\\s+amount|amount\\s+of\\s+loan|principal\\s+amount|loan\\s+principal|amount\\s+financed|sanctioned\\s+amount|amount\\s+sanctioned|approved\\s+amount|credit\\s+facility\\s+amount)"
                         (captureLabeled(principalLabel) ?: captureLabeledNearby(principalLabel))?.let { fields.put("principal", it.substringBefore(".")) }
                         captureAnywhere("(?:statement\\s*date|as\\s*of)\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z0-9]{2,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})")?.let { fields.put("statementDate", it) }
                         (captureAnywhere("(?:repayment|first\\s*(?:emi|installment|instalment)|emi)\\s*(?:start|commencement|starting)?\\s*date\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z]{3,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})")
                             ?: aprStartDate
                             ?: captureAnywhere("commencement\\s+of\\s+repayments?[^\\n]{0,250}?([0-9]{4}-[0-9]{2}-[0-9]{2})"))?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
-                        captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?borrower|borrower(?:\\s+name)?|customer(?:\\s+name)?|applicant(?:\\s+name)?)")?.let { fields.put("borrowerName", it) }
+                        captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?borrower|borrower(?:'s)?(?:\\s+(?:full\\s+)?name)?|customer(?:\\s+(?:full\\s+)?name)?|applicant(?:\\s+(?:full\\s+)?name)?|name\\s+of\\s+(?:the\\s+)?applicant)")?.let { fields.put("borrowerName", it) }
                         captureAnywhere("(?:agreement|contract)\\s*(?:number|no\\.?|#)\\s*[:\\-]?\\s*([A-Z0-9/-]{4,40})")?.let { fields.put("agreementNumber", it) }
-                        Regex("(?im)^\\s*(?:lender|bank|financial institution)\\s*[:\\-]\\s*(.{2,60})$").find(extracted)
-                            ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
-                            ?.let { fields.put("lender", it) }
-                            ?: Regex("(?m)^\\s*([A-Z][A-Z &.-]{3,50}\\b(?:BANK|FINANCE|FINANCIAL))\\s*$").find(extracted)
-                                ?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }?.let { fields.put("lender", it) }
+                        (captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?(?:lender|regulated\\s+entity|bank|financial\\s+institution)|(?:lender|bank|nbfc|financial\\s+institution)\\s+name|lender|bank|financial\\s+institution|nbfc)")
+                            ?: Regex("(?im)^\\s*(?:lender|bank|financial institution|name of (?:the )?regulated entity)\\s*[:\\-]\\s*(.{2,80})$").find(extracted)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+                            ?: Regex("(?m)^\\s*([A-Z][A-Z &.-]{3,50}\\b(?:BANK|FINANCE|FINANCIAL|LIMITED|LTD\\.?))\\s*$").find(extracted)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() })?.let { fields.put("lender", it) }
                         fields
                     }
                 }
@@ -4278,6 +4526,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     if (fields.has("statementOutstanding")) statementOutstanding = fields.getString("statementOutstanding")
                     if (fields.has("statementDate")) statementDate = fields.getString("statementDate")
                     importedPrincipal = if (fields.has("principal")) fields.getString("principal") else ""
+                    calculatorLoanAmount = importedPrincipal
                     if (fields.has("lender")) lender = fields.getString("lender")
                     if (fields.has("borrowerName")) borrowerName = fields.getString("borrowerName")
                     if (fields.has("agreementNumber")) agreementNumber = fields.getString("agreementNumber")
@@ -4340,6 +4589,46 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     OutlinedTextField(emi, { emi = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(totalPayments, { totalPayments = it.filter(Char::isDigit); importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Total tenure (months)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    val calculatorEmi = calculateLoanEmi(
+                        calculatorLoanAmount.toDoubleOrNull() ?: 0.0,
+                        rate.toDoubleOrNull() ?: -1.0,
+                        totalPayments.toIntOrNull() ?: 0
+                    )
+                    Card(colors = CardDefaults.cardColors(containerColor = Mint), shape = RoundedCornerShape(16.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                            Text("EMI Calculator", color = Green, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("Enter the principal, annual interest rate and tenure to calculate the monthly EMI.", color = Muted, fontSize = 11.sp)
+                            OutlinedTextField(
+                                value = calculatorLoanAmount,
+                                onValueChange = { calculatorLoanAmount = it.filter { c -> c.isDigit() || c == '.' }; saved = false },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Loan amount (₹)") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("Calculated monthly EMI", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(calculatorEmi?.let { Money.format(it) } ?: "—", color = Green, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Text("Rate and tenure use the fields above. Calculation uses the reducing-balance EMI formula.", color = Muted, fontSize = 10.sp)
+                            OutlinedButton(
+                                onClick = {
+                                    calculatorEmi?.let { result ->
+                                        emi = result.toString()
+                                        importedPrincipal = calculatorLoanAmount
+                                        error = ""
+                                        saved = false
+                                    }
+                                },
+                                enabled = calculatorEmi != null,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Calculate, null)
+                                Spacer(Modifier.width(7.dp))
+                                Text("Use calculated EMI")
+                            }
+                        }
+                    }
                     OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(statementOutstanding, { statementOutstanding = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Statement outstanding principal (optional, ₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     if (statementDate.isNotBlank()) Text("Statement date: $statementDate", color = Muted, fontSize = 11.sp)
@@ -4400,6 +4689,7 @@ private fun TransactionDetailsDialog(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val categoryTotal = allTransactions.filter { it.category.equals(transaction.category, ignoreCase = true) && it.income == transaction.income }.sumOf { it.amount }
     val currency = Money
+    val isLinkedLoanTransaction = transaction.transactionKind == "Loan repayment / EMI" || transaction.transactionKind == "Loan received"
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier.fillMaxWidth().fillMaxHeight(0.92f),
@@ -4444,11 +4734,20 @@ private fun TransactionDetailsDialog(
                         }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        DetailQuickAction("Edit", Icons.Default.Edit, LavenderTint, Purple, onEdit)
+                        if (!isLinkedLoanTransaction) DetailQuickAction("Edit", Icons.Default.Edit, LavenderTint, Purple, onEdit)
                         DetailQuickAction("Delete", Icons.Default.Delete, ExpenseTint, ExpenseRed) { showDeleteConfirm = true }
                         DetailQuickAction("Duplicate", Icons.Default.ContentCopy, SkyTint, Blue, onDuplicate)
-                        DetailQuickAction("Add Note", Icons.Default.Notes, SkyTint, Blue, onEdit)
-                        DetailQuickAction("Add Tag", Icons.Default.LocalOffer, LavenderTint, Purple, onEdit)
+                        if (!isLinkedLoanTransaction) {
+                            DetailQuickAction("Add Note", Icons.Default.Notes, SkyTint, Blue, onEdit)
+                            DetailQuickAction("Add Tag", Icons.Default.LocalOffer, LavenderTint, Purple, onEdit)
+                        }
+                    }
+                    if (isLinkedLoanTransaction) {
+                        Text(
+                            if (transaction.transactionKind == "Loan repayment / EMI") "This payment is linked to the loan balance. Change its amount from Loans → EMI Quick Actions to keep the installment and balance synchronized." else "This loan receipt is linked to the loan balance. Delete it to reverse the recorded loan amount.",
+                            color = Muted,
+                            fontSize = 11.sp
+                        )
                     }
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE1E6F1)), shape = RoundedCornerShape(18.dp)) {
                         Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 4.dp)) {
@@ -4473,10 +4772,12 @@ private fun TransactionDetailsDialog(
                         }
                     }
                 }
-                Button(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0BAA83), contentColor = Color.White)) {
-                    Icon(Icons.Default.Edit, null)
-                    Spacer(Modifier.width(9.dp))
-                    Text("Edit Transaction", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                if (!isLinkedLoanTransaction) {
+                    Button(onClick = onEdit, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0BAA83), contentColor = Color.White)) {
+                        Icon(Icons.Default.Edit, null)
+                        Spacer(Modifier.width(9.dp))
+                        Text("Edit Transaction", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
                 }
             }
         }
@@ -4485,7 +4786,7 @@ private fun TransactionDetailsDialog(
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Delete transaction?") },
-            text = { Text("This will permanently remove this transaction from MoneyLog on this device.") },
+            text = { Text(if (isLinkedLoanTransaction) "This will permanently remove the linked loan transaction and reverse its saved loan balance adjustment and installment status." else "This will permanently remove this transaction from MoneyLog on this device.") },
             confirmButton = { TextButton(onClick = { showDeleteConfirm = false; onDelete() }) { Text("Delete", color = ExpenseRed) } },
             dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
         )
@@ -5132,6 +5433,11 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("loanLender", transaction.loanLender)
             put("emiInstallmentDate", transaction.emiInstallmentDate)
             put("transactionKind", transaction.transactionKind)
+            put("loanPrincipalReduction", transaction.loanPrincipalReduction)
+            put("loanInterestPortion", transaction.loanInterestPortion)
+            put("loanPaymentCounted", transaction.loanPaymentCounted)
+            put("loanAllocationRecorded", transaction.loanAllocationRecorded)
+            put("loanReceiptPrincipalAdded", transaction.loanReceiptPrincipalAdded)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -5158,7 +5464,12 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optString("tag", ""),
             item.optString("loanLender", ""),
             item.optString("emiInstallmentDate", ""),
-            item.optString("transactionKind", "")
+            item.optString("transactionKind", ""),
+            item.optLong("loanPrincipalReduction", 0L),
+            item.optLong("loanInterestPortion", 0L),
+            item.optBoolean("loanPaymentCounted", false),
+            item.optBoolean("loanAllocationRecorded", false),
+            item.optLong("loanReceiptPrincipalAdded", 0L)
         )
     }
 }.getOrNull()
