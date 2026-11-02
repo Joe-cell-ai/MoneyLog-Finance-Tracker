@@ -37,7 +37,7 @@ internal object LoanDocumentParser {
     private val amountToken = Regex("""([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
 
     fun parse(sourceText: String): LoanDocumentExtraction {
-        val text = sourceText.replace('\u00A0', ' ').replace('\u200B', ' ')
+        val text = sourceText.replace('\u00A0', ' ').replace('\u200B', ' ')\n            .replace('\uFB03', 'ffi').replace('\uFB01', 'fi').replace('\uFB02', 'fl').replace('\uFB00', 'ff')
         val lines = text.lines().map { it.trim().replace(Regex("""[ \t]+"""), " ") }
         fun number(raw: String?): Long? = raw?.replace(",", "")?.toDoubleOrNull()
             ?.takeIf { it >= 0.0 && it <= Long.MAX_VALUE.toDouble() }
@@ -94,7 +94,7 @@ internal object LoanDocumentParser {
                 .find(text)?.groupValues?.get(1)
             ?: Regex("""(?i)Repayment\s+Start\s+Date\s*[:\-]?\s*(\d{1,2}-[A-Za-z]{3}-\d{2,4})""")
                 .find(text)?.groupValues?.get(1)?.let { raw ->
-                    val patterns = listOf("d-MMM-yy", "dd-MMM-yy", "d-MMM-yyyy", "dd-MMM-yyyy")
+                    val patterns = listOf("d-MMM-yy", "dd-MMM-yy", "d-MMM-yyyy", "dd-MMM-yyyy", "d/MM/yy", "dd/MM/yy", "d/MM/yyyy", "dd/MM/yyyy")
                     patterns.firstNotNullOfOrNull { pattern ->
                         runCatching { java.time.LocalDate.parse(raw, java.time.format.DateTimeFormatterBuilder()
                             .parseCaseInsensitive().appendPattern(pattern).toFormatter(java.util.Locale.ENGLISH)).toString() }.getOrNull()
