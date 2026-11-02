@@ -220,7 +220,7 @@ class LoanDocumentParserTest {
             Repayment Start Date: 10-Nov-2026
             Repayment End Date: 10-Jan-2027
             Interest Rate: 12.00% p.a. (Reducing)
-            Amortization Timeline Statement
+            Official Amortization Timeline Statement
             Opening Principal Monthly EMI Interest Component Principal Component Closing Balance
             1 10000 4000 1000 3000 7000
             2 7000 4000 900 3100 3900
