@@ -4920,7 +4920,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                     .put("emi", monthlyEmi)
                                     .put("annualInterestRate", rate.toDoubleOrNull() ?: JSONObject.NULL)
                                     .put("tenureMonths", total)
-                                    .put("repaymentStartDate", startDate.ifBlank { JSONObject.NULL.toString() })
+                                    .put("repaymentStartDate", startDate.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
                                     .put("scheduleInterestTotal", importedScheduleRows.sumOf { it.interest })
                                     .put("processingFee", importedProcessingFee ?: JSONObject.NULL)
                                     .put("totalInterest", importedTotalInterest ?: JSONObject.NULL)
