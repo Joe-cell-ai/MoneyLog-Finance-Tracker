@@ -4887,11 +4887,14 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                 Text("Repayment rows extracted from PDF (${importedScheduleRows.size})", color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 if (importedIllustrative) Text("Illustrative schedule only — not a final disbursement-based schedule.", color = Color(0xFFB45309), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                                 importedScheduleRows.forEach { row ->
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("EMI ${row.installmentNumber}${row.dueDate?.let { " · $it" } ?: ""}", color = Ink, fontSize = 10.sp, modifier = Modifier.weight(0.9f))
-                                        Text("P ${Money.format(row.principal)}", color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
-                                        val displayedRate = row.annualRate ?: rate.toDoubleOrNull()
-                                        Text("I ${Money.format(row.interest)} · ${displayedRate?.let { "Rate $it%" } ?: "Rate not stated"}", color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1.2f))
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("EMI ${row.installmentNumber}${row.dueDate?.let { " · $it" } ?: ""}", color = Ink, fontSize = 10.sp)
+                                            Text("Opening ${Money.format(row.openingPrincipal)} · Closing ${row.closingPrincipal?.let { Money.format(it) } ?: "Not stated"}", color = Muted, fontSize = 8.sp)
+                                        }
+                                        Text("P ${Money.format(row.principal)}", color = Muted, fontSize = 9.sp, modifier = Modifier.weight(.9f))
+                                        val displayedRate = row.annualRate
+                                        Text("I ${Money.format(row.interest)} · ${displayedRate?.let { "Rate $it%" } ?: "Rate not stated"}", color = Muted, fontSize = 9.sp, modifier = Modifier.weight(1.2f))
                                         Text(Money.format(row.installment), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
