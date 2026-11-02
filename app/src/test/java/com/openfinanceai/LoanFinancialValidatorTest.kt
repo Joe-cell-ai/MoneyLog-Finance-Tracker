@@ -21,17 +21,17 @@ class LoanFinancialValidatorTest {
 
     @Test fun validatesFractionalPaiseWithoutRupeeToleranceOrRounding() {
         val rows = listOf(
-            FinancialScheduleRow(1, "2026-01-04", 1000000, 125000, 688062, 561938, 311938),
-            FinancialScheduleRow(2, "2026-02-04", 311938, 125000, 694943, 555057, 0)
+            FinancialScheduleRow(1, "2026-01-04", 1000005, 510003, 500002, 10001, 500003),
+            FinancialScheduleRow(2, "2026-02-04", 500003, 510000, 500003, 9997, 0)
         )
         val result = LoanFinancialValidator.validate(
-            rows, declaredTenure = 2, declaredPrincipal = 1383005,
-            declaredInterest = 1116995, declaredRepayment = 2500000
+            rows, declaredTenure = 2, declaredPrincipal = 1000005,
+            declaredInterest = 19998, declaredRepayment = 1020003
         )
         assertTrue(result.accepted)
-        assertEquals(1383005L, result.principalTotal)
-        assertEquals(1116995L, result.interestTotal)
-        assertEquals(2500000L, result.installmentTotal)
+        assertEquals(1000005L, result.principalTotal)
+        assertEquals(19998L, result.interestTotal)
+        assertEquals(1020003L, result.installmentTotal)
     }
 
     @Test fun rejectsPrincipalInterestMismatch() {
