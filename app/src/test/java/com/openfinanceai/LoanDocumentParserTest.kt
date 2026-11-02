@@ -181,4 +181,31 @@ class LoanDocumentParserTest {
     }
 
 
+    @Test fun parsesYesBankFiveAmountScheduleWithOpeningInstallmentPrincipalInterestClosingAndTwoDigitDates() {
+        val statement = """
+            Customer Name : NELATOORI VIJAY KUMAR REDDY
+            Agreement No : PLN002202247931
+            Repayment Start Date : 04-FEB-26
+            Repayment End Date : 04-JAN-31
+            Loan Amount(INR) : INR 5,69,000.00
+            Tenure : 60 Months
+            Repayment Schedule
+            Serial No. Due Date Opening Principal (INR) Installment Amount (INR) Principal Amount (INR) Interest Amount (INR) Closing Principal (INR)
+            1 04-FEB-26 569,000.00 12,657.00 7,536.00 5,121.00 561,464.00
+            2 04-MAR-26 561,464.00 12,657.00 7,042.00 5,615.00 554,422.00
+            3 04-APR-26 554,422.00 12,657.00 7,113.00 5,544.00 547,309.00
+        """.trimIndent()
+        val result = LoanDocumentParser.parse(statement)
+        assertEquals(3, result.scheduleRows.size)
+        assertEquals("2026-02-04", result.scheduleRows[0].dueDate)
+        assertEquals(569000L, result.scheduleRows[0].openingPrincipal)
+        assertEquals(7536L, result.scheduleRows[0].principal)
+        assertEquals(5121L, result.scheduleRows[0].interest)
+        assertEquals(12657L, result.scheduleRows[0].installment)
+        assertEquals("2026-04-04", result.scheduleRows[2].dueDate)
+        assertEquals(554422L, result.scheduleRows[2].openingPrincipal)
+        assertEquals(547309L, result.scheduleRows[2].openingPrincipal - result.scheduleRows[2].principal)
+    }
+
+
 }
