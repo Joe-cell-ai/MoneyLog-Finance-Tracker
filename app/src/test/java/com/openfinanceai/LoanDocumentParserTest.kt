@@ -209,6 +209,33 @@ class LoanDocumentParserTest {
     }
 
 
+    @Test fun mapsInterestBeforePrincipalForDifferentLenderAmortizationLayout() {
+        val statement = """
+            APEX NATIONAL BANK
+            Customer Name: Rohan Sharma
+            Loan Amount: INR 10,000
+            Agreement No: LN-TEST-1001
+            Tenure: 3 Months
+            Monthly EMI: INR 4,000
+            Repayment Start Date: 10-Nov-2026
+            Repayment End Date: 10-Jan-2027
+            Interest Rate: 12.00% p.a. (Reducing)
+            Amortization Timeline Statement
+            Opening Principal Monthly EMI Interest Component Principal Component Closing Balance
+            1 10000 4000 1000 3000 7000
+            2 7000 4000 900 3100 3900
+            3 3900 4000 100 3900 0
+        """.trimIndent()
+        val result = LoanDocumentParser.parse(statement)
+        assertEquals(3, result.scheduleRows.size)
+        assertEquals(10000L, result.principal)
+        assertEquals(4000L, result.emi)
+        assertEquals(12.0, result.annualInterestRate!!, 0.0)
+        assertEquals(listOf(1000L, 900L, 100L), result.scheduleRows.map { it.interest })
+        assertEquals(listOf(3000L, 3100L, 3900L), result.scheduleRows.map { it.principal })
+        assertEquals(listOf(7000L, 3900L, 0L), result.scheduleRows.map { it.closingPrincipal })
+    }
+
     @Test fun parsesAllSixtyRowsFromUploadedYesBankRepaymentStatement() {
         val statement = """
             Corporate & Registered oﬃce: YES BANK Limited, YES BANK House, Off Western Express Highway
