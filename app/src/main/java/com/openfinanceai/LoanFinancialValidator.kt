@@ -1,5 +1,6 @@
 package com.openfinanceai
 
+/** All monetary fields are integer paise. */
 internal data class FinancialScheduleRow(
     val installmentNumber: Int,
     val dueDate: String?,
@@ -10,6 +11,7 @@ internal data class FinancialScheduleRow(
     val closingBalance: Long?
 )
 
+/** Totals are integer paise. */
 internal data class FinancialValidationResult(
     val accepted: Boolean,
     val errors: List<String>,
@@ -28,7 +30,7 @@ internal object LoanFinancialValidator {
         declaredInterest: Long? = null,
         declaredRepayment: Long? = null,
         processingFee: Long? = null,
-        toleranceRupees: Long = 1L
+        tolerancePaise: Long = 1L
     ): FinancialValidationResult {
         val errors = mutableListOf<String>()
         val warnings = mutableListOf<String>()
@@ -38,11 +40,12 @@ internal object LoanFinancialValidator {
         if (declaredTenure != null && rows.size != declaredTenure) errors += "Extracted ${rows.size} rows but the document declares $declaredTenure instalments."
         if (rows.any { it.installmentAmount <= 0L || it.principal < 0L || it.interest < 0L }) errors += "A row contains a zero/negative instalment or negative principal/interest."
         rows.forEachIndexed { index, row ->
-            if (row.principal + row.interest != row.installmentAmount) {
+            val componentTotal = runCatching { Math.addExact(row.principal, row.interest) }.getOrNull()
+            if (componentTotal == null || componentTotal != row.installmentAmount) {
                 errors += "Instalment ${row.installmentNumber}: principal + interest does not equal the instalment amount."
             }
             if (row.openingBalance != null && row.closingBalance != null &&
-                row.openingBalance - row.principal != row.closingBalance) {
+                runCatching { Math.subtractExact(row.openingBalance, row.principal) }.getOrNull() != row.closingBalance) {
                 errors += "Instalment ${row.installmentNumber}: opening balance minus principal does not equal closing balance."
             }
             if (index > 0) {
@@ -56,14 +59,16 @@ internal object LoanFinancialValidator {
                 }
             }
         }
-        val principal = rows.sumOf { it.principal }
-        val interest = rows.sumOf { it.interest }
-        val repayment = rows.sumOf { it.installmentAmount }
-        fun differs(a: Long, b: Long) = kotlin.math.abs(a - b) > toleranceRupees
+        val principal = runCatching { LoanMoney.sumPaise(rows.map { it.principal }) }.getOrElse { errors += "Principal total exceeds supported exact-money range."; 0L }
+        val interest = runCatching { LoanMoney.sumPaise(rows.map { it.interest }) }.getOrElse { errors += "Interest total exceeds supported exact-money range."; 0L }
+        val repayment = runCatching { LoanMoney.sumPaise(rows.map { it.installmentAmount }) }.getOrElse { errors += "Repayment total exceeds supported exact-money range."; 0L }
+        fun differs(a: Long, b: Long): Boolean =
+            java.math.BigInteger.valueOf(a).subtract(java.math.BigInteger.valueOf(b)).abs()
+                .compareTo(java.math.BigInteger.valueOf(tolerancePaise.coerceAtLeast(0L))) > 0
         if (declaredPrincipal != null && differs(principal, declaredPrincipal)) errors += "Principal total $principal does not reconcile with declared principal $declaredPrincipal."
         if (declaredInterest != null && differs(interest, declaredInterest)) errors += "Interest total $interest does not reconcile with declared interest $declaredInterest."
         if (declaredRepayment != null && differs(repayment, declaredRepayment)) {
-            val includesFee = processingFee != null && !differs(repayment + processingFee, declaredRepayment)
+            val includesFee = processingFee != null && runCatching { Math.addExact(repayment, processingFee) }.getOrNull()?.let { !differs(it, declaredRepayment) } == true
             if (includesFee) warnings += "Declared repayment includes the separately stated processing fee; schedule instalments reconcile before that fee."
             else errors += "Instalment total $repayment does not reconcile with declared repayment $declaredRepayment."
         }
