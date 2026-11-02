@@ -173,7 +173,14 @@ internal object LoanDocumentParser {
             }
         }
         val rowPattern = Regex("""(?m)^\s*(\d{1,3})\s+(.+?)\s*$""")
-        val rows = rowPattern.findAll(scheduleText).mapNotNull { match ->
+        fun exactScheduleAmount(raw: String): Long? = runCatching {
+            val value = java.math.BigDecimal(raw.replace(",", ""))
+            if (value.stripTrailingZeros().scale() > 0) null else value.longValueExact()
+        }.getOrNull()
+        val hasSubRupeeScheduleValues = rowPattern.findAll(scheduleText).any { match ->
+            Regex("""[0-9][0-9,]*\.[0-9]*[1-9][0-9]*""").containsMatchIn(match.groupValues[2])
+        }
+        val rows = if (hasSubRupeeScheduleValues) emptyList() else rowPattern.findAll(scheduleText).mapNotNull { match ->
             val no = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
             val rawValues = match.groupValues[2]
             val dateMatch = scheduleDatePattern.find(rawValues)
@@ -183,12 +190,12 @@ internal object LoanDocumentParser {
             val tokens = Regex("""[0-9][0-9,]*(?:\.[0-9]{1,4})?""").findAll(numericSource).map { it.value }.toList()
             if (hasScheduleRateColumn && tokens.size == 5) {
                 val rate = tokens[1].replace(",", "").toDoubleOrNull() ?: return@mapNotNull null
-                val amounts = listOf(0, 2, 3, 4).map { number(tokens[it]) ?: return@mapNotNull null }
+                val amounts = listOf(0, 2, 3, 4).map { exactScheduleAmount(tokens[it]) ?: return@mapNotNull null }
                 if (rate !in 0.0..100.0) return@mapNotNull null
                 LoanDocumentScheduleRow(no, amounts[0], amounts[1], amounts[2], amounts[3], rate, dueDate)
             } else if (!hasScheduleRateColumn && tokens.size == 5) {
                 // Standard bank statements: opening principal, installment, principal, interest, closing principal.
-                val amounts = tokens.map { number(it) ?: return@mapNotNull null }
+                val amounts = tokens.map { exactScheduleAmount(it) ?: return@mapNotNull null }
                 val opening = amounts[0]
                 val installment = amounts[1]
                 val principalPaid = if (principalBeforeInterest) amounts[2] else amounts[3]
@@ -197,7 +204,7 @@ internal object LoanDocumentParser {
                 if (opening - principalPaid != closing || principalPaid + interestPaid != installment) return@mapNotNull null
                 LoanDocumentScheduleRow(no, opening, principalPaid, interestPaid, installment, null, dueDate, closing)
             } else if (!hasScheduleRateColumn && tokens.size == 4) {
-                val amounts = tokens.map { number(it) ?: return@mapNotNull null }
+                val amounts = tokens.map { exactScheduleAmount(it) ?: return@mapNotNull null }
                 LoanDocumentScheduleRow(no, amounts[0], amounts[1], amounts[2], amounts[3], null, dueDate)
             } else null
         }.toList()
@@ -206,7 +213,10 @@ internal object LoanDocumentParser {
         if (rows.any { it.dueDate != null } && rows.any { it.dueDate == null }) {
             warnings += "Only some repayment rows contain readable due dates. MoneyLog will not invent dates for the remaining rows."
         }
-        if (rows.isEmpty() && tenure != null) {
+        if (hasSubRupeeScheduleValues) {
+            warnings += "The repayment schedule contains paise-level decimal amounts. This version of MoneyLog stores schedule amounts in whole rupees, so the PDF schedule was blocked rather than silently rounded. Import it only after paise-precision storage is supported."
+        }
+        if (rows.isEmpty() && tenure != null && !hasSubRupeeScheduleValues) {
             warnings += "No detailed monthly principal/interest schedule was extracted. MoneyLog will not invent a monthly split from the EMI and interest rate."
         }
         if (scheduleHeader != null && rows.isEmpty()) {
