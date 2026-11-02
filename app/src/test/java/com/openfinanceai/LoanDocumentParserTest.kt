@@ -345,6 +345,13 @@ class LoanDocumentParserTest {
         assertEquals(688062L, result.scheduleRows.first().principal)
         assertEquals(1250000L, result.scheduleRows.first().installment)
         assertEquals(1249994L, result.scheduleRows.last().installment)
+        val dated = LoanDocumentScheduleMapper.map(result.scheduleRows, result.repaymentStartDate)
+        assertEquals(60, dated.size)
+        val validation = LoanFinancialValidator.validate(
+            dated.map { FinancialScheduleRow(it.installmentNumber, it.date, it.openingBalance, it.amount, it.principal, it.interest, it.closingBalance) },
+            declaredTenure = 60, declaredPrincipal = result.principal
+        )
+        assertTrue(validation.errors.joinToString("\n"), validation.accepted)
         assertTrue(result.warnings.none { it.contains("paise-level decimal amounts") })
     }
 
@@ -439,6 +446,14 @@ class LoanDocumentParserTest {
         assertEquals((758402L * 100L), result.scheduleRows.sumOf { it.installment })
         assertEquals((569000L * 100L), result.scheduleRows.sumOf { it.principal })
         assertEquals((189402L * 100L), result.scheduleRows.sumOf { it.interest })
+        val dated = LoanDocumentScheduleMapper.map(result.scheduleRows, result.repaymentStartDate)
+        assertEquals(60, dated.size)
+        val validation = LoanFinancialValidator.validate(
+            dated.map { FinancialScheduleRow(it.installmentNumber, it.date, it.openingBalance, it.amount, it.principal, it.interest, it.closingBalance) },
+            declaredTenure = 60, declaredPrincipal = result.principal, declaredInterest = (189402L * 100L),
+            declaredRepayment = (758402L * 100L)
+        )
+        assertTrue(validation.errors.joinToString("\n"), validation.accepted)
     }
 
 
