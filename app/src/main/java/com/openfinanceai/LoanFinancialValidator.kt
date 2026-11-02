@@ -27,6 +27,7 @@ internal object LoanFinancialValidator {
         declaredPrincipal: Long? = null,
         declaredInterest: Long? = null,
         declaredRepayment: Long? = null,
+        processingFee: Long? = null,
         toleranceRupees: Long = 1L
     ): FinancialValidationResult {
         val errors = mutableListOf<String>()
@@ -61,7 +62,11 @@ internal object LoanFinancialValidator {
         fun differs(a: Long, b: Long) = kotlin.math.abs(a - b) > toleranceRupees
         if (declaredPrincipal != null && differs(principal, declaredPrincipal)) errors += "Principal total $principal does not reconcile with declared principal $declaredPrincipal."
         if (declaredInterest != null && differs(interest, declaredInterest)) errors += "Interest total $interest does not reconcile with declared interest $declaredInterest."
-        if (declaredRepayment != null && differs(repayment, declaredRepayment)) errors += "Instalment total $repayment does not reconcile with declared repayment $declaredRepayment."
+        if (declaredRepayment != null && differs(repayment, declaredRepayment)) {
+            val includesFee = processingFee != null && !differs(repayment + processingFee, declaredRepayment)
+            if (includesFee) warnings += "Declared repayment includes the separately stated processing fee; schedule instalments reconcile before that fee."
+            else errors += "Instalment total $repayment does not reconcile with declared repayment $declaredRepayment."
+        }
         if (rows.any { it.openingBalance == null || it.closingBalance == null }) warnings += "Opening/closing balance is not available for every row; balance-chain validation is partial."
         if (rows.any { it.dueDate == null }) warnings += "Some due dates are missing; no dates have been generated."
         return FinancialValidationResult(errors.isEmpty(), errors.distinct(), warnings.distinct(), principal, interest, repayment)
