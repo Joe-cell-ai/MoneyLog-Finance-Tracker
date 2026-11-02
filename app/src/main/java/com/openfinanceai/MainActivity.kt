@@ -4893,7 +4893,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                             Text("Opening ${Money.format(row.openingPrincipal)} · Closing ${row.closingPrincipal?.let { Money.format(it) } ?: "Not stated"}", color = Muted, fontSize = 8.sp)
                                         }
                                         Text("P ${Money.format(row.principal)}", color = Muted, fontSize = 9.sp, modifier = Modifier.weight(.9f))
-                                        val displayedRate = row.annualRate
+                                        val displayedRate = row.annualRate ?: rate.toDoubleOrNull()
                                         Text("I ${Money.format(row.interest)} · ${displayedRate?.let { "Rate $it%" } ?: "Rate not stated"}", color = Muted, fontSize = 9.sp, modifier = Modifier.weight(1.2f))
                                         Text(Money.format(row.installment), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
