@@ -14,12 +14,12 @@ class LoanDocumentScheduleMapperTest {
         )
         val mapped = LoanDocumentScheduleMapper.map(rows, null)
         assertEquals(listOf("2026-11-05", "2026-12-05", "2027-01-05", "2027-02-05"), mapped.map { it.date })
-        assertEquals(listOf(8000L, 8000L, 8000L, 79100L), mapped.map { it.amount })
-        assertEquals(listOf(100000L, 93000L, 85900L, 78600L), mapped.map { it.openingBalance })
-        assertEquals(listOf(7000L, 7100L, 7300L, 78600L), mapped.map { it.principal })
-        assertEquals(listOf(1000L, 900L, 700L, 500L), mapped.map { it.interest })
-        assertEquals(listOf(93000L, 85900L, 78600L, 0L), mapped.map { it.closingBalance })
-        assertEquals(103100L, mapped.sumOf { it.amount })
+        assertEquals(listOf((8000L * 100L), (8000L * 100L), (8000L * 100L), (79100L * 100L)), mapped.map { it.amount })
+        assertEquals(listOf((100000L * 100L), (93000L * 100L), (85900L * 100L), (78600L * 100L)), mapped.map { it.openingBalance })
+        assertEquals(listOf((7000L * 100L), (7100L * 100L), (7300L * 100L), (78600L * 100L)), mapped.map { it.principal })
+        assertEquals(listOf((1000L * 100L), (900L * 100L), (700L * 100L), (500L * 100L)), mapped.map { it.interest })
+        assertEquals(listOf((93000L * 100L), (85900L * 100L), (78600L * 100L), (0L * 100L)), mapped.map { it.closingBalance })
+        assertEquals((103100L * 100L), mapped.sumOf { it.amount })
     }
 
     @Test fun doesNotInventClosingBalanceWhenPdfDoesNotStateIt() {
@@ -68,8 +68,8 @@ class LoanDocumentScheduleMapperTest {
         )
         val mapped = LoanDocumentScheduleMapper.map(rows, null)
         assertEquals(listOf("2026-11-05", "2026-12-07", "2027-01-10"), mapped.map { it.date })
-        assertEquals(listOf(9300L, 9210L, 9120L), mapped.map { it.amount })
-        assertEquals(listOf(300L, 210L, 120L), mapped.map { it.interest })
+        assertEquals(listOf((9300L * 100L), (9210L * 100L), (9120L * 100L)), mapped.map { it.amount })
+        assertEquals(listOf((300L * 100L), (210L * 100L), (120L * 100L)), mapped.map { it.interest })
     }
 
     @Test fun refusesMixedExplicitAndMissingRowDatesRatherThanInventingDates() {
