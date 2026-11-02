@@ -3975,7 +3975,10 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
     val pendingAmountOverrides = pendingScheduleRows.mapNotNull { (date, amount) ->
         if (date.isNotBlank() && schedulePrefs.contains("emi_amount_${loan.lender}_${date}")) {
             val savedAmount = schedulePrefs.getLong("emi_amount_${loan.lender}_${date}", amount)
-            date to if (loanDocumentMetadata.optString("moneyUnit") == "PAISE") savedAmount else LoanMoney.rupeesToPaise(savedAmount)
+            date to if (importedSchedule.isNotEmpty()) {
+                val storedUnit = runCatching { JSONObject(schedulePrefs.getString("loan_document_metadata_${loan.lender}", "{}") ?: "{}").optString("moneyUnit") }.getOrDefault("")
+                if (storedUnit == "PAISE") savedAmount else LoanMoney.rupeesToPaise(savedAmount)
+            } else savedAmount
         }
         else null
     }.toMap()
