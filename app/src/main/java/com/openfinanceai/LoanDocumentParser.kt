@@ -80,7 +80,8 @@ internal object LoanDocumentParser {
                 .find(text)?.groupValues?.get(1)
         val processingFee = amountOnLine(Regex("""Processing\s+Fees?\s*\(INR\)"""))
             ?: directAmount("""Processing\s+fees?.{0,100}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
-        val totalInterest = directAmount("""Total\s+Interest\s+Amount\s+to\s+be\s+charged.{0,250}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
+        val totalInterest = directAmount("""Total\s+Interest\s+Amount\s+to\s+be\s+charged[^\n]*\n\s*\d{1,3}\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
+            ?: directAmount("""Total\s+Interest\s+Amount\s+to\s+be\s+charged[^\n]*?([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
         val declaredTotal = directAmount("""Total\s+amount\s+to\s+be\s+paid\s+by\s+the\s+borrower.{0,250}?\(in\s+Rupees\)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
 
         val scheduleHeader = Regex("""(?i)Illustrative\s+Repayment\s+Schedule""").find(text)
