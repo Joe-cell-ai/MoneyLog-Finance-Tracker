@@ -4982,7 +4982,8 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             error = ""
                             saved = true
                         }
-                    }, enabled = !pdfBusy && (importedWarnings.isEmpty() || warningsAcknowledged), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                    }, enabled = !pdfBusy && (importedWarnings.isEmpty() || warningsAcknowledged) &&
+                        importedWarnings.none { it.contains("paise-level decimal amounts") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) {
                         Icon(Icons.Default.Save, null)
                         Spacer(Modifier.width(8.dp))
                         Text("Save Loan", fontWeight = FontWeight.Bold)
