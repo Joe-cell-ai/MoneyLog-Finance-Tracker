@@ -4782,6 +4782,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     LoanDateField("Repayment start date", startDate, { startDate = it; saved = false })
                     OutlinedTextField(emi, { emi = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    if (rate.isBlank() && importedScheduleRows.isNotEmpty()) Text("Annual rate is not stated in this PDF. MoneyLog keeps it unknown and uses the exact monthly principal and interest amounts from the lender schedule.", color = Muted, fontSize = 10.sp)
                     OutlinedTextField(totalPayments, { totalPayments = it.filter(Char::isDigit); importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Total tenure (months)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     val calculatorEmi = calculateLoanEmi(
                         calculatorLoanAmount.toDoubleOrNull() ?: 0.0,
@@ -4879,7 +4880,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                 Text("Outstanding principal: ${Money.format(kotlin.math.round(currentOutstanding).toLong())}", color = Ink, fontWeight = FontWeight.SemiBold)
                                 Text("EMIs remaining: $remainingMonths", color = Ink)
                                 Text("Total remaining EMI payments: ${Money.format(kotlin.math.round(remainingPayments).toLong())}", color = Ink)
-                                Text("Estimated remaining interest: ${Money.format(kotlin.math.round(remainingInterest).toLong())}", color = Ink)
+                                Text("${if (remainingPdfRows != null) "Remaining interest from PDF" else "Estimated remaining interest"}: ${Money.format(kotlin.math.round(remainingInterest).toLong())}", color = Ink)
                                 Text(if (actualStatementBalance != null) "Outstanding balance uses the imported statement value; verify its date." else if (scheduleBasedOutstanding != null) "Outstanding principal is derived from the lender's schedule and the paid-installment count above." else "Outstanding balance is an estimate for a fixed-rate reducing-balance loan.", color = Muted, fontSize = 10.sp)
                             }
                         }
