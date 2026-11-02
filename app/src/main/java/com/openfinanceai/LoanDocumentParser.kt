@@ -96,7 +96,7 @@ internal object LoanDocumentParser {
                 ?: lines.drop(prepaymentLabelIndex + 1).firstOrNull { it.isNotBlank() }
             valueLine?.let { Regex("""\bNA\b|[0-9][0-9,]*(?:\.[0-9]{1,2})?""", RegexOption.IGNORE_CASE).find(it)?.value }
         } else null
-        val foreclosureCharge = Regex("""(?im)^\s*Foreclosure\s+charges,?\s*if\s+applicable\s*(.+?)\s*$""")
+        val foreclosureCharge = Regex("""(?im)^\s*(?:\([ivx]+\)\s*)?Foreclosure\s+charges,?\s*if\s+applicable\s*(.+?)\s*$""")
             .find(text)?.groupValues?.get(1)?.trim()
         val bounceCharge = Regex("""(?im)^\s*Bounce\s+Charges\s+(.+?)\s*$""")
             .find(text)?.groupValues?.get(1)?.trim()
