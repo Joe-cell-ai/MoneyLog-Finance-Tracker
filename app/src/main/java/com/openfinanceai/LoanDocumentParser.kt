@@ -108,7 +108,7 @@ internal object LoanDocumentParser {
                 val details = mutableListOf<String>()
                 if (first.isNotBlank()) details += first
                 for (line in lines.drop(index + 1)) {
-                    if (line.isBlank() || Regex("""^(?:Overdue\s+Amount|Late\s+Payment\s+Charges|Penal\s+Charges)\b""", RegexOption.IGNORE_CASE).containsMatchIn(line)) break
+                    if (line.isBlank() || Regex("""^(?:Key\s+Facts\s+Statement|Computation\s+of\s+APR|Total\s+Interest\s+Amount|Total\s+amount\s+to\s+be\s+paid|Illustrative\s+Repayment\s+Schedule|Repayment\s+Schedule|Instalment\s+No\.?|Installment\s+No\.?|Please\s+Note|Overdue\s+Amount|Late\s+Payment\s+Charges|Penal\s+Charges|Foreclosure\s+Charges|Prepayment\s+Charges|Processing\s+Fees)\b""", RegexOption.IGNORE_CASE).containsMatchIn(line)) break
                     details += line
                 }
                 details.joinToString(" ").trim().takeIf { it.isNotBlank() }

@@ -74,6 +74,7 @@ class LoanDocumentParserTest {
         assertTrue(result.foreclosureCharge!!.contains("4.0%"))
         assertTrue(result.bounceCharge!!.contains("300"))
         assertTrue(result.bounceCharge!!.contains("every Mandate Bounce"))
+        assertEquals("Flat charge of INR 300 on every Mandate Bounce (Upto- 2 Times)", result.bounceCharge)
     }
 
     @Test fun extractsEveryScheduleRowAndPreservesConflictingSourceAmount() {
