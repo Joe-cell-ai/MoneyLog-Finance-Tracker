@@ -38,7 +38,7 @@ internal object LoanDocumentParser {
 
     fun parse(sourceText: String): LoanDocumentExtraction {
         val text = sourceText.replace('\u00A0', ' ').replace('\u200B', ' ')
-            .replace('\uFB03', 'ffi').replace('\uFB01', 'fi').replace('\uFB02', 'fl').replace('\uFB00', 'ff')
+            .replace("\uFB03", "ffi").replace("\uFB01", "fi").replace("\uFB02", "fl").replace("\uFB00", "ff")
         val lines = text.lines().map { it.trim().replace(Regex("""[ \t]+"""), " ") }
         fun number(raw: String?): Long? = raw?.replace(",", "")?.toDoubleOrNull()
             ?.takeIf { it >= 0.0 && it <= Long.MAX_VALUE.toDouble() }
