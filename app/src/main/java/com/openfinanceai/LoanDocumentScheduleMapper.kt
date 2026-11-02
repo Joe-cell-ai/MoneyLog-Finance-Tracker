@@ -61,8 +61,7 @@ internal object LoanDocumentScheduleMapper {
                 openingBalance = row.openingPrincipal,
                 principal = row.principal,
                 interest = row.interest,
-                closingBalance = row.closingPrincipal
-                    ?: (row.openingPrincipal - row.principal).takeIf { it >= 0L },
+                closingBalance = row.closingPrincipal,
                 annualRatePercent = row.annualRate
             )
         }
