@@ -25,6 +25,7 @@ class LoanDocumentParserTest {
         a Processing Fees (INR) (inclusive of 18% GST) 1292.0
         b NA
         Prepayment Charges (INR)
+        c Bounce Charge (INR) As per Schedule A
         (iii) Foreclosure charges, if applicable 4.0% of the Principal Outstanding + GST
         Key Facts Statement
         Name of the Regulated Entity: Finnable Credit Private Limited
