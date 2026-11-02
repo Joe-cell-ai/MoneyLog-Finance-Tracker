@@ -4872,7 +4872,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                 Text("EMIs remaining: $remainingMonths", color = Ink)
                                 Text("Total remaining EMI payments: ${Money.format(kotlin.math.round(remainingPayments).toLong())}", color = Ink)
                                 Text("Estimated remaining interest: ${Money.format(kotlin.math.round(remainingInterest).toLong())}", color = Ink)
-                                Text(if (actualStatementBalance != null) "Outstanding balance uses the imported statement value; verify its date." else "Outstanding balance is an estimate for a fixed-rate reducing-balance loan.", color = Muted, fontSize = 10.sp)
+                                Text(if (actualStatementBalance != null) "Outstanding balance uses the imported statement value; verify its date." else if (scheduleBasedOutstanding != null) "Outstanding principal is derived from the lender's schedule and the paid-installment count above." else "Outstanding balance is an estimate for a fixed-rate reducing-balance loan.", color = Muted, fontSize = 10.sp)
                             }
                         }
                     } else {
