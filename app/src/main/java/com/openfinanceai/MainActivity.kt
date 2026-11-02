@@ -3758,6 +3758,17 @@ private fun parseScheduleDate(raw: String): java.time.LocalDate? {
     return null
 }
 
+internal fun calculatePendingEmiTotal(
+    installments: List<Pair<String, Long>>,
+    paidDates: Set<String>,
+    amountOverrides: Map<String, Long> = emptyMap(),
+    alreadyPaidCount: Long = 0L
+): Long = installments.withIndex().sumOf { indexed ->
+    val (date, scheduledAmount) = indexed.value
+    if (indexed.index.toLong() < alreadyPaidCount || date in paidDates) 0L
+    else (amountOverrides[date] ?: scheduledAmount).coerceAtLeast(0L)
+}
+
 internal fun calculateLoanEmi(principal: Double, annualRatePercent: Double, months: Int): Long? {
     if (!principal.isFinite() || !annualRatePercent.isFinite() ||
         principal <= 0.0 || annualRatePercent < 0.0 || months !in 1..600) return null
@@ -3884,26 +3895,26 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
             }
         }.getOrDefault(emptyList()))
     }
-    val totalPendingEmiAmount = if (importedSchedule.isNotEmpty()) {
-        importedSchedule.withIndex().sumOf { indexed ->
-            val (date, importedAmount) = indexed.value
-            val explicitPaid = schedulePrefs.getString("emi_status_${loan.lender}_${date}", null) == "Paid"
-            val countedPaid = indexed.index < loan.paymentsMade
-            if (explicitPaid || countedPaid) 0L
-            else schedulePrefs.getLong("emi_amount_${loan.lender}_${date}", importedAmount).coerceAtLeast(0L)
-        }
-    } else {
-        schedule.indices.sumOf { index ->
-            val date = firstDueDate?.plusMonths(index.toLong())
-                ?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
-            val explicitPaid = date?.let { schedulePrefs.getString("emi_status_${loan.lender}_${it}", null) == "Paid" } == true
-            if (explicitPaid) 0L else {
-                val (interest, principalPart, _) = schedule[index]
-                val computedAmount = interest + principalPart
-                if (date == null) computedAmount else schedulePrefs.getLong("emi_amount_${loan.lender}_${date}", computedAmount).coerceAtLeast(0L)
-            }
-        }
+    val pendingScheduleRows = if (importedSchedule.isNotEmpty()) importedSchedule else schedule.indices.map { index ->
+        val date = firstDueDate?.plusMonths(index.toLong())
+            ?.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)).orEmpty()
+        val (interest, principalPart, _) = schedule[index]
+        date to (interest + principalPart)
     }
+    val pendingPaidDates = pendingScheduleRows.mapNotNull { (date, _) ->
+        date.takeIf { it.isNotBlank() && schedulePrefs.getString("emi_status_${loan.lender}_${it}", null) == "Paid" }
+    }.toSet()
+    val pendingAmountOverrides = pendingScheduleRows.mapNotNull { (date, amount) ->
+        if (date.isNotBlank() && schedulePrefs.contains("emi_amount_${loan.lender}_${date}"))
+            date to schedulePrefs.getLong("emi_amount_${loan.lender}_${date}", amount)
+        else null
+    }.toMap()
+    val totalPendingEmiAmount = calculatePendingEmiTotal(
+        installments = pendingScheduleRows,
+        paidDates = pendingPaidDates,
+        amountOverrides = pendingAmountOverrides,
+        alreadyPaidCount = if (importedSchedule.isNotEmpty()) loan.paymentsMade else 0L
+    )
     var pdfMessage by remember(loan.lender) { mutableStateOf("") }
     var pdfBusy by remember(loan.lender) { mutableStateOf(false) }
     val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
