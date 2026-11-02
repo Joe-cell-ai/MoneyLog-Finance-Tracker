@@ -183,10 +183,12 @@ class LoanDocumentParserTest {
 
     @Test fun parsesYesBankFiveAmountScheduleWithOpeningInstallmentPrincipalInterestClosingAndTwoDigitDates() {
         val statement = """
-            Corporate & Registered o\uFB03ce: YES BANK Limited, YES BANK House, O\uFB00 Western Express Highway\n            Customer Name : NELATOORI VIJAY KUMAR REDDY
+            Corporate & Registered oﬃce: YES BANK Limited, YES BANK House, Off Western Express Highway
+            Customer Name : NELATOORI VIJAY KUMAR REDDY
             Agreement No : PLN002202247931
             Repayment Start Date : 04-FEB-26
-            Repayment End Date : 04-JAN-31\n            ROI(%) : 12.00
+            Repayment End Date : 04-JAN-31
+            ROI(%) : 12.00
             Loan Amount(INR) : INR 5,69,000.00
             Tenure : 60 Months
             Repayment Schedule
@@ -210,10 +212,12 @@ class LoanDocumentParserTest {
 
     @Test fun parsesAllSixtyRowsFromUploadedYesBankRepaymentStatement() {
         val statement = """
-            Corporate & Registered o\uFB03ce: YES BANK Limited, YES BANK House, O\uFB00 Western Express Highway\n            Customer Name : NELATOORI VIJAY KUMAR REDDY
+            Corporate & Registered oﬃce: YES BANK Limited, YES BANK House, Off Western Express Highway
+            Customer Name : NELATOORI VIJAY KUMAR REDDY
             Agreement No : PLN002202247931
             Repayment Start Date : 04-FEB-26
-            Repayment End Date : 04-JAN-31\n            ROI(%) : 12.00
+            Repayment End Date : 04-JAN-31
+            ROI(%) : 12.00
             Loan Amount(INR) : INR 5,69,000.00
             Tenure : 60 Months
             Repayment Schedule
