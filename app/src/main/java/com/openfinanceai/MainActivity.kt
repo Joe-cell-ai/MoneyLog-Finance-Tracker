@@ -4740,6 +4740,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         }
                         val fields = JSONObject()
                         val auditedDocument = LoanDocumentParser.parse(extracted)
+                        val auditValidationWarnings = mutableListOf<String>()
                         if (auditedDocument.scheduleRows.isNotEmpty()) {
                             val financialRows = auditedDocument.scheduleRows.map { row ->
                                 FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal,
@@ -4756,6 +4757,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             if (!validation.accepted) {
                                 throw IllegalArgumentException("PDF schedule failed exact financial reconciliation. Nothing was imported: " + validation.errors.joinToString(" "))
                             }
+                            auditValidationWarnings += validation.warnings
                         }
                         // Use the document's own section headings rather than assuming that values
                         // always appear on page 1. PDFTextStripper separates pages with form feeds.
@@ -4842,7 +4844,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         auditedDocument.foreclosureCharge?.let { fields.put("auditForeclosureCharge", it) }
                         auditedDocument.bounceCharge?.let { fields.put("auditBounceCharge", it) }
                         fields.put("auditIllustrative", auditedDocument.illustrativeSchedule)
-                        fields.put("auditWarnings", JSONArray(auditedDocument.warnings))
+                        fields.put("auditWarnings", JSONArray((auditedDocument.warnings + auditValidationWarnings).distinct()))
                         val auditRows = JSONArray()
                         auditedDocument.scheduleRows.forEach { row ->
                             auditRows.put(JSONObject().put("number", row.installmentNumber)
