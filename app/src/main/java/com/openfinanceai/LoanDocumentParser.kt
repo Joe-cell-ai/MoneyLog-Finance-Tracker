@@ -96,6 +96,9 @@ internal object LoanDocumentParser {
         }.toList()
 
         val warnings = mutableListOf<String>()
+        if (rows.isEmpty() && tenure != null) {
+            warnings += "No detailed monthly principal/interest schedule was extracted. MoneyLog will not invent a monthly split from the EMI and interest rate."
+        }
         if (scheduleHeader != null && rows.isEmpty()) {
             warnings += "A repayment schedule heading was found, but no complete five-column instalment rows could be read. No schedule rows were invented."
         }
