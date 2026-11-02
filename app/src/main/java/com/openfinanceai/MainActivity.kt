@@ -4029,7 +4029,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 }
                 val validation = LoanFinancialValidator.validate(
                     financialRows, document.tenureMonths, document.principal, document.totalInterest,
-                    document.declaredTotalRepayment
+                    document.declaredTotalRepayment, document.processingFee
                 )
                 if (!validation.accepted) error("Financial validation failed. Nothing was saved: " + validation.errors.joinToString(" "))
                 Triple(document, mappedRows, (document.warnings + pageExtraction.warnings + validation.warnings).distinct())
