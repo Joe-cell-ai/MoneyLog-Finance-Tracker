@@ -236,6 +236,23 @@ class LoanDocumentParserTest {
         assertEquals(listOf(7000L, 3900L, 0L), result.scheduleRows.map { it.closingPrincipal })
     }
 
+    @Test fun blocksPaisePrecisionSchedulesInsteadOfRoundingSourceValues() {
+        val statement = """
+            APEX NATIONAL BANK
+            Loan Amount: INR 561938.00
+            Tenure: 3 Months
+            Monthly EMI: INR 12500.00
+            Official Amortization Timeline Statement
+            Opening Principal Monthly EMI Interest Component Principal Component Closing Balance
+            1 561938.00 12500.00 5619.38 6880.62 555057.38
+            2 555057.38 12500.00 5550.57 6949.43 548107.95
+            3 548107.95 12500.00 5481.08 7018.92 541089.03
+        """.trimIndent()
+        val result = LoanDocumentParser.parse(statement)
+        assertTrue(result.scheduleRows.isEmpty())
+        assertTrue(result.warnings.any { it.contains("paise-level decimal amounts") })
+    }
+
     @Test fun parsesAllSixtyRowsFromUploadedYesBankRepaymentStatement() {
         val statement = """
             Corporate & Registered oﬃce: YES BANK Limited, YES BANK House, Off Western Express Highway
