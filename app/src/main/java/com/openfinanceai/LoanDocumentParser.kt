@@ -122,7 +122,7 @@ internal object LoanDocumentParser {
         val rowPattern = Regex("""(?m)^\s*(\d{1,3})\s+((?:[0-9][0-9,]*(?:\.[0-9]{1,4})?\s+){3,4}[0-9][0-9,]*(?:\.[0-9]{1,4})?)\s*$""")
         val rows = rowPattern.findAll(scheduleText).mapNotNull { match ->
             val no = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
-            val values = amountToken.findAll(match.groupValues[2]).mapNotNull { number(it.groupValues[1]) }.toList()
+            val values = Regex("""[0-9][0-9,]*(?:\\.[0-9]{1,4})?""").findAll(match.groupValues[2]).mapNotNull { number(it.value) }.toList()
             if (hasScheduleRateColumn && values.size == 5) {
                 val rate = values[1].toDouble()
                 if (rate !in 0.0..100.0) return@mapNotNull null
