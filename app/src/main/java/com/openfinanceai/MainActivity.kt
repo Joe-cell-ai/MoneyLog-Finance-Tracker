@@ -4709,6 +4709,27 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         }
                         val fields = JSONObject()
                         val auditedDocument = LoanDocumentParser.parse(extracted)
+                        if (auditedDocument.scheduleRows.isNotEmpty()) {
+                            val mappedForValidation = LoanDocumentScheduleMapper.map(auditedDocument.scheduleRows, auditedDocument.repaymentStartDate)
+                            if (mappedForValidation.size != auditedDocument.scheduleRows.size) {
+                                throw IllegalArgumentException("The PDF schedule contains missing, invalid or unordered dates. No schedule was imported.")
+                            }
+                            val financialRows = auditedDocument.scheduleRows.map { row ->
+                                FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal,
+                                    row.installment, row.principal, row.interest, row.closingPrincipal)
+                            }
+                            val validation = LoanFinancialValidator.validate(
+                                financialRows,
+                                declaredTenure = auditedDocument.tenureMonths,
+                                declaredPrincipal = auditedDocument.principal,
+                                declaredInterest = auditedDocument.totalInterest,
+                                declaredRepayment = auditedDocument.declaredTotalRepayment,
+                                processingFee = auditedDocument.processingFee
+                            )
+                            if (!validation.accepted) {
+                                throw IllegalArgumentException("PDF schedule failed exact financial reconciliation. Nothing was imported: " + validation.errors.joinToString(" "))
+                            }
+                        }
                         // Use the document's own section headings rather than assuming that values
                         // always appear on page 1. PDFTextStripper separates pages with form feeds.
                         val pdfPages = extracted.split('\u000C')
