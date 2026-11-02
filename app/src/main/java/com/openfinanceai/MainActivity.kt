@@ -3993,22 +3993,15 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
     }
     var pdfMessage by remember(loan.lender) { mutableStateOf("") }
     var pdfBusy by remember(loan.lender) { mutableStateOf(false) }
+    val loanPdfScope = rememberCoroutineScope()
     val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             pdfBusy = true
             pdfMessage = ""
+            loanPdfScope.launch {
             val result = runCatching {
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: error("Could not read the selected PDF. Please choose it again.")
-                if (bytes.size < 8 || !bytes.copyOfRange(0, 5).toString(Charsets.US_ASCII).startsWith("%PDF-")) {
-                    error("Invalid PDF file. Choose a readable EMI schedule PDF.")
-                }
-                PDFBoxResourceLoader.init(context.applicationContext)
-                val extractedText = PDDocument.load(bytes.inputStream()).use { document ->
-                    if (document.isEncrypted) error("Password-protected PDFs are not supported. Upload an unlocked PDF.")
-                    if (document.numberOfPages !in 1..300) error("The PDF has an invalid or unsupported page count.")
-                    PDFTextStripper().apply { setSortByPosition(true) }.getText(document)
-                }
+                val pageExtraction = withContext(kotlinx.coroutines.Dispatchers.IO) { LoanPdfExtractionEngine(context).extract(uri) }
+                val extractedText = pageExtraction.combinedText
                 val document = LoanDocumentParser.parse(extractedText)
                 if (document.scheduleRows.isEmpty()) error("No complete monthly repayment rows could be read from this PDF. No data was saved.")
                 val mappedRows = LoanDocumentScheduleMapper.map(document.scheduleRows, document.repaymentStartDate)
@@ -4030,7 +4023,16 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 if (document.principal != null && loan.originalPrincipal > 0L && document.principal != loan.originalPrincipal) {
                     error("The PDF principal ${document.principal} does not match this loan's original principal ${loan.originalPrincipal}. No data was saved.")
                 }
-                Triple(document, mappedRows, document.warnings)
+                val financialRows = document.scheduleRows.map { row ->
+                    FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal, row.installment,
+                        row.principal, row.interest, null)
+                }
+                val validation = LoanFinancialValidator.validate(
+                    financialRows, document.tenureMonths, document.principal, document.totalInterest,
+                    document.declaredTotalRepayment
+                )
+                if (!validation.accepted) error("Financial validation failed. Nothing was saved: " + validation.errors.joinToString(" "))
+                Triple(document, mappedRows, (document.warnings + pageExtraction.warnings + validation.warnings).distinct())
             }
             result.onSuccess { (document, mappedRows, sourceWarnings) ->
                 val arr = JSONArray()
@@ -4082,6 +4084,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 pdfMessage = error.message ?: "Could not validate this PDF. No schedule was saved."
             }
             pdfBusy = false
+            }
         }
     }
     LazyColumn(
