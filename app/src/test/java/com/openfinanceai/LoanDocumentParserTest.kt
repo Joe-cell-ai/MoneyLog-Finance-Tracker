@@ -29,7 +29,7 @@ class LoanDocumentParserTest {
         9 Annual Percentage Rate (APR) (%) 31.65 % p.a.
         Computation of APR
         Total Interest Amount to be charged during the entire tenor of the loan 2680.0
-        Total amount to be paid by the borrower (sum of 1,5 and 6) 32980.0
+        Total amount to be paid by the borrower (sum of 1,5 and 6) (in Rupees) 32980.0
         Illustrative Repayment Schedule
         Instalment No. Outstanding Principal Principal Interest Installment
         1 29205.0 3057.0 493.0 4842.0
