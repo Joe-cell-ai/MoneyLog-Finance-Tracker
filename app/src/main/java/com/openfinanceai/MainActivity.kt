@@ -4267,10 +4267,10 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(if (selectedSection == "Bank Verify") "Bank Schedule Verify" else "EMI Schedule", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text(if (selectedSection == "Bank Schedule") "Compare your lender statement" else "All installments · estimate", color = Muted, fontSize = 11.sp)
+                        Text(if (selectedSection == "Bank Verify") "Compare your lender statement" else if (importedSchedule.isNotEmpty()) "All installments · exact PDF values" else "All installments · estimate", color = Muted, fontSize = 11.sp)
                     }
                     Box(Modifier.clip(RoundedCornerShape(50)).background(mint).padding(horizontal = 10.dp, vertical = 7.dp)) {
-                        Text(if (selectedSection == "Bank Schedule") "VERIFY" else "ESTIMATE", color = forest, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        Text(if (selectedSection == "Bank Verify") "VERIFY" else if (importedSchedule.isNotEmpty()) "PDF SOURCE" else "ESTIMATE", color = forest, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -4370,7 +4370,14 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                             Text(dateLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
                             val displayedRate = breakdown?.annualRate ?: loan.annualRate.takeIf { it > 0.0 }
                             val rateLabel = displayedRate?.let { "Rate $it%" } ?: "Rate not stated"
-                            Text(if (breakdown != null) "P ${Money.format(breakdown.principal)} · I ${Money.format(breakdown.interest)} · $rateLabel" else "PDF EMI · $rateLabel", color = Muted, fontSize = 9.sp)
+                            if (breakdown != null) {
+                                Text("Principal ${Money.format(breakdown.principal)} · Interest ${Money.format(breakdown.interest)}", color = Muted, fontSize = 9.sp)
+                                val balances = listOfNotNull(
+                                    breakdown.openingPrincipal.takeIf { it > 0L }?.let { "Opening ${Money.format(it)}" },
+                                    breakdown.closingPrincipal?.let { "Closing ${Money.format(it)}" }
+                                )
+                                Text((balances + rateLabel).joinToString(" · "), color = Muted, fontSize = 8.sp)
+                            } else Text("PDF EMI · $rateLabel", color = Muted, fontSize = 9.sp)
                         }
                         Column(Modifier.weight(1f), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(Money.format(amount), color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -4420,7 +4427,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 InfoCard("EMI may not cover interest", "At the entered interest rate, the EMI is not greater than the estimated monthly interest. The balance may not reduce unless the EMI or rate changes.", Icons.Default.Warning)
             }
             item {
-                Text(if (selectedSection == "Bank Schedule") "Bank Schedule is a comparison view, not a bank feed. Dates and amounts shown here are MoneyLog estimates; verify every installment against your lender's official statement." else "Schedule is estimated from the current outstanding balance, entered EMI and interest rate. Paid labels reflect only the payment count you entered; verify dates and amounts against your lender statement.", color = Muted, fontSize = 10.sp)
+                Text(if (selectedSection == "Bank Verify") "Bank Schedule is a manual comparison, not a bank feed. Verify every value against your lender statement." else if (importedSchedule.isNotEmpty()) "Instalment dates, EMI amounts, principal and interest shown here are copied from the imported PDF. Values not stated in the PDF are not calculated or filled in." else "Schedule is estimated from the current outstanding balance, entered EMI and interest rate. Verify dates and amounts against your lender statement.", color = Muted, fontSize = 10.sp)
             }
         }
     }
@@ -4726,7 +4733,8 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                 .put("openingPrincipal", row.openingPrincipal).put("principal", row.principal)
                                 .put("interest", row.interest).put("installment", row.installment)
                                 .put("annualRate", row.annualRate ?: JSONObject.NULL)
-                                .put("dueDate", row.dueDate ?: JSONObject.NULL))
+                                .put("dueDate", row.dueDate ?: JSONObject.NULL)
+                                .put("closingPrincipal", row.closingPrincipal ?: JSONObject.NULL))
                         }
                         fields.put("auditScheduleRows", auditRows)
                         fields
@@ -4759,7 +4767,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     importedWarnings = fields.optJSONArray("auditWarnings")?.let { array -> (0 until array.length()).map { array.getString(it) } } ?: emptyList()
                     importedScheduleRows = fields.optJSONArray("auditScheduleRows")?.let { array ->
                         (0 until array.length()).map { index -> array.getJSONObject(index).let { row ->
-                            LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null, if (row.has("dueDate") && !row.isNull("dueDate")) row.optString("dueDate") else null)
+                            LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null, if (row.has("dueDate") && !row.isNull("dueDate")) row.optString("dueDate") else null, if (row.has("closingPrincipal") && !row.isNull("closingPrincipal")) row.optLong("closingPrincipal") else null)
                         } }
                     } ?: emptyList()
                     if (startDate.isBlank()) importedScheduleRows.firstOrNull()?.dueDate?.let { startDate = it }
@@ -4830,13 +4838,15 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         Spacer(Modifier.width(8.dp))
                         Text(if (pdfBusy) "Reading PDF…" else "Import Loan PDF")
                     }
-                    Text("Option 2 · Enter or correct the details manually", color = Muted, fontSize = 12.sp)
+                    Text("Review the extracted values. Only lender, principal, EMI and tenure are essential; rate and dates may remain unknown when the PDF provides exact monthly schedule rows.", color = Muted, fontSize = 12.sp)
                     OutlinedTextField(lender, { lender = it; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Lender / Bank") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(borrowerName, { borrowerName = it; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Borrower name (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(agreementNumber, { agreementNumber = it; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Agreement / Loan No. (primary identifier)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                    LoanDateField("Repayment start date", startDate, { startDate = it; saved = false })
+                    if (importedScheduleRows.isEmpty() || importedScheduleRows.any { it.dueDate.isNullOrBlank() }) {
+                        LoanDateField("First EMI date (required only if PDF has no row dates)", startDate, { startDate = it; saved = false })
+                    }
                     OutlinedTextField(emi, { emi = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Monthly EMI (₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Annual interest rate (%) · optional when PDF gives monthly interest") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     if (rate.isBlank() && importedScheduleRows.isNotEmpty()) Text("Annual rate is not stated in this PDF. MoneyLog keeps it unknown and uses the exact monthly principal and interest amounts from the lender schedule.", color = Muted, fontSize = 10.sp)
                     OutlinedTextField(totalPayments, { totalPayments = it.filter(Char::isDigit); importedPrincipal = ""; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Total tenure (months)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     val calculatorEmi = calculateLoanEmi(
@@ -4844,41 +4854,14 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         rate.toDoubleOrNull() ?: -1.0,
                         totalPayments.toIntOrNull() ?: 0
                     )
-                    Card(colors = CardDefaults.cardColors(containerColor = Mint), shape = RoundedCornerShape(16.dp)) {
-                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                            Text("EMI Calculator", color = Green, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("Enter the principal, annual interest rate and tenure to calculate the monthly EMI.", color = Muted, fontSize = 11.sp)
-                            OutlinedTextField(
-                                value = calculatorLoanAmount,
-                                onValueChange = { calculatorLoanAmount = it.filter { c -> c.isDigit() || c == '.' }; saved = false },
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Loan amount (₹)") },
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("Calculated monthly EMI", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                Text(calculatorEmi?.let { Money.format(it) } ?: "—", color = Green, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Text("Rate and tenure use the fields above. Calculation uses the reducing-balance EMI formula.", color = Muted, fontSize = 10.sp)
-                            OutlinedButton(
-                                onClick = {
-                                    calculatorEmi?.let { result ->
-                                        emi = result.toString()
-                                        importedPrincipal = calculatorLoanAmount
-                                        error = ""
-                                        saved = false
-                                    }
-                                },
-                                enabled = calculatorEmi != null,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(Icons.Default.Calculate, null)
-                                Spacer(Modifier.width(7.dp))
-                                Text("Use calculated EMI")
-                            }
-                        }
-                    }
+                    OutlinedTextField(
+                        value = calculatorLoanAmount,
+                        onValueChange = { calculatorLoanAmount = it.filter { c -> c.isDigit() || c == '.' }; saved = false; error = "" },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Loan principal (₹)") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp)
+                    )
                     OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(statementOutstanding, { statementOutstanding = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Statement outstanding principal (optional, ₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     if (statementDate.isNotBlank()) Text("Statement date: $statementDate", color = Muted, fontSize = 11.sp)
@@ -4904,11 +4887,14 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                 Text("Repayment rows extracted from PDF (${importedScheduleRows.size})", color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 if (importedIllustrative) Text("Illustrative schedule only — not a final disbursement-based schedule.", color = Color(0xFFB45309), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                                 importedScheduleRows.forEach { row ->
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("EMI ${row.installmentNumber}${row.dueDate?.let { " · $it" } ?: ""}", color = Ink, fontSize = 10.sp, modifier = Modifier.weight(0.9f))
-                                        Text("P ${Money.format(row.principal)}", color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("EMI ${row.installmentNumber}${row.dueDate?.let { " · $it" } ?: ""}", color = Ink, fontSize = 10.sp)
+                                            Text("Opening ${Money.format(row.openingPrincipal)} · Closing ${row.closingPrincipal?.let { Money.format(it) } ?: "Not stated"}", color = Muted, fontSize = 8.sp)
+                                        }
+                                        Text("P ${Money.format(row.principal)}", color = Muted, fontSize = 9.sp, modifier = Modifier.weight(.9f))
                                         val displayedRate = row.annualRate ?: rate.toDoubleOrNull()
-                                        Text("I ${Money.format(row.interest)} · ${displayedRate?.let { "Rate $it%" } ?: "Rate not stated"}", color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1.2f))
+                                        Text("I ${Money.format(row.interest)} · ${displayedRate?.let { "Rate $it%" } ?: "Rate not stated"}", color = Muted, fontSize = 9.sp, modifier = Modifier.weight(1.2f))
                                         Text(Money.format(row.installment), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
@@ -4967,7 +4953,8 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                 importedScheduleRows.forEach { row -> savedRows.put(JSONObject().put("number", row.installmentNumber)
                                     .put("openingPrincipal", row.openingPrincipal).put("principal", row.principal)
                                     .put("interest", row.interest).put("installment", row.installment)
-                                    .put("annualRate", row.annualRate ?: JSONObject.NULL).put("dueDate", row.dueDate ?: JSONObject.NULL)) }
+                                    .put("annualRate", row.annualRate ?: JSONObject.NULL).put("dueDate", row.dueDate ?: JSONObject.NULL)
+                                    .put("closingPrincipal", row.closingPrincipal ?: JSONObject.NULL)) }
                                 val metadata = JSONObject().put("apr", importedApr ?: JSONObject.NULL)
                                     .put("lender", lenderName)
                                     .put("borrowerName", borrowerName.trim().takeIf { it.isNotBlank() } ?: JSONObject.NULL)
