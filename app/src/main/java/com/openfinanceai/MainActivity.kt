@@ -4780,9 +4780,9 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                 if (importedIllustrative) Text("Illustrative schedule only — not a final disbursement-based schedule.", color = Color(0xFFB45309), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                                 importedScheduleRows.forEach { row ->
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("EMI ${row.installmentNumber}", color = Ink, fontSize = 10.sp, modifier = Modifier.weight(0.8f))
+                                        Text("EMI ${row.installmentNumber}${row.dueDate?.let { " · $it" } ?: ""}", color = Ink, fontSize = 10.sp, modifier = Modifier.weight(0.9f))
                                         Text("P ${Money.format(row.principal)}", color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
-                                        Text("I ${Money.format(row.interest)}", color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                                        Text("I ${Money.format(row.interest)} · ${row.annualRate ?: rate}%", color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1.2f))
                                         Text(Money.format(row.installment), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
