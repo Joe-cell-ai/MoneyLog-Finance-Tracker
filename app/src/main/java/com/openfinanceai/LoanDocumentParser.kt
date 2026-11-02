@@ -118,8 +118,8 @@ internal object LoanDocumentParser {
 
         val scheduleHeader = Regex("""(?i)Illustrative\s+Repayment\s+Schedule""").find(text)
         val scheduleText = scheduleHeader?.let { text.substring(it.range.last + 1) }.orEmpty()
-        val hasScheduleRateColumn = Regex("""(?i)(?:interest\\s+rate|rate\\s*\\(%\\))""").containsMatchIn(scheduleText.take(1800))
-        val rowPattern = Regex("""(?m)^\\s*(\\d{1,3})\\s+((?:[0-9][0-9,]*(?:\\.[0-9]{1,4})?\\s+){3,4}[0-9][0-9,]*(?:\\.[0-9]{1,4})?)\\s*$""")
+        val hasScheduleRateColumn = Regex("""(?i)(?:interest\s+rate|rate\s*\(%\))""").containsMatchIn(scheduleText.take(1800))
+        val rowPattern = Regex("""(?m)^\s*(\d{1,3})\s+((?:[0-9][0-9,]*(?:\.[0-9]{1,4})?\s+){3,4}[0-9][0-9,]*(?:\.[0-9]{1,4})?)\s*$""")
         val rows = rowPattern.findAll(scheduleText).mapNotNull { match ->
             val no = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
             val values = amountToken.findAll(match.groupValues[2]).mapNotNull { number(it.groupValues[1]) }.toList()
