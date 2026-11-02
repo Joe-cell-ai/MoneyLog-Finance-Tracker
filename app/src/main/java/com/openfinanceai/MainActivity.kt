@@ -4252,10 +4252,10 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     }
                     val statusColor = when (importedStatus) { "Paid" -> Color(0xFF0E7490); "Overdue" -> Color(0xFFEF4444); else -> Color(0xFFF59E0B) }
                     val statusTint = when (importedStatus) { "Paid" -> Color(0xFFCCFBF1); "Overdue" -> Color(0xFFFFE4E6); else -> Color(0xFFFFF1D6) }
+                    val breakdown = importedDocumentBreakdown.getOrNull(index)
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }, onLongClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(dateLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
-                            val breakdown = importedDocumentBreakdown.getOrNull(index)
                             Text(if (breakdown != null) "P ${Money.format(breakdown.principal)} · I ${Money.format(breakdown.interest)} · Rate ${breakdown.annualRate ?: loan.annualRate}%" else "PDF EMI · Rate ${loan.annualRate}%", color = Muted, fontSize = 9.sp)
                         }
                         Column(Modifier.weight(1f), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
