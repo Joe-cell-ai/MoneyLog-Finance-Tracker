@@ -60,16 +60,16 @@ class LoanDocumentParserTest {
         assertEquals("Finnable Credit Private Limited", result.lender)
         assertEquals("CL491032662", result.loanNumber)
         assertEquals("VIJAY KUMAR REDDY NELATOORI", result.borrowerName)
-        assertEquals(29205L, result.principal)
-        assertEquals(3550L, result.emi)
+        assertEquals((29205L * 100L), result.principal)
+        assertEquals((3550L * 100L), result.emi)
         assertEquals(22.0, result.annualInterestRate!!, 0.0)
         assertEquals(31.65, result.apr!!, 0.0)
         assertEquals(9, result.tenureMonths)
         assertEquals("2026-11-05", result.repaymentStartDate)
-        assertEquals(1292L, result.processingFee)
-        assertEquals(2680L, result.totalInterest)
-        assertEquals(32980L, result.declaredTotalRepayment)
-        assertEquals(29205L, result.netDisbursedAmount)
+        assertEquals((1292L * 100L), result.processingFee)
+        assertEquals((2680L * 100L), result.totalInterest)
+        assertEquals((32980L * 100L), result.declaredTotalRepayment)
+        assertEquals((29205L * 100L), result.netDisbursedAmount)
         assertEquals("NA", result.prepaymentCharge)
         assertTrue(result.foreclosureCharge!!.contains("4.0%"))
         assertTrue(result.bounceCharge!!.contains("300"))
@@ -80,13 +80,13 @@ class LoanDocumentParserTest {
     @Test fun extractsEveryScheduleRowAndPreservesConflictingSourceAmount() {
         val result = LoanDocumentParser.parse(finnableKfs)
         assertEquals(9, result.scheduleRows.size)
-        assertEquals(4842L, result.scheduleRows.first().installment)
-        assertEquals(3550L, result.scheduleRows.first().principal + result.scheduleRows.first().interest)
-        assertEquals(3485L, result.scheduleRows.last().installment)
-        assertEquals(29205L, result.scheduleRows.sumOf { it.principal })
-        assertEquals(2680L, result.scheduleRows.sumOf { it.interest })
-        assertEquals(listOf(4842L, 3550L, 3550L, 3550L, 3550L, 3550L, 3550L, 3550L, 3485L), result.scheduleRows.map { it.installment })
-        assertEquals(33177L, result.scheduleRows.sumOf { it.installment })
+        assertEquals((4842L * 100L), result.scheduleRows.first().installment)
+        assertEquals((3550L * 100L), result.scheduleRows.first().principal + result.scheduleRows.first().interest)
+        assertEquals((3485L * 100L), result.scheduleRows.last().installment)
+        assertEquals((29205L * 100L), result.scheduleRows.sumOf { it.principal })
+        assertEquals((2680L * 100L), result.scheduleRows.sumOf { it.interest })
+        assertEquals(listOf((4842L * 100L), (3550L * 100L), (3550L * 100L), (3550L * 100L), (3550L * 100L), (3550L * 100L), (3550L * 100L), (3550L * 100L), (3485L * 100L)), result.scheduleRows.map { it.installment })
+        assertEquals((33177L * 100L), result.scheduleRows.sumOf { it.installment })
     }
 
     @Test fun reportsAllKnownKfsArithmeticConflictsInsteadOfSilentlyCorrectingThem() {
@@ -135,10 +135,10 @@ class LoanDocumentParserTest {
         """.trimIndent()
         val result = LoanDocumentParser.parse(statement)
         assertEquals(3, result.scheduleRows.size)
-        assertEquals(listOf(10300L, 10225L, 10117L), result.scheduleRows.map { it.installment })
-        assertEquals(listOf(300L, 225L, 117L), result.scheduleRows.map { it.interest })
+        assertEquals(listOf((10300L * 100L), (10225L * 100L), (10117L * 100L)), result.scheduleRows.map { it.installment })
+        assertEquals(listOf((300L * 100L), (225L * 100L), (117L * 100L)), result.scheduleRows.map { it.interest })
         assertEquals(listOf(12.0, 13.5, 14.0), result.scheduleRows.map { it.annualRate })
-        assertEquals(30642L, result.scheduleRows.sumOf { it.installment })
+        assertEquals((30642L * 100L), result.scheduleRows.sumOf { it.installment })
     }
 
     @Test fun retainsDifferentMonthlyInstallmentAmountsAndInterestValues() {
@@ -155,8 +155,8 @@ class LoanDocumentParserTest {
             3 6900 6900 69 6969
         """.trimIndent()
         val result = LoanDocumentParser.parse(statement)
-        assertEquals(listOf(6700L, 6735L, 6969L), result.scheduleRows.map { it.installment })
-        assertEquals(listOf(200L, 135L, 69L), result.scheduleRows.map { it.interest })
+        assertEquals(listOf((6700L * 100L), (6735L * 100L), (6969L * 100L)), result.scheduleRows.map { it.installment })
+        assertEquals(listOf((200L * 100L), (135L * 100L), (69L * 100L)), result.scheduleRows.map { it.interest })
     }
 
     @Test fun extractsExplicitIrregularDatesAcrossMultiplePdfPages() {
@@ -177,7 +177,7 @@ class LoanDocumentParserTest {
         assertEquals(2, result.scheduleRows.size)
         assertEquals("2026-11-05", result.scheduleRows[0].dueDate)
         assertEquals("2026-12-07", result.scheduleRows[1].dueDate)
-        assertEquals(listOf(9200L, 9110L), result.scheduleRows.map { it.installment })
+        assertEquals(listOf((9200L * 100L), (9110L * 100L)), result.scheduleRows.map { it.installment })
     }
 
 
@@ -199,13 +199,13 @@ class LoanDocumentParserTest {
         val result = LoanDocumentParser.parse(statement)
         assertEquals(3, result.scheduleRows.size)
         assertEquals("2026-02-04", result.scheduleRows[0].dueDate)
-        assertEquals(569000L, result.scheduleRows[0].openingPrincipal)
-        assertEquals(7536L, result.scheduleRows[0].principal)
-        assertEquals(5121L, result.scheduleRows[0].interest)
-        assertEquals(12657L, result.scheduleRows[0].installment)
+        assertEquals((569000L * 100L), result.scheduleRows[0].openingPrincipal)
+        assertEquals((7536L * 100L), result.scheduleRows[0].principal)
+        assertEquals((5121L * 100L), result.scheduleRows[0].interest)
+        assertEquals((12657L * 100L), result.scheduleRows[0].installment)
         assertEquals("2026-04-04", result.scheduleRows[2].dueDate)
-        assertEquals(554422L, result.scheduleRows[2].openingPrincipal)
-        assertEquals(547309L, result.scheduleRows[2].openingPrincipal - result.scheduleRows[2].principal)
+        assertEquals((554422L * 100L), result.scheduleRows[2].openingPrincipal)
+        assertEquals((547309L * 100L), result.scheduleRows[2].openingPrincipal - result.scheduleRows[2].principal)
     }
 
 
@@ -228,15 +228,15 @@ class LoanDocumentParserTest {
         """.trimIndent()
         val result = LoanDocumentParser.parse(statement)
         assertEquals(3, result.scheduleRows.size)
-        assertEquals(10000L, result.principal)
-        assertEquals(4000L, result.emi)
+        assertEquals((10000L * 100L), result.principal)
+        assertEquals((4000L * 100L), result.emi)
         assertEquals(12.0, result.annualInterestRate!!, 0.0)
-        assertEquals(listOf(1000L, 900L, 100L), result.scheduleRows.map { it.interest })
-        assertEquals(listOf(3000L, 3100L, 3900L), result.scheduleRows.map { it.principal })
-        assertEquals(listOf(7000L, 3900L, 0L), result.scheduleRows.map { it.closingPrincipal })
+        assertEquals(listOf((1000L * 100L), (900L * 100L), (100L * 100L)), result.scheduleRows.map { it.interest })
+        assertEquals(listOf((3000L * 100L), (3100L * 100L), (3900L * 100L)), result.scheduleRows.map { it.principal })
+        assertEquals(listOf((7000L * 100L), (3900L * 100L), (0L * 100L)), result.scheduleRows.map { it.closingPrincipal })
     }
 
-    @Test fun blocksPaisePrecisionSchedulesInsteadOfRoundingSourceValues() {
+    @Test fun preservesEveryPaiseInDecimalAmortizationSchedule() {
         val statement = """
             APEX NATIONAL BANK
             Loan Amount: INR 561938.00
@@ -249,8 +249,15 @@ class LoanDocumentParserTest {
             3 548107.95 12500.00 5481.08 7018.92 541089.03
         """.trimIndent()
         val result = LoanDocumentParser.parse(statement)
-        assertTrue(result.scheduleRows.isEmpty())
-        assertTrue(result.warnings.any { it.contains("paise-level decimal amounts") })
+        assertEquals(3, result.scheduleRows.size)
+        assertEquals(56193800L, result.principal)
+        assertEquals(56193800L, result.scheduleRows.first().openingPrincipal)
+        assertEquals(561938L, result.scheduleRows.first().interest)
+        assertEquals(688062L, result.scheduleRows.first().principal)
+        assertEquals(1250000L, result.scheduleRows.first().installment)
+        assertEquals(55505738L, result.scheduleRows.first().closingPrincipal)
+        assertEquals(54108903L, result.scheduleRows.last().closingPrincipal)
+        assertFalse(result.warnings.any { it.contains("paise-level decimal amounts") })
     }
 
     @Test fun parsesAllSixtyRowsFromUploadedYesBankRepaymentStatement() {
@@ -329,8 +336,8 @@ class LoanDocumentParserTest {
         assertEquals("YES BANK Limited", result.lender)
         assertEquals("PLN002202247931", result.loanNumber)
         assertEquals("NELATOORI VIJAY KUMAR REDDY", result.borrowerName)
-        assertEquals(569000L, result.principal)
-        assertEquals(12657L, result.emi)
+        assertEquals((569000L * 100L), result.principal)
+        assertEquals((12657L * 100L), result.emi)
         assertEquals(60, result.tenureMonths)
         assertEquals(null, result.annualInterestRate) // Annual ROI is not stated in this source PDF.
         assertEquals("2031-01-04", result.repaymentEndDate)
@@ -339,11 +346,11 @@ class LoanDocumentParserTest {
         assertEquals((1..60).toList(), result.scheduleRows.map { it.installmentNumber })
         assertEquals("2026-02-04", result.scheduleRows.first().dueDate)
         assertEquals("2031-01-04", result.scheduleRows.last().dueDate)
-        assertEquals(569000L, result.scheduleRows.first().openingPrincipal)
-        assertEquals(0L, result.scheduleRows.last().openingPrincipal - result.scheduleRows.last().principal)
-        assertEquals(758402L, result.scheduleRows.sumOf { it.installment })
-        assertEquals(569000L, result.scheduleRows.sumOf { it.principal })
-        assertEquals(189402L, result.scheduleRows.sumOf { it.interest })
+        assertEquals((569000L * 100L), result.scheduleRows.first().openingPrincipal)
+        assertEquals((0L * 100L), result.scheduleRows.last().openingPrincipal - result.scheduleRows.last().principal)
+        assertEquals((758402L * 100L), result.scheduleRows.sumOf { it.installment })
+        assertEquals((569000L * 100L), result.scheduleRows.sumOf { it.principal })
+        assertEquals((189402L * 100L), result.scheduleRows.sumOf { it.interest })
     }
 
 
