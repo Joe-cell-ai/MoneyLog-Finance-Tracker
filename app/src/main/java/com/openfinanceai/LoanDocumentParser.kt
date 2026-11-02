@@ -125,7 +125,7 @@ internal object LoanDocumentParser {
         val scheduleDatePattern = Regex("""(?i)\b(\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}[- ](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[- ,]+\d{2,4})\b""")
         fun normalizedScheduleDate(raw: String): String? {
             val value = raw.trim()
-            val patterns = listOf("yyyy-MM-dd", "d MMMM yyyy", "d MMM yyyy", "d-MMM-yyyy", "d/MM/yyyy", "dd/MM/yyyy", "d-MM-yyyy", "dd-MM-yyyy")
+            val patterns = listOf("yyyy-MM-dd", "d MMMM yyyy", "d MMM yyyy", "d-MMM-yyyy", "d-MMM-yy", "dd-MMM-yy", "d/MM/yyyy", "dd/MM/yyyy", "d/MM/yy", "dd/MM/yy", "d-MM-yyyy", "dd-MM-yyyy")
             return patterns.firstNotNullOfOrNull { pattern ->
                 runCatching {
                     java.time.LocalDate.parse(value, java.time.format.DateTimeFormatterBuilder()
@@ -147,6 +147,16 @@ internal object LoanDocumentParser {
                 val amounts = listOf(0, 2, 3, 4).map { number(tokens[it]) ?: return@mapNotNull null }
                 if (rate !in 0.0..100.0) return@mapNotNull null
                 LoanDocumentScheduleRow(no, amounts[0], amounts[1], amounts[2], amounts[3], rate, dueDate)
+            } else if (!hasScheduleRateColumn && tokens.size == 5) {
+                // Standard bank statements: opening principal, installment, principal, interest, closing principal.
+                val amounts = tokens.map { number(it) ?: return@mapNotNull null }
+                val opening = amounts[0]
+                val installment = amounts[1]
+                val principalPaid = amounts[2]
+                val interestPaid = amounts[3]
+                val closing = amounts[4]
+                if (opening - principalPaid != closing || principalPaid + interestPaid != installment) return@mapNotNull null
+                LoanDocumentScheduleRow(no, opening, principalPaid, interestPaid, installment, null, dueDate)
             } else if (!hasScheduleRateColumn && tokens.size == 4) {
                 val amounts = tokens.map { number(it) ?: return@mapNotNull null }
                 LoanDocumentScheduleRow(no, amounts[0], amounts[1], amounts[2], amounts[3], null, dueDate)
