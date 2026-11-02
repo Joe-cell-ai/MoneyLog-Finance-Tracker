@@ -3978,10 +3978,12 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         amountOverrides = pendingAmountOverrides,
         alreadyPaidCount = if (importedSchedule.isNotEmpty()) loan.paymentsMade else 0L
     )
-    val loanDocumentMetadata = remember(loan.lender) {
-        runCatching { JSONObject(schedulePrefs.getString("loan_document_metadata_${loan.lender}", "{}") ?: "{}") }.getOrDefault(JSONObject())
+    var loanDocumentMetadata by remember(loan.lender) {
+        mutableStateOf(runCatching {
+            JSONObject(schedulePrefs.getString("loan_document_metadata_${loan.lender}", "{}") ?: "{}")
+        }.getOrDefault(JSONObject()))
     }
-    val importedDocumentBreakdown = remember(loan.lender) {
+    val importedDocumentBreakdown = remember(loan.lender, loanDocumentMetadata.toString()) {
         runCatching {
             val rows = loanDocumentMetadata.optJSONArray("scheduleRows") ?: JSONArray()
             (0 until rows.length()).map { index -> rows.getJSONObject(index).let { row ->
@@ -4007,29 +4009,75 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     if (document.numberOfPages !in 1..300) error("The PDF has an invalid or unsupported page count.")
                     PDFTextStripper().apply { setSortByPosition(true) }.getText(document)
                 }
-                val normalized = extractedText.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ")
-                val looksLikeSchedule = Regex("(?i)\\b(emi|installment|instalment|repayment|due date|principal|outstanding)\\b").containsMatchIn(normalized)
-                if (!looksLikeSchedule) error("This PDF does not look like an EMI repayment schedule. No data was saved.")
-                val datePattern = Regex("(?i)(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|\\d{1,2}[- ](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[- ,]+\\d{2,4}|\\d{4}-\\d{2}-\\d{2})")
-                val amountPattern = Regex("(?:₹|Rs\\.?\\s*)?([0-9]{1,3}(?:,[0-9]{2,3})+(?:\\.\\d{1,2})?|[0-9]+(?:\\.\\d{1,2})?)")
-                val rows = normalized.lines().mapNotNull { line ->
-                    val dateMatch = datePattern.find(line) ?: return@mapNotNull null
-                    val tail = line.substring(dateMatch.range.last + 1)
-                    val amount = amountPattern.findAll(tail).mapNotNull { match ->
-                        match.groupValues[1].replace(",", "").toDoubleOrNull()?.takeIf { it in 1.0..1000000000.0 }?.toLong()
-                    }.firstOrNull() ?: return@mapNotNull null
-                    dateMatch.value.trim() to amount
-                }.distinct().take(1200)
-                if (rows.size < 2) error("The PDF is readable, but I couldn't confidently identify at least two dated EMI rows. No data was saved. Use a text-based PDF with visible dates and amounts.")
-                if (rows.map { it.first }.distinct().size != rows.size) error("The schedule contains repeated dates that need manual review. No data was saved.")
-                rows
+                val document = LoanDocumentParser.parse(extractedText)
+                if (document.scheduleRows.isEmpty()) error("No complete monthly repayment rows could be read from this PDF. No data was saved.")
+                val mappedRows = LoanDocumentScheduleMapper.map(document.scheduleRows, document.repaymentStartDate)
+                if (mappedRows.size != document.scheduleRows.size) {
+                    error("The PDF schedule has missing, duplicated, invalid or unordered dates/rows. No data was saved.")
+                }
+                if (document.tenureMonths != null && document.scheduleRows.size != document.tenureMonths) {
+                    error("The PDF states ${document.tenureMonths} installments, but only ${document.scheduleRows.size} complete rows were extracted. No partial schedule was saved.")
+                }
+                val normalizeKey: (String) -> String = { value -> value.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() } }
+                val documentLender = document.lender.orEmpty()
+                if (documentLender.isNotBlank() && loan.lender.isNotBlank()) {
+                    val actual = normalizeKey(documentLender)
+                    val expected = normalizeKey(loan.lender)
+                    if (!actual.contains(expected) && !expected.contains(actual)) {
+                        error("This PDF names ${documentLender}, but the selected loan is ${loan.lender}. Choose the matching loan before importing.")
+                    }
+                }
+                if (document.principal != null && loan.originalPrincipal > 0L && document.principal != loan.originalPrincipal) {
+                    error("The PDF principal ${document.principal} does not match this loan's original principal ${loan.originalPrincipal}. No data was saved.")
+                }
+                Triple(document, mappedRows, document.warnings)
             }
-            result.onSuccess { rows ->
+            result.onSuccess { (document, mappedRows, sourceWarnings) ->
                 val arr = JSONArray()
-                rows.forEach { (date, amount) -> arr.put(JSONObject().put("date", date).put("amount", amount)) }
-                schedulePrefs.edit().putString("bank_schedule_${loan.lender}", arr.toString()).apply()
-                importedSchedule = rows
-                pdfMessage = "Extracted ${rows.size} dated installments for review. Source authenticity is not verified; confirm with your lender."
+                mappedRows.forEach { row ->
+                    arr.put(JSONObject().put("date", row.date).put("amount", row.amount).put("installment", row.installmentNumber))
+                }
+                val savedRows = JSONArray()
+                document.scheduleRows.forEach { row ->
+                    savedRows.put(JSONObject().put("number", row.installmentNumber)
+                        .put("openingPrincipal", row.openingPrincipal).put("principal", row.principal)
+                        .put("interest", row.interest).put("installment", row.installment)
+                        .put("annualRate", row.annualRate ?: JSONObject.NULL)
+                        .put("dueDate", row.dueDate ?: JSONObject.NULL))
+                }
+                val metadata = JSONObject()
+                    .put("lender", document.lender ?: loan.lender)
+                    .put("borrowerName", document.borrowerName ?: JSONObject.NULL)
+                    .put("agreementNumber", document.loanNumber ?: JSONObject.NULL)
+                    .put("principal", document.principal ?: JSONObject.NULL)
+                    .put("emi", document.emi ?: JSONObject.NULL)
+                    .put("annualInterestRate", document.annualInterestRate ?: JSONObject.NULL)
+                    .put("apr", document.apr ?: JSONObject.NULL)
+                    .put("tenureMonths", document.tenureMonths ?: JSONObject.NULL)
+                    .put("repaymentStartDate", document.repaymentStartDate ?: JSONObject.NULL)
+                    .put("repaymentEndDate", document.repaymentEndDate ?: JSONObject.NULL)
+                    .put("totalInterest", document.totalInterest ?: JSONObject.NULL)
+                    .put("scheduleInterestTotal", document.scheduleRows.sumOf { it.interest })
+                    .put("declaredTotalRepayment", document.declaredTotalRepayment ?: JSONObject.NULL)
+                    .put("netDisbursedAmount", document.netDisbursedAmount ?: JSONObject.NULL)
+                    .put("processingFee", document.processingFee ?: JSONObject.NULL)
+                    .put("prepaymentCharge", document.prepaymentCharge ?: JSONObject.NULL)
+                    .put("foreclosureCharge", document.foreclosureCharge ?: JSONObject.NULL)
+                    .put("bounceCharge", document.bounceCharge ?: JSONObject.NULL)
+                    .put("illustrativeSchedule", document.illustrativeSchedule)
+                    .put("scheduleRows", savedRows)
+                    .put("warnings", JSONArray(sourceWarnings))
+                schedulePrefs.edit()
+                    .putString("bank_schedule_${loan.lender}", arr.toString())
+                    .putString("loan_document_metadata_${loan.lender}", metadata.toString())
+                    .apply()
+                importedSchedule = mappedRows.map { it.date to it.amount }
+                loanDocumentMetadata = metadata
+                val totalInstallments = mappedRows.sumOf { it.amount }
+                val totalPrincipal = document.scheduleRows.sumOf { it.principal }
+                val totalInterest = document.scheduleRows.sumOf { it.interest }
+                pdfMessage = "Imported ${mappedRows.size} installments · EMI total ${Money.format(totalInstallments)} · Principal ${Money.format(totalPrincipal)} · Interest ${Money.format(totalInterest)}. Source authenticity is not verified; confirm with your lender." +
+                    if (sourceWarnings.isNotEmpty()) " Review ${sourceWarnings.size} document warning(s) in Loan Overview." else ""
             }.onFailure { error ->
                 pdfMessage = error.message ?: "Could not validate this PDF. No schedule was saved."
             }
@@ -4068,7 +4116,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("TOTAL INTEREST*", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
                         Spacer(Modifier.height(7.dp))
-                        Text(if (estimateValid) Money.format(totalInterestEstimate) else "—", color = forest, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
+                        Text(if (importedDocumentBreakdown.isNotEmpty()) Money.format(importedDocumentBreakdown.drop(loan.paymentsMade.coerceIn(0L, importedDocumentBreakdown.size.toLong()).toInt()).sumOf { it.interest }) else if (estimateValid) Money.format(totalInterestEstimate) else "—", color = forest, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
                     }
                     Box(Modifier.width(1.dp).height(42.dp).background(page))
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -4127,6 +4175,10 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                         if (!loanDocumentMetadata.isNull("loanId")) LoanOverviewRow("Document loan ID", loanDocumentMetadata.optString("loanId"))
                         if (!loanDocumentMetadata.isNull("prepaymentCharge")) LoanOverviewRow("Prepayment charges", loanDocumentMetadata.optString("prepaymentCharge"))
                         if (!loanDocumentMetadata.isNull("foreclosureCharge")) LoanOverviewRow("Foreclosure charges", loanDocumentMetadata.optString("foreclosureCharge"))
+                        if (!loanDocumentMetadata.isNull("repaymentStartDate")) LoanOverviewRow("Repayment starts", loanDocumentMetadata.optString("repaymentStartDate"))
+                        if (!loanDocumentMetadata.isNull("repaymentEndDate")) LoanOverviewRow("Repayment ends", loanDocumentMetadata.optString("repaymentEndDate"))
+                        if (!loanDocumentMetadata.isNull("annualInterestRate")) LoanOverviewRow("Annual interest rate", loanDocumentMetadata.optString("annualInterestRate") + "%")
+                        if (!loanDocumentMetadata.isNull("scheduleInterestTotal")) LoanOverviewRow("Total schedule interest", Money.format(loanDocumentMetadata.optLong("scheduleInterestTotal")))
                         if (!loanDocumentMetadata.isNull("bounceCharge")) LoanOverviewRow("Bounce charges", loanDocumentMetadata.optString("bounceCharge"))
                         if (importedDocumentBreakdown.isNotEmpty()) {
                             HorizontalDivider(color = page)
@@ -4194,7 +4246,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                                 Text(if (pdfBusy) "Validating PDF…" else "Upload EMI Schedule PDF")
                             }
                             if (pdfMessage.isNotBlank()) {
-                                Text(pdfMessage, color = if (pdfMessage.startsWith("EMI schedule submitted")) forest else Color(0xFFB45309), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(pdfMessage, color = if (pdfMessage.startsWith("Imported") || pdfMessage.startsWith("EMI schedule submitted")) forest else Color(0xFFB45309), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             }
                             if (importedSchedule.isNotEmpty()) {
                                 Text("Saved schedule · ${importedSchedule.size} installments", color = Ink, fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -4387,6 +4439,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     var importedDeclaredTotal by remember { mutableStateOf<Long?>(null) }
     var importedNetDisbursed by remember { mutableStateOf<Long?>(null) }
     var importedDocumentLoanId by remember { mutableStateOf<String?>(null) }
+    var importedRepaymentEndDate by remember { mutableStateOf<String?>(null) }
     var importedPrepaymentCharge by remember { mutableStateOf<String?>(null) }
     var importedForeclosureCharge by remember { mutableStateOf<String?>(null) }
     var importedBounceCharge by remember { mutableStateOf<String?>(null) }
@@ -4407,6 +4460,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
             importedDeclaredTotal = null
             importedNetDisbursed = null
             importedDocumentLoanId = null
+            importedRepaymentEndDate = null
             importedPrepaymentCharge = null
             importedForeclosureCharge = null
             importedBounceCharge = null
@@ -4590,6 +4644,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         auditedDocument.annualInterestRate?.let { fields.put("rate", it.toString()) }
                         auditedDocument.tenureMonths?.let { fields.put("totalPayments", it.toString()) }
                         auditedDocument.repaymentStartDate?.let { fields.put("startDate", it) }
+                        auditedDocument.repaymentEndDate?.let { fields.put("auditRepaymentEndDate", it) }
                         auditedDocument.lender?.let { fields.put("lender", it) }
                         auditedDocument.borrowerName?.let { fields.put("borrowerName", it) }
                         auditedDocument.loanNumber?.let { fields.put("auditLoanId", it) }
@@ -4607,7 +4662,9 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         auditedDocument.scheduleRows.forEach { row ->
                             auditRows.put(JSONObject().put("number", row.installmentNumber)
                                 .put("openingPrincipal", row.openingPrincipal).put("principal", row.principal)
-                                .put("interest", row.interest).put("installment", row.installment))
+                                .put("interest", row.interest).put("installment", row.installment)
+                                .put("annualRate", row.annualRate ?: JSONObject.NULL)
+                                .put("dueDate", row.dueDate ?: JSONObject.NULL))
                         }
                         fields.put("auditScheduleRows", auditRows)
                         fields
@@ -4627,6 +4684,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     importedDocumentLoanId = fields.optString("auditLoanId").takeIf { it.isNotBlank() }
                     if (fields.has("agreementNumber")) agreementNumber = fields.getString("agreementNumber")
                     if (fields.has("startDate")) startDate = fields.getString("startDate")
+                    importedRepaymentEndDate = fields.optString("auditRepaymentEndDate").takeIf { it.isNotBlank() }
                     importedApr = fields.optString("auditApr").toDoubleOrNull()
                     importedProcessingFee = fields.optString("auditProcessingFee").toDoubleOrNull()?.toLong()
                     importedTotalInterest = fields.optString("auditTotalInterest").toDoubleOrNull()?.toLong()
@@ -4662,8 +4720,12 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
         }
     }
     val monthly = emi.toDoubleOrNull() ?: 0.0
-    val annualRate = rate.toDoubleOrNull() ?: -1.0
     val total = totalPayments.toIntOrNull() ?: 0
+    val hasCompletePdfSchedule = importedScheduleRows.size == total && total > 0 &&
+        importedScheduleRows.map { it.installmentNumber } == (1..importedScheduleRows.size).toList()
+    // Some lender schedules disclose exact monthly interest but omit an annual ROI.
+    // Keep the rate unknown (stored as 0 only for the legacy Loan model) and use PDF rows for calculations.
+    val annualRate = rate.toDoubleOrNull() ?: if (hasCompletePdfSchedule) 0.0 else -1.0
     val paid = paymentsMade.toIntOrNull() ?: 0
     val validInputs = monthly > 0.0 && annualRate >= 0.0 && total > 0 && paid in 0..total
     val originalPrincipal = importedPrincipal.toDoubleOrNull()?.takeIf { it > 0.0 }
@@ -4848,6 +4910,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                     .put("declaredTotalRepayment", importedDeclaredTotal ?: JSONObject.NULL)
                                     .put("netDisbursedAmount", importedNetDisbursed ?: JSONObject.NULL)
                                     .put("loanId", importedDocumentLoanId ?: JSONObject.NULL)
+                                    .put("repaymentEndDate", importedRepaymentEndDate ?: JSONObject.NULL)
                                     .put("prepaymentCharge", importedPrepaymentCharge ?: JSONObject.NULL)
                                     .put("foreclosureCharge", importedForeclosureCharge ?: JSONObject.NULL)
                                     .put("bounceCharge", importedBounceCharge ?: JSONObject.NULL)
