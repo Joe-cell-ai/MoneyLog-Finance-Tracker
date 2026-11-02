@@ -3987,7 +3987,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         runCatching {
             val rows = loanDocumentMetadata.optJSONArray("scheduleRows") ?: JSONArray()
             (0 until rows.length()).map { index -> rows.getJSONObject(index).let { row ->
-                LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null, if (row.has("dueDate") && !row.isNull("dueDate")) row.optString("dueDate") else null)
+                LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null, if (row.has("dueDate") && !row.isNull("dueDate")) row.optString("dueDate") else null, if (row.has("closingPrincipal") && !row.isNull("closingPrincipal")) row.optLong("closingPrincipal") else null)
             } }
         }.getOrDefault(emptyList())
     }
@@ -4025,7 +4025,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 }
                 val financialRows = document.scheduleRows.map { row ->
                     FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal, row.installment,
-                        row.principal, row.interest, null)
+                        row.principal, row.interest, row.closingPrincipal)
                 }
                 val validation = LoanFinancialValidator.validate(
                     financialRows, document.tenureMonths, document.principal, document.totalInterest,
@@ -4045,7 +4045,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                         .put("openingPrincipal", row.openingPrincipal).put("principal", row.principal)
                         .put("interest", row.interest).put("installment", row.installment)
                         .put("annualRate", row.annualRate ?: JSONObject.NULL)
-                        .put("dueDate", row.dueDate ?: JSONObject.NULL))
+                        .put("dueDate", row.dueDate ?: JSONObject.NULL)
+                        .put("closingPrincipal", row.closingPrincipal ?: JSONObject.NULL))
                 }
                 val metadata = JSONObject()
                     .put("lender", document.lender ?: loan.lender)
