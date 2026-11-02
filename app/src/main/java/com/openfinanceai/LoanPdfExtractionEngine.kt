@@ -62,7 +62,7 @@ internal class LoanPdfExtractionEngine(private val context: Context) {
                                 val bitmap = renderer.openPage(pageIndex).use { page ->
                                     val scale = 2
                                     Bitmap.createBitmap(page.width * scale, page.height * scale, Bitmap.Config.ARGB_8888).also {
-                                        page.render(it, null, null, PdfRenderer.Page.RENDER_MODE_FOR_OCR)
+                                        page.render(it, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                                     }
                                 }
                                 val recognized = try {
