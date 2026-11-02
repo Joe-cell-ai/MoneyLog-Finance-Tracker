@@ -564,6 +564,7 @@ private fun FinanceApp() {
     var emiRescheduleDate by remember { mutableStateOf("") }
     var showEmiReschedule by remember { mutableStateOf<EmiQuickAction?>(null) }
     val context = LocalContext.current
+    val financeScope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         androidx.work.WorkManager.getInstance(context).cancelUniqueWork("moneylog_drive_backup_daily")
     }
@@ -1356,11 +1357,20 @@ private fun FinanceApp() {
                             val editor = prefs.edit()
                             prefs.all.keys.filter { key ->
                                 key == "bank_schedule_${lenderKey}" ||
+                                    key == "loan_document_metadata_${lenderKey}" ||
                                     key.startsWith("emi_status_${lenderKey}_") ||
                                     key.startsWith("emi_amount_${lenderKey}_") ||
+                                    key.startsWith("emi_amount_paise_${lenderKey}_") ||
                                     key.startsWith("emi_rescheduled_${lenderKey}_")
                             }.forEach(editor::remove)
                             editor.apply()
+                            financeScope.launch {
+                                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    val dao = LoanScheduleDatabase.get(context).loanScheduleDao()
+                                    dao.deleteLoanSchedules(lenderKey)
+                                    dao.deleteLoanDocuments(lenderKey)
+                                }
+                            }
                             loanPendingDelete = null
                         }) { Text("Delete loan", color = ExpenseRed, fontWeight = FontWeight.Bold) }
                     },
