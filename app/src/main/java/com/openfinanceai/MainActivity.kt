@@ -4920,12 +4920,12 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                             Text("EMI ${row.installmentNumber}${row.dueDate?.let { " · $it" } ?: ""}", color = Ink, fontSize = 10.sp)
-                                            Text("Opening ${Money.format(row.openingPrincipal)} · Closing ${row.closingPrincipal?.let { Money.format(it) } ?: "Not stated"}", color = Muted, fontSize = 8.sp)
+                                            Text("Opening ${LoanMoney.formatPaise(row.openingPrincipal)} · Closing ${row.closingPrincipal?.let { LoanMoney.formatPaise(it) } ?: "Not stated"}", color = Muted, fontSize = 8.sp)
                                         }
-                                        Text("P ${Money.format(row.principal)}", color = Muted, fontSize = 9.sp, modifier = Modifier.weight(.9f))
+                                        Text("P ${LoanMoney.formatPaise(row.principal)}", color = Muted, fontSize = 9.sp, modifier = Modifier.weight(.9f))
                                         val displayedRate = row.annualRate ?: rate.toDoubleOrNull()
-                                        Text("I ${Money.format(row.interest)} · ${displayedRate?.let { "Rate $it%" } ?: "Rate not stated"}", color = Muted, fontSize = 9.sp, modifier = Modifier.weight(1.2f))
-                                        Text(Money.format(row.installment), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        Text("I ${LoanMoney.formatPaise(row.interest)} · ${displayedRate?.let { "Rate $it%" } ?: "Rate not stated"}", color = Muted, fontSize = 9.sp, modifier = Modifier.weight(1.2f))
+                                        Text(LoanMoney.formatPaise(row.installment), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -4963,7 +4963,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     Button(onClick = {
                         val lenderName = lender.trim()
                         val original = kotlin.math.round(originalPrincipal).toLong()
-                        val balance = kotlin.math.round(currentOutstanding).toLong()
+                        val balance = kotlin.math.round(currentOutstanding / 100.0).toLong()
                         val count = paid.toLong()
                         val monthlyEmi = kotlin.math.round(monthly).toLong()
                         if (lenderName.isBlank() || !validInputs || original <= 0L || balance < 0L || statementOutstanding.isNotBlank() && actualStatementBalance == null) {
@@ -4986,15 +4986,16 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                     .put("annualRate", row.annualRate ?: JSONObject.NULL).put("dueDate", row.dueDate ?: JSONObject.NULL)
                                     .put("closingPrincipal", row.closingPrincipal ?: JSONObject.NULL)) }
                                 val metadata = JSONObject().put("apr", importedApr ?: JSONObject.NULL)
+                                    .put("moneyUnit", "PAISE")
                                     .put("lender", lenderName)
                                     .put("borrowerName", borrowerName.trim().takeIf { it.isNotBlank() } ?: JSONObject.NULL)
                                     .put("agreementNumber", agreementNumber.trim().takeIf { it.isNotBlank() } ?: JSONObject.NULL)
-                                    .put("principal", original)
-                                    .put("emi", monthlyEmi)
+                                    .put("principal", LoanMoney.parsePaise(importedPrincipal) ?: LoanMoney.rupeesToPaise(original))
+                                    .put("emi", LoanMoney.parsePaise(emi) ?: LoanMoney.rupeesToPaise(monthlyEmi))
                                     .put("annualInterestRate", rate.toDoubleOrNull() ?: JSONObject.NULL)
                                     .put("tenureMonths", total)
                                     .put("repaymentStartDate", startDate.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
-                                    .put("scheduleInterestTotal", importedScheduleRows.sumOf { it.interest })
+                                    .put("scheduleInterestTotal", LoanMoney.sumPaise(importedScheduleRows.map { it.interest }))
                                     .put("processingFee", importedProcessingFee ?: JSONObject.NULL)
                                     .put("totalInterest", importedTotalInterest ?: JSONObject.NULL)
                                     .put("declaredTotalRepayment", importedDeclaredTotal ?: JSONObject.NULL)
