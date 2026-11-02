@@ -28,7 +28,9 @@ class LoanDocumentParserTest {
         6 Interest rate (%) and type (fixed or floating or hybrid) 22.0 % per annum and fixed
         9 Annual Percentage Rate (APR) (%) 31.65 % p.a.
         Computation of APR
-        Total Interest Amount to be charged during the entire tenor of the loan 2680.0
+        Total Interest Amount to be charged during the entire tenor of the loan as per the rate
+        5 2680.0
+        prevailing on sanction date (in Rupees)
         Total amount to be paid by the borrower (sum of 1,5 and 6) (in Rupees) 32980.0
         Illustrative Repayment Schedule
         Instalment No. Outstanding Principal Principal Interest Installment
