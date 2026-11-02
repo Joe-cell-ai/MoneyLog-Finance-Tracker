@@ -106,7 +106,7 @@ internal object LoanDocumentParser {
                             .parseCaseInsensitive().appendPattern(pattern).toFormatter(java.util.Locale.ENGLISH)).toString() }.getOrNull()
                     }
                 }
-        val repaymentEndDate = Regex("""(?i)(?:repayment|installment|instalment)\\s+end\\s+date\\s*[:\\-]?\\s*(\\d{1,2}[-/][A-Za-z0-9]{2,4}[-/]\\d{2,4}|\\d{4}-\\d{2}-\\d{2})""")
+        val repaymentEndDate = Regex("""(?i)(?:repayment|installment|instalment)\s+end\s+date\s*[:\-]?\s*(\d{1,2}[-/][A-Za-z0-9]{2,4}[-/]\d{2,4}|\d{4}-\d{2}-\d{2})""")
             .find(text)?.groupValues?.get(1)?.let { raw ->
                 val patterns = listOf("d-MMM-yy", "dd-MMM-yy", "d-MMM-yyyy", "dd-MMM-yyyy", "d/MM/yy", "dd/MM/yy", "d/MM/yyyy", "dd/MM/yyyy", "yyyy-MM-dd")
                 patterns.firstNotNullOfOrNull { pattern ->
