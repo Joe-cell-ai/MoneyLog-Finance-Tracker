@@ -4123,6 +4123,11 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                         if (!loanDocumentMetadata.isNull("processingFee")) LoanOverviewRow("Document processing fee", Money.format(loanDocumentMetadata.optLong("processingFee")))
                         if (!loanDocumentMetadata.isNull("totalInterest")) LoanOverviewRow("Document total interest", Money.format(loanDocumentMetadata.optLong("totalInterest")))
                         if (!loanDocumentMetadata.isNull("declaredTotalRepayment")) LoanOverviewRow("Document-declared total repayment", Money.format(loanDocumentMetadata.optLong("declaredTotalRepayment")))
+                        if (!loanDocumentMetadata.isNull("netDisbursedAmount")) LoanOverviewRow("Net disbursed amount", Money.format(loanDocumentMetadata.optLong("netDisbursedAmount")))
+                        if (!loanDocumentMetadata.isNull("loanId")) LoanOverviewRow("Document loan ID", loanDocumentMetadata.optString("loanId"))
+                        if (!loanDocumentMetadata.isNull("prepaymentCharge")) LoanOverviewRow("Prepayment charges", loanDocumentMetadata.optString("prepaymentCharge"))
+                        if (!loanDocumentMetadata.isNull("foreclosureCharge")) LoanOverviewRow("Foreclosure charges", loanDocumentMetadata.optString("foreclosureCharge"))
+                        if (!loanDocumentMetadata.isNull("bounceCharge")) LoanOverviewRow("Bounce charges", loanDocumentMetadata.optString("bounceCharge"))
                         if (importedDocumentBreakdown.isNotEmpty()) {
                             HorizontalDivider(color = page)
                             Text("Repayment breakdown extracted from PDF", color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -4379,6 +4384,11 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     var importedProcessingFee by remember { mutableStateOf<Long?>(null) }
     var importedTotalInterest by remember { mutableStateOf<Long?>(null) }
     var importedDeclaredTotal by remember { mutableStateOf<Long?>(null) }
+    var importedNetDisbursed by remember { mutableStateOf<Long?>(null) }
+    var importedDocumentLoanId by remember { mutableStateOf<String?>(null) }
+    var importedPrepaymentCharge by remember { mutableStateOf<String?>(null) }
+    var importedForeclosureCharge by remember { mutableStateOf<String?>(null) }
+    var importedBounceCharge by remember { mutableStateOf<String?>(null) }
     var importedIllustrative by remember { mutableStateOf(false) }
     var warningsAcknowledged by remember { mutableStateOf(false) }
     val pdfImportScope = rememberCoroutineScope()
@@ -4565,11 +4575,16 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         auditedDocument.tenureMonths?.let { fields.put("totalPayments", it.toString()) }
                         auditedDocument.repaymentStartDate?.let { fields.put("startDate", it) }
                         auditedDocument.lender?.let { fields.put("lender", it) }
-                        auditedDocument.loanNumber?.let { fields.put("agreementNumber", it) }
+                        auditedDocument.borrowerName?.let { fields.put("borrowerName", it) }
+                        auditedDocument.loanNumber?.let { fields.put("auditLoanId", it) }
                         auditedDocument.apr?.let { fields.put("auditApr", it) }
                         auditedDocument.processingFee?.let { fields.put("auditProcessingFee", it) }
                         auditedDocument.totalInterest?.let { fields.put("auditTotalInterest", it) }
                         auditedDocument.declaredTotalRepayment?.let { fields.put("auditDeclaredTotal", it) }
+                        auditedDocument.netDisbursedAmount?.let { fields.put("auditNetDisbursed", it) }
+                        auditedDocument.prepaymentCharge?.let { fields.put("auditPrepaymentCharge", it) }
+                        auditedDocument.foreclosureCharge?.let { fields.put("auditForeclosureCharge", it) }
+                        auditedDocument.bounceCharge?.let { fields.put("auditBounceCharge", it) }
                         fields.put("auditIllustrative", auditedDocument.illustrativeSchedule)
                         fields.put("auditWarnings", JSONArray(auditedDocument.warnings))
                         val auditRows = JSONArray()
@@ -4593,12 +4608,17 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     calculatorLoanAmount = importedPrincipal
                     if (fields.has("lender")) lender = fields.getString("lender")
                     if (fields.has("borrowerName")) borrowerName = fields.getString("borrowerName")
+                    importedDocumentLoanId = fields.optString("auditLoanId").takeIf { it.isNotBlank() }
                     if (fields.has("agreementNumber")) agreementNumber = fields.getString("agreementNumber")
                     if (fields.has("startDate")) startDate = fields.getString("startDate")
                     importedApr = fields.optString("auditApr").toDoubleOrNull()
                     importedProcessingFee = fields.optString("auditProcessingFee").toDoubleOrNull()?.toLong()
                     importedTotalInterest = fields.optString("auditTotalInterest").toDoubleOrNull()?.toLong()
                     importedDeclaredTotal = fields.optString("auditDeclaredTotal").toDoubleOrNull()?.toLong()
+                    importedNetDisbursed = fields.optString("auditNetDisbursed").toDoubleOrNull()?.toLong()
+                    importedPrepaymentCharge = fields.optString("auditPrepaymentCharge").takeIf { it.isNotBlank() }
+                    importedForeclosureCharge = fields.optString("auditForeclosureCharge").takeIf { it.isNotBlank() }
+                    importedBounceCharge = fields.optString("auditBounceCharge").takeIf { it.isNotBlank() }
                     importedIllustrative = fields.optBoolean("auditIllustrative", false)
                     importedWarnings = fields.optJSONArray("auditWarnings")?.let { array -> (0 until array.length()).map { array.getString(it) } } ?: emptyList()
                     importedScheduleRows = fields.optJSONArray("auditScheduleRows")?.let { array ->
@@ -4708,7 +4728,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(statementOutstanding, { statementOutstanding = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Statement outstanding principal (optional, ₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     if (statementDate.isNotBlank()) Text("Statement date: $statementDate", color = Muted, fontSize = 11.sp)
-                    if (importedApr != null || importedProcessingFee != null || importedTotalInterest != null || importedDeclaredTotal != null) {
+                    if (importedApr != null || importedProcessingFee != null || importedTotalInterest != null || importedDeclaredTotal != null || importedNetDisbursed != null || importedDocumentLoanId != null || importedPrepaymentCharge != null || importedForeclosureCharge != null || importedBounceCharge != null) {
                         Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F6FF)), shape = RoundedCornerShape(14.dp)) {
                             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                 Text("Additional figures extracted from lender document", color = Ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -4716,6 +4736,11 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                 importedProcessingFee?.let { Text("Processing fee: ${Money.format(it)}", color = Ink, fontSize = 11.sp) }
                                 importedTotalInterest?.let { Text("Stated total interest: ${Money.format(it)}", color = Ink, fontSize = 11.sp) }
                                 importedDeclaredTotal?.let { Text("Document-declared total repayment: ${Money.format(it)}", color = Ink, fontSize = 11.sp) }
+                                importedNetDisbursed?.let { Text("Net disbursed amount: ${Money.format(it)}", color = Ink, fontSize = 11.sp) }
+                                importedDocumentLoanId?.let { Text("Document loan ID: $it (not an agreement number)", color = Ink, fontSize = 11.sp) }
+                                importedPrepaymentCharge?.let { Text("Prepayment charges: $it", color = Ink, fontSize = 11.sp) }
+                                importedForeclosureCharge?.let { Text("Foreclosure charges: $it", color = Ink, fontSize = 11.sp) }
+                                importedBounceCharge?.let { Text("Bounce charges: $it", color = Ink, fontSize = 11.sp) }
                             }
                         }
                     }
@@ -4775,7 +4800,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             saved = false
                         } else {
                             onSave(lenderName, original, balance, count, annualRate, monthlyEmi, total.toLong(), borrowerName.trim(), agreementNumber.trim(), "", startDate)
-                            if (importedScheduleRows.isNotEmpty() || importedWarnings.isNotEmpty() || importedApr != null || importedProcessingFee != null || importedTotalInterest != null) {
+                            if (importedScheduleRows.isNotEmpty() || importedWarnings.isNotEmpty() || importedApr != null || importedProcessingFee != null || importedTotalInterest != null || importedNetDisbursed != null || importedDocumentLoanId != null || importedPrepaymentCharge != null || importedForeclosureCharge != null || importedBounceCharge != null) {
                                 val savedRows = JSONArray()
                                 importedScheduleRows.forEach { row -> savedRows.put(JSONObject().put("number", row.installmentNumber)
                                     .put("openingPrincipal", row.openingPrincipal).put("principal", row.principal)
@@ -4784,6 +4809,11 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                     .put("processingFee", importedProcessingFee ?: JSONObject.NULL)
                                     .put("totalInterest", importedTotalInterest ?: JSONObject.NULL)
                                     .put("declaredTotalRepayment", importedDeclaredTotal ?: JSONObject.NULL)
+                                    .put("netDisbursedAmount", importedNetDisbursed ?: JSONObject.NULL)
+                                    .put("loanId", importedDocumentLoanId ?: JSONObject.NULL)
+                                    .put("prepaymentCharge", importedPrepaymentCharge ?: JSONObject.NULL)
+                                    .put("foreclosureCharge", importedForeclosureCharge ?: JSONObject.NULL)
+                                    .put("bounceCharge", importedBounceCharge ?: JSONObject.NULL)
                                     .put("illustrativeSchedule", importedIllustrative)
                                     .put("scheduleRows", savedRows).put("warnings", JSONArray(importedWarnings))
                                 context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()

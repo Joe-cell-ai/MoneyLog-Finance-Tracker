@@ -9,6 +9,8 @@ class LoanDocumentParserTest {
     private val finnableKfs = """
         SANCTION LETTER CUM KEY FACTS STATEMENT
         Lender : Finnable Credit Private Limited
+        Dear VIJAY KUMAR REDDY NELATOORI
+        2 Name of the Borrower (\"Borrower\") VIJAY KUMAR REDDY NELATOORI
         Date: 2026-10-08
         This is reference to your Loan ID. CL491032662
         5 Loan Amount (INR)
@@ -21,12 +23,19 @@ class LoanDocumentParserTest {
         3550.0
         11 Amount of EMI Payable (INR)
         a Processing Fees (INR) (inclusive of 18% GST) 1292.0
+        b NA
+        Prepayment Charges (INR)
+        c Bounce Charge (INR) As per Schedule A
+        (iii) Foreclosure charges, if applicable 4.0% of the Principal Outstanding + GST
         Key Facts Statement
         Name of the Regulated Entity: Finnable Credit Private Limited
         5 Instalment details
         Monthly 9 3550.0 2026-11-05
         6 Interest rate (%) and type (fixed or floating or hybrid) 22.0 % per annum and fixed
         9 Annual Percentage Rate (APR) (%) 31.65 % p.a.
+        (iii) Foreclosure charges, if applicable 4.0% of the Principal Outstanding + GST
+        Bounce Charges Flat charge of INR 300
+        on every Mandate Bounce (Upto- 2 Times)
         Computation of APR
         Total Interest Amount to be charged during the entire tenor of the loan as per the rate
         5 2680.0
@@ -50,6 +59,7 @@ class LoanDocumentParserTest {
         val result = LoanDocumentParser.parse(finnableKfs)
         assertEquals("Finnable Credit Private Limited", result.lender)
         assertEquals("CL491032662", result.loanNumber)
+        assertEquals("VIJAY KUMAR REDDY NELATOORI", result.borrowerName)
         assertEquals(29205L, result.principal)
         assertEquals(3550L, result.emi)
         assertEquals(22.0, result.annualInterestRate!!, 0.0)
@@ -59,6 +69,11 @@ class LoanDocumentParserTest {
         assertEquals(1292L, result.processingFee)
         assertEquals(2680L, result.totalInterest)
         assertEquals(32980L, result.declaredTotalRepayment)
+        assertEquals(29205L, result.netDisbursedAmount)
+        assertEquals("NA", result.prepaymentCharge)
+        assertTrue(result.foreclosureCharge!!.contains("4.0%"))
+        assertTrue(result.bounceCharge!!.contains("300"))
+        assertTrue(result.bounceCharge!!.contains("every Mandate Bounce"))
     }
 
     @Test fun extractsEveryScheduleRowAndPreservesConflictingSourceAmount() {
@@ -78,6 +93,7 @@ class LoanDocumentParserTest {
         assertTrue(warnings.contains("APR total repayment mismatch"))
         assertTrue(warnings.contains("illustrative schedule"))
         assertTrue(warnings.contains("Some schedule instalment amounts differ"))
+        assertTrue(warnings.contains("prepayment charges as NA"))
     }
 
     @Test fun incompleteScheduleDoesNotInventMissingRows() {

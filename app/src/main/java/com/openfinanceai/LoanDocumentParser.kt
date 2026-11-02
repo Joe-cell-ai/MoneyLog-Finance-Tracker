@@ -11,6 +11,7 @@ internal data class LoanDocumentScheduleRow(
 internal data class LoanDocumentExtraction(
     val lender: String? = null,
     val loanNumber: String? = null,
+    val borrowerName: String? = null,
     val principal: Long? = null,
     val emi: Long? = null,
     val annualInterestRate: Double? = null,
@@ -67,6 +68,8 @@ internal object LoanDocumentParser {
             ?: Regex("""(?im)^Name of the Regulated Entity\s*:\s*(.+?)\s*$""").find(text)?.groupValues?.get(1)?.trim()
         val loanNumber = Regex("""(?i)(?:Loan\s*ID|Loan proposal\s*/\s*account\s*No\.?|Loan account\s*(?:number|no\.?))\s*[:.]?\s*([A-Z0-9/-]{5,40})""")
             .find(text)?.groupValues?.get(1)
+        val borrowerName = Regex("""(?im)^\s*(?:Dear\s+|[0-9]{1,2}\s+Name\s+of\s+the\s+Borrower\s*\(\s*["']Borrower["']\s*\)\s+|Applicant\s+Name\s*[:：]?\s*)([A-Z][A-Z .'-]{2,80})\s*$""")
+            .find(text)?.groupValues?.get(1)?.trim()
         val principal = directAmount("""Total\s+Loan\s+Amount\s*\(\s*Principal\s+Amount\s*\)\s*[:\-]?\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Sanctioned\s+Loan\s+amount\s*\(in\s+Rupees\)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
         val emi = amountOnLine(Regex("""Amount\s+of\s+EMI\s+Payable"""))
@@ -96,10 +99,21 @@ internal object LoanDocumentParser {
                 ?: lines.drop(prepaymentLabelIndex + 1).firstOrNull { it.isNotBlank() }
             valueLine?.let { Regex("""\bNA\b|[0-9][0-9,]*(?:\.[0-9]{1,2})?""", RegexOption.IGNORE_CASE).find(it)?.value }
         } else null
-        val foreclosureCharge = Regex("""(?im)^\s*Foreclosure\s+charges,?\s*if\s+applicable\s*(.+?)\s*$""")
+        val foreclosureCharge = Regex("""(?im)^\s*(?:\([ivx]+\)\s*)?Foreclosure\s+charges,?\s*if\s+applicable\s*(.+?)\s*$""")
             .find(text)?.groupValues?.get(1)?.trim()
-        val bounceCharge = Regex("""(?im)^\s*Bounce\s+Charges\s+(.+?)\s*$""")
-            .find(text)?.groupValues?.get(1)?.trim()
+        val bounceCharge = run {
+            val index = lines.indexOfLast { Regex("""^\s*Bounce\s+Charges?\b""", RegexOption.IGNORE_CASE).containsMatchIn(it) }
+            if (index < 0) null else {
+                val first = lines[index].replace(Regex("""^.*?Bounce\s+Charges?\b""", RegexOption.IGNORE_CASE), "").trim()
+                val details = mutableListOf<String>()
+                if (first.isNotBlank()) details += first
+                for (line in lines.drop(index + 1)) {
+                    if (line.isBlank() || Regex("""^(?:Overdue\s+Amount|Late\s+Payment\s+Charges|Penal\s+Charges)\b""", RegexOption.IGNORE_CASE).containsMatchIn(line)) break
+                    details += line
+                }
+                details.joinToString(" ").trim().takeIf { it.isNotBlank() }
+            }
+        }
 
         val scheduleHeader = Regex("""(?i)Illustrative\s+Repayment\s+Schedule""").find(text)
         val scheduleText = scheduleHeader?.let { text.substring(it.range.last + 1) }.orEmpty()
@@ -172,6 +186,7 @@ internal object LoanDocumentParser {
         return LoanDocumentExtraction(
             lender = lender,
             loanNumber = loanNumber,
+            borrowerName = borrowerName,
             principal = principal,
             emi = emi,
             annualInterestRate = fixedRate,
