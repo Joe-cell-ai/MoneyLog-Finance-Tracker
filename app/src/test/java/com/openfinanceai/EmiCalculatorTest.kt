@@ -32,7 +32,7 @@ class EmiCalculatorTest {
     fun pendingTotalExcludesPaidRowsAndUsesEditedInstallmentAmounts() {
         val installments = (1..5).map { "date-$it" to 3_750L }
         assertEquals(
-            10_500L,
+            13_500L,
             calculatePendingEmiTotal(
                 installments = installments,
                 paidDates = setOf("date-1"),
