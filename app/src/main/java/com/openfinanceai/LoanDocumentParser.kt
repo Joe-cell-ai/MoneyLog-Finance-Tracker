@@ -122,13 +122,15 @@ internal object LoanDocumentParser {
         val rowPattern = Regex("""(?m)^\s*(\d{1,3})\s+((?:[0-9][0-9,]*(?:\.[0-9]{1,4})?\s+){3,4}[0-9][0-9,]*(?:\.[0-9]{1,4})?)\s*$""")
         val rows = rowPattern.findAll(scheduleText).mapNotNull { match ->
             val no = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
-            val values = Regex("""[0-9][0-9,]*(?:\.[0-9]{1,4})?""").findAll(match.groupValues[2]).mapNotNull { number(it.value) }.toList()
-            if (hasScheduleRateColumn && values.size == 5) {
-                val rate = values[1].toDouble()
+            val tokens = Regex("""[0-9][0-9,]*(?:\.[0-9]{1,4})?""").findAll(match.groupValues[2]).map { it.value }.toList()
+            if (hasScheduleRateColumn && tokens.size == 5) {
+                val rate = tokens[1].replace(",", "").toDoubleOrNull() ?: return@mapNotNull null
+                val amounts = listOf(0, 2, 3, 4).map { number(tokens[it]) ?: return@mapNotNull null }
                 if (rate !in 0.0..100.0) return@mapNotNull null
-                LoanDocumentScheduleRow(no, values[0], values[2], values[3], values[4], rate)
-            } else if (!hasScheduleRateColumn && values.size == 4) {
-                LoanDocumentScheduleRow(no, values[0], values[1], values[2], values[3])
+                LoanDocumentScheduleRow(no, amounts[0], amounts[1], amounts[2], amounts[3], rate)
+            } else if (!hasScheduleRateColumn && tokens.size == 4) {
+                val amounts = tokens.map { number(it) ?: return@mapNotNull null }
+                LoanDocumentScheduleRow(no, amounts[0], amounts[1], amounts[2], amounts[3])
             } else null
         }.toList()
 
