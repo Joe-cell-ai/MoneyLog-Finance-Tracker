@@ -4037,6 +4037,22 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         mutableStateOf(runCatching {
             val saved = JSONObject(schedulePrefs.getString("loan_document_metadata_${loan.lender}", "{}") ?: "{}")
             if (saved.optString("moneyUnit") != "PAISE") {
+                // The legacy SharedPreferences bank schedule also stored whole rupees.
+                // Migrate it in the same one-time unit transition as the metadata rows.
+                runCatching {
+                    val scheduleKey = "bank_schedule_${loan.lender}"
+                    val rawSchedule = schedulePrefs.getString(scheduleKey, null)
+                    if (!rawSchedule.isNullOrBlank()) {
+                        val schedule = JSONArray(rawSchedule)
+                        for (index in 0 until schedule.length()) {
+                            val row = schedule.getJSONObject(index)
+                            if (row.has("amount") && !row.isNull("amount")) {
+                                row.put("amount", LoanMoney.rupeesToPaise(row.getLong("amount")))
+                            }
+                        }
+                        schedulePrefs.edit().putString(scheduleKey, schedule.toString()).apply()
+                    }
+                }
                 listOf("principal", "emi", "totalInterest", "scheduleInterestTotal", "declaredTotalRepayment", "processingFee", "netDisbursedAmount").forEach { key ->
                     if (!saved.isNull(key)) saved.put(key, LoanMoney.rupeesToPaise(saved.optLong(key)))
                 }
@@ -4065,6 +4081,11 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
             val (record, rows) = persisted
             if (rows.isNotEmpty()) {
                 importedSchedule = rows.map { (it.dueDate ?: "") to it.installmentAmount }
+                val persistedBankSchedule = JSONArray()
+                rows.forEach { row ->
+                    persistedBankSchedule.put(JSONObject().put("date", row.dueDate ?: "").put("amount", row.installmentAmount).put("installment", row.installmentNumber))
+                }
+                schedulePrefs.edit().putString("bank_schedule_${loan.lender}", persistedBankSchedule.toString()).apply()
                 val rowJson = JSONArray()
                 rows.forEach { row ->
                     rowJson.put(JSONObject().put("number", row.installmentNumber)
