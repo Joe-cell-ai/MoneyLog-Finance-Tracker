@@ -5044,7 +5044,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                 importedWarnings.forEach { warning -> Text("• $warning", color = Color(0xFF7C4A03), fontSize = 10.sp) }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Checkbox(checked = warningsAcknowledged, onCheckedChange = { warningsAcknowledged = it })
-                                    Text("I reviewed these source conflicts. Save only the extracted loan fields.", color = Ink, fontSize = 10.sp)
+                                    Text("I reviewed these source conflicts. Save the PDF values as shown; no missing figures will be estimated.", color = Ink, fontSize = 10.sp)
                                 }
                             }
                         }
