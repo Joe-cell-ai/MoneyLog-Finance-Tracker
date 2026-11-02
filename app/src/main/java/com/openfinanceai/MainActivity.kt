@@ -3978,6 +3978,17 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         amountOverrides = pendingAmountOverrides,
         alreadyPaidCount = if (importedSchedule.isNotEmpty()) loan.paymentsMade else 0L
     )
+    val loanDocumentMetadata = remember(loan.lender) {
+        runCatching { JSONObject(schedulePrefs.getString("loan_document_metadata_${loan.lender}", "{}") ?: "{}") }.getOrDefault(JSONObject())
+    }
+    val importedDocumentBreakdown = remember(loan.lender) {
+        runCatching {
+            val rows = loanDocumentMetadata.optJSONArray("scheduleRows") ?: JSONArray()
+            (0 until rows.length()).map { index -> rows.getJSONObject(index).let { row ->
+                LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"))
+            } }
+        }.getOrDefault(emptyList())
+    }
     var pdfMessage by remember(loan.lender) { mutableStateOf("") }
     var pdfBusy by remember(loan.lender) { mutableStateOf(false) }
     val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -4108,6 +4119,28 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                         LoanOverviewRow("Monthly EMI", Money.format(loan.emi))
                         LoanOverviewRow("Annual interest rate", "${loan.annualRate}%")
                         LoanOverviewRow("Payments recorded", loan.paymentsMade.toString())
+                        if (!loanDocumentMetadata.isNull("apr")) LoanOverviewRow("Document APR", loanDocumentMetadata.optDouble("apr").toString() + "%")
+                        if (!loanDocumentMetadata.isNull("processingFee")) LoanOverviewRow("Document processing fee", Money.format(loanDocumentMetadata.optLong("processingFee")))
+                        if (!loanDocumentMetadata.isNull("totalInterest")) LoanOverviewRow("Document total interest", Money.format(loanDocumentMetadata.optLong("totalInterest")))
+                        if (!loanDocumentMetadata.isNull("declaredTotalRepayment")) LoanOverviewRow("Document-declared total repayment", Money.format(loanDocumentMetadata.optLong("declaredTotalRepayment")))
+                        if (importedDocumentBreakdown.isNotEmpty()) {
+                            HorizontalDivider(color = page)
+                            Text("Repayment breakdown extracted from PDF", color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            if (loanDocumentMetadata.optBoolean("illustrativeSchedule")) Text("Illustrative only — confirm the final schedule with the lender.", color = Color(0xFFB45309), fontSize = 10.sp)
+                            importedDocumentBreakdown.forEach { row ->
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("EMI " + row.installmentNumber, color = Ink, fontSize = 10.sp, modifier = Modifier.weight(.7f))
+                                    Text("P " + Money.format(row.principal), color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                                    Text("I " + Money.format(row.interest), color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                                    Text(Money.format(row.installment), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        val savedWarnings = loanDocumentMetadata.optJSONArray("warnings")
+                        if (savedWarnings != null && savedWarnings.length() > 0) {
+                            Text("Source document warnings", color = Color(0xFF9A5B00), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            (0 until savedWarnings.length()).forEach { index -> Text("• " + savedWarnings.getString(index), color = Color(0xFF7C4A03), fontSize = 10.sp) }
+                        }
                         Text("Progress is estimated from the principal and outstanding balance entered in MoneyLog.", color = Muted, fontSize = 11.sp)
                     }
                 }
@@ -4340,6 +4373,14 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
     var saved by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var pdfBusy by remember { mutableStateOf(false) }
+    var importedWarnings by remember { mutableStateOf(emptyList<String>()) }
+    var importedScheduleRows by remember { mutableStateOf(emptyList<LoanDocumentScheduleRow>()) }
+    var importedApr by remember { mutableStateOf<Double?>(null) }
+    var importedProcessingFee by remember { mutableStateOf<Long?>(null) }
+    var importedTotalInterest by remember { mutableStateOf<Long?>(null) }
+    var importedDeclaredTotal by remember { mutableStateOf<Long?>(null) }
+    var importedIllustrative by remember { mutableStateOf(false) }
+    var warningsAcknowledged by remember { mutableStateOf(false) }
     val pdfImportScope = rememberCoroutineScope()
     val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -4362,7 +4403,8 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         }
                         val extractedLabelCount = Regex("(?i)\\b(?:loan\\s+amount|principal\\s+amount|amount\\s+of\\s+loan|emi|equated\\s+monthly|interest\\s+rate|tenure|loan\\s+term|borrower|applicant|repayment|sanctioned\\s+amount|agreement\\s+number)\\b").findAll(extracted).count()
                         // Scanned PDFs can have short text layers containing only logos or page footers.
-                        if (extracted.trim().length < 40 || extractedLabelCount < 2) {
+                        val hasReadableScheduleRows = Regex("(?m)^\\s*\\d{1,3}\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s*$").containsMatchIn(extracted)
+                        if (extracted.trim().length < 40 || extractedLabelCount < 2 || !hasReadableScheduleRows) {
                             val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
                                 ?: throw IllegalArgumentException("Could not render this PDF for OCR.")
                             descriptor.use { pfd ->
@@ -4370,14 +4412,15 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                                     val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
                                     try {
                                         val ocrText = StringBuilder()
-                                        for (pageIndex in 0 until minOf(renderer.pageCount, 20)) {
+                                        for (pageIndex in 0 until renderer.pageCount) {
                                             renderer.openPage(pageIndex).use { page ->
                                                 val scale = minOf(2, maxOf(1, 1800 / maxOf(page.width, page.height)))
                                                 val bitmap = android.graphics.Bitmap.createBitmap(page.width * scale, page.height * scale, android.graphics.Bitmap.Config.ARGB_8888)
-                                                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                                val recognized = com.google.android.gms.tasks.Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)))
-                                                ocrText.append(recognized.text).append('\n')
-                                                bitmap.recycle()
+                                                try {
+                                                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                                    val recognized = com.google.android.gms.tasks.Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)))
+                                                    ocrText.append(recognized.text).append('\n')
+                                                } finally { bitmap.recycle() }
                                             }
                                         }
                                         val recognizedText = ocrText.toString()
@@ -4450,6 +4493,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             return null
                         }
                         val fields = JSONObject()
+                        val auditedDocument = LoanDocumentParser.parse(extracted)
                         // Use the document's own section headings rather than assuming that values
                         // always appear on page 1. PDFTextStripper separates pages with form feeds.
                         val pdfPages = extracted.split('\u000C')
@@ -4515,6 +4559,26 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         (captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?(?:lender|regulated\\s+entity|bank|financial\\s+institution)|(?:lender|bank|nbfc|financial\\s+institution)\\s+name|lender|bank|financial\\s+institution|nbfc)")
                             ?: Regex("(?im)^\\s*(?:lender|bank|financial institution|name of (?:the )?regulated entity)\\s*[:\\-]\\s*(.{2,80})$").find(extracted)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
                             ?: Regex("(?m)^\\s*([A-Z][A-Z &.-]{3,50}\\b(?:BANK|FINANCE|FINANCIAL|LIMITED|LTD\\.?))\\s*$").find(extracted)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() })?.let { fields.put("lender", it) }
+                        auditedDocument.principal?.let { fields.put("principal", it.toString()) }
+                        auditedDocument.emi?.let { fields.put("emi", it.toString()) }
+                        auditedDocument.annualInterestRate?.let { fields.put("rate", it.toString()) }
+                        auditedDocument.tenureMonths?.let { fields.put("totalPayments", it.toString()) }
+                        auditedDocument.repaymentStartDate?.let { fields.put("startDate", it) }
+                        auditedDocument.lender?.let { fields.put("lender", it) }
+                        auditedDocument.loanNumber?.let { fields.put("agreementNumber", it) }
+                        auditedDocument.apr?.let { fields.put("auditApr", it) }
+                        auditedDocument.processingFee?.let { fields.put("auditProcessingFee", it) }
+                        auditedDocument.totalInterest?.let { fields.put("auditTotalInterest", it) }
+                        auditedDocument.declaredTotalRepayment?.let { fields.put("auditDeclaredTotal", it) }
+                        fields.put("auditIllustrative", auditedDocument.illustrativeSchedule)
+                        fields.put("auditWarnings", JSONArray(auditedDocument.warnings))
+                        val auditRows = JSONArray()
+                        auditedDocument.scheduleRows.forEach { row ->
+                            auditRows.put(JSONObject().put("number", row.installmentNumber)
+                                .put("openingPrincipal", row.openingPrincipal).put("principal", row.principal)
+                                .put("interest", row.interest).put("installment", row.installment))
+                        }
+                        fields.put("auditScheduleRows", auditRows)
                         fields
                     }
                 }
@@ -4531,6 +4595,18 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     if (fields.has("borrowerName")) borrowerName = fields.getString("borrowerName")
                     if (fields.has("agreementNumber")) agreementNumber = fields.getString("agreementNumber")
                     if (fields.has("startDate")) startDate = fields.getString("startDate")
+                    importedApr = fields.optString("auditApr").toDoubleOrNull()
+                    importedProcessingFee = fields.optString("auditProcessingFee").toDoubleOrNull()?.toLong()
+                    importedTotalInterest = fields.optString("auditTotalInterest").toDoubleOrNull()?.toLong()
+                    importedDeclaredTotal = fields.optString("auditDeclaredTotal").toDoubleOrNull()?.toLong()
+                    importedIllustrative = fields.optBoolean("auditIllustrative", false)
+                    importedWarnings = fields.optJSONArray("auditWarnings")?.let { array -> (0 until array.length()).map { array.getString(it) } } ?: emptyList()
+                    importedScheduleRows = fields.optJSONArray("auditScheduleRows")?.let { array ->
+                        (0 until array.length()).map { index -> array.getJSONObject(index).let { row ->
+                            LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"))
+                        } }
+                    } ?: emptyList()
+                    warningsAcknowledged = false
                     if (listOf("emi", "rate", "totalPayments").none { fields.has(it) }) {
                         error = "PDF opened, but no EMI amount, interest rate, or tenure could be identified. Enter those values manually or upload a text-based lender statement."
                     } else {
@@ -4632,6 +4708,45 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(statementOutstanding, { statementOutstanding = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Statement outstanding principal (optional, ₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     if (statementDate.isNotBlank()) Text("Statement date: $statementDate", color = Muted, fontSize = 11.sp)
+                    if (importedApr != null || importedProcessingFee != null || importedTotalInterest != null || importedDeclaredTotal != null) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F6FF)), shape = RoundedCornerShape(14.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text("Additional figures extracted from lender document", color = Ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                importedApr?.let { Text("APR: $it%", color = Ink, fontSize = 11.sp) }
+                                importedProcessingFee?.let { Text("Processing fee: ${Money.format(it)}", color = Ink, fontSize = 11.sp) }
+                                importedTotalInterest?.let { Text("Stated total interest: ${Money.format(it)}", color = Ink, fontSize = 11.sp) }
+                                importedDeclaredTotal?.let { Text("Document-declared total repayment: ${Money.format(it)}", color = Ink, fontSize = 11.sp) }
+                            }
+                        }
+                    }
+                    if (importedScheduleRows.isNotEmpty()) {
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(14.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Text("Repayment rows extracted from PDF (${importedScheduleRows.size})", color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                if (importedIllustrative) Text("Illustrative schedule only — not a final disbursement-based schedule.", color = Color(0xFFB45309), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                importedScheduleRows.forEach { row ->
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("EMI ${row.installmentNumber}", color = Ink, fontSize = 10.sp, modifier = Modifier.weight(0.8f))
+                                        Text("P ${Money.format(row.principal)}", color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                                        Text("I ${Money.format(row.interest)}", color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                                        Text(Money.format(row.installment), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (importedWarnings.isNotEmpty()) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7E8)), shape = RoundedCornerShape(14.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Document conflicts — review required", color = Color(0xFF9A5B00), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                importedWarnings.forEach { warning -> Text("• $warning", color = Color(0xFF7C4A03), fontSize = 10.sp) }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(checked = warningsAcknowledged, onCheckedChange = { warningsAcknowledged = it })
+                                    Text("I reviewed these source conflicts. Save only the extracted loan fields.", color = Ink, fontSize = 10.sp)
+                                }
+                            }
+                        }
+                    }
                     if (validInputs) {
                         Card(colors = CardDefaults.cardColors(containerColor = Mint), shape = RoundedCornerShape(16.dp)) {
                             Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -4660,10 +4775,24 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                             saved = false
                         } else {
                             onSave(lenderName, original, balance, count, annualRate, monthlyEmi, total.toLong(), borrowerName.trim(), agreementNumber.trim(), "", startDate)
+                            if (importedScheduleRows.isNotEmpty() || importedWarnings.isNotEmpty() || importedApr != null || importedProcessingFee != null || importedTotalInterest != null) {
+                                val savedRows = JSONArray()
+                                importedScheduleRows.forEach { row -> savedRows.put(JSONObject().put("number", row.installmentNumber)
+                                    .put("openingPrincipal", row.openingPrincipal).put("principal", row.principal)
+                                    .put("interest", row.interest).put("installment", row.installment)) }
+                                val metadata = JSONObject().put("apr", importedApr ?: JSONObject.NULL)
+                                    .put("processingFee", importedProcessingFee ?: JSONObject.NULL)
+                                    .put("totalInterest", importedTotalInterest ?: JSONObject.NULL)
+                                    .put("declaredTotalRepayment", importedDeclaredTotal ?: JSONObject.NULL)
+                                    .put("illustrativeSchedule", importedIllustrative)
+                                    .put("scheduleRows", savedRows).put("warnings", JSONArray(importedWarnings))
+                                context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
+                                    .putString("loan_document_metadata_$lenderName", metadata.toString()).apply()
+                            }
                             error = ""
                             saved = true
                         }
-                    }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                    }, enabled = !pdfBusy && (importedWarnings.isEmpty() || warningsAcknowledged), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) {
                         Icon(Icons.Default.Save, null)
                         Spacer(Modifier.width(8.dp))
                         Text("Save Loan", fontWeight = FontWeight.Bold)
