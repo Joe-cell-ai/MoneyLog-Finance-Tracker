@@ -28,6 +28,6 @@ class LoanMoneyTest {
     }
 
     @Test fun paiseTotalsDoNotLoseFractions() {
-        assertEquals(166613L, LoanMoney.sumPaise(listOf(561938L, 555057L, 548108L)))
+        assertEquals(1665103L, LoanMoney.sumPaise(listOf(561938L, 555057L, 548108L)))
     }
 }
