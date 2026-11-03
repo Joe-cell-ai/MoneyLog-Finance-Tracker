@@ -4182,7 +4182,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         runCatching {
             val rows = loanDocumentMetadata.optJSONArray("scheduleRows") ?: JSONArray()
             (0 until rows.length()).map { index -> rows.getJSONObject(index).let { row ->
-                LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null, if (row.has("dueDate") && !row.isNull("dueDate")) row.optString("dueDate") else null, if (row.has("closingPrincipal") && !row.isNull("closingPrincipal")) row.optLong("closingPrincipal") else null)
+                LoanDocumentScheduleRow(row.getInt("number"), row.optLong("openingPrincipal", 0L), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null, if (row.has("dueDate") && !row.isNull("dueDate")) row.optString("dueDate") else null, if (row.has("closingPrincipal") && !row.isNull("closingPrincipal")) row.optLong("closingPrincipal") else null)
             } }
         }.getOrDefault(emptyList())
     }
@@ -4191,12 +4191,16 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
     val exactPaidScheduleCount = maxOf(leadingPaidScheduleCount, loan.paymentsMade.coerceAtLeast(0L).coerceAtMost(importedSchedule.size.toLong()).toInt())
     val importedCurrentBalancePaise = if (importedDocumentBreakdown.isNotEmpty()) {
         when {
-            exactPaidScheduleCount <= 0 -> importedDocumentBreakdown.first().openingPrincipal
+            exactPaidScheduleCount <= 0 ->
+                importedDocumentBreakdown.first().openingPrincipal.takeIf { it > 0L }
             exactPaidScheduleCount >= importedDocumentBreakdown.size -> 0L
-            else -> runCatching {
-                Math.subtractExact(importedDocumentBreakdown[exactPaidScheduleCount - 1].openingPrincipal,
-                    importedDocumentBreakdown[exactPaidScheduleCount - 1].principal).coerceAtLeast(0L)
-            }.getOrNull()
+            else -> {
+                val previous = importedDocumentBreakdown[exactPaidScheduleCount - 1]
+                previous.closingPrincipal?.coerceAtLeast(0L)
+                    ?: if (previous.openingPrincipal > 0L) {
+                        (previous.openingPrincipal - previous.principal).coerceAtLeast(0L)
+                    } else null
+            }
         }
     } else null
     val importedEmiPaise = if (!loanDocumentMetadata.isNull("emi")) loanDocumentMetadata.optLong("emi")
@@ -4974,7 +4978,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                     importedWarnings = fields.optJSONArray("auditWarnings")?.let { array -> (0 until array.length()).map { array.getString(it) } } ?: emptyList()
                     importedScheduleRows = fields.optJSONArray("auditScheduleRows")?.let { array ->
                         (0 until array.length()).map { index -> array.getJSONObject(index).let { row ->
-                            LoanDocumentScheduleRow(row.getInt("number"), row.getLong("openingPrincipal"), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null, if (row.has("dueDate") && !row.isNull("dueDate")) row.optString("dueDate") else null, if (row.has("closingPrincipal") && !row.isNull("closingPrincipal")) row.optLong("closingPrincipal") else null)
+                            LoanDocumentScheduleRow(row.getInt("number"), row.optLong("openingPrincipal", 0L), row.getLong("principal"), row.getLong("interest"), row.getLong("installment"), if (row.has("annualRate") && !row.isNull("annualRate")) row.optDouble("annualRate") else null, if (row.has("dueDate") && !row.isNull("dueDate")) row.optString("dueDate") else null, if (row.has("closingPrincipal") && !row.isNull("closingPrincipal")) row.optLong("closingPrincipal") else null)
                         } }
                     } ?: emptyList()
                     if (startDate.isBlank()) importedScheduleRows.firstOrNull()?.dueDate?.let { startDate = it }
