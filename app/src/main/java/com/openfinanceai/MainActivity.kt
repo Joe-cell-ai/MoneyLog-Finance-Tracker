@@ -3999,7 +3999,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
     val firstDueDate = (parseScheduleDate(loan.due) ?: runCatching { loan.startDate.takeIf { it.isNotBlank() }?.let { java.time.LocalDate.parse(it.take(10)) } }.getOrNull() ?: nextLoanDueDate(loan.due))
         ?.plusMonths(loan.paymentsMade.coerceAtLeast(0L))
     var scheduleBalance = loan.balance.toDouble().coerceAtLeast(0.0)
-    val monthlyRate = loan.annualRatePercent.coerceAtLeast(0.0) / 1200.0
+    val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
     // The remaining schedule starts at today's outstanding principal and contains only
     // installments not already counted as paid. This prevents past installments being counted twice.
     val scheduleMonths = if (loan.totalPayments in 1L..600L)
@@ -4145,15 +4145,15 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 importedSchedule = rows.map { (it.dueDate ?: "") to it.installmentAmountAmount }
                 val persistedBankSchedule = JSONArray()
                 rows.forEach { row ->
-                    persistedBankSchedule.put(JSONObject().put("date", row.dueDate ?: "").put("amount", row.installmentAmountAmount).put("installment", row.installmentAmountNumber))
+                    persistedBankSchedule.put(JSONObject().put("date", row.dueDate ?: "").put("amount", row.installmentAmount).put("installment", row.installmentNumber))
                 }
                 schedulePrefs.edit().putString("bank_schedule_${loan.lender}", persistedBankSchedule.toString()).apply()
                 val rowJson = JSONArray()
                 rows.forEach { row ->
-                    rowJson.put(JSONObject().put("number", row.installmentAmountNumber)
+                    rowJson.put(JSONObject().put("number", row.installmentNumber)
                         .put("openingPrincipal", row.openingBalance ?: JSONObject.NULL)
                         .put("principal", row.principal).put("interest", row.interest)
-                        .put("installment", row.installmentAmountAmount)
+                        .put("installment", row.installmentAmount)
                         .put("annualRate", JSONObject.NULL)
                         .put("dueDate", row.dueDate ?: JSONObject.NULL)
                         .put("closingPrincipal", row.closingBalance ?: JSONObject.NULL))
@@ -4164,7 +4164,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     .put("agreementNumber", record.agreementNumber ?: JSONObject.NULL)
                     .put("principal", record.principal ?: JSONObject.NULL)
                     .put("emi", rows.firstOrNull()?.installmentAmountAmount ?: JSONObject.NULL)
-                    .put("annualInterestRate", record.annualRatePercentPercent ?: JSONObject.NULL)
+                    .put("annualInterestRate", record.annualRatePercent ?: JSONObject.NULL)
                     .put("apr", record.aprPercent ?: JSONObject.NULL)
                     .put("tenureMonths", record.tenureMonths ?: JSONObject.NULL)
                     .put("repaymentStartDate", record.repaymentStartDate ?: JSONObject.NULL)
@@ -4246,8 +4246,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     error("The PDF principal ${LoanMoney.formatPaise(document.principal)} does not match this loan's original principal ${Money.format(loan.originalPrincipal)}. No data was saved.")
                 }
                 val financialRows = document.scheduleRows.map { row ->
-                    FinancialScheduleRow(row.installmentAmountNumber, row.dueDate, row.openingBalance, row.installmentAmount,
-                        row.principal, row.interest, row.closingBalance)
+                    FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal, row.installment,
+                        row.principal, row.interest, row.closingPrincipal)
                 }
                 val validation = LoanFinancialValidator.validate(
                     financialRows, document.tenureMonths, document.principal, document.totalInterest,
@@ -4261,7 +4261,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     ?: loan.lender.takeIf { it.isNotBlank() }
                     ?: "Lender not identified"
                 val financialRowsForRoom = document.scheduleRows.map { row ->
-                    FinancialScheduleRow(row.installmentAmountNumber, row.dueDate, row.openingBalance, row.installmentAmount,
+                    FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingBalance, row.installmentAmount,
                         row.principal, row.interest, row.closingBalance)
                 }
                 val roomValidation = LoanFinancialValidator.validate(
@@ -4273,11 +4273,11 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 )
                 val arr = JSONArray()
                 mappedRows.forEach { row ->
-                    arr.put(JSONObject().put("date", row.date).put("amount", row.amount).put("installment", row.installmentAmountNumber))
+                    arr.put(JSONObject().put("date", row.date).put("amount", row.amount).put("installment", row.installmentNumber))
                 }
                 val savedRows = JSONArray()
                 document.scheduleRows.forEach { row ->
-                    savedRows.put(JSONObject().put("number", row.installmentAmountNumber)
+                    savedRows.put(JSONObject().put("number", row.installmentNumber)
                         .put("openingPrincipal", row.openingBalance).put("principal", row.principal)
                         .put("interest", row.interest).put("installment", row.installmentAmount)
                         .put("annualRate", row.annualRatePercent ?: JSONObject.NULL)
@@ -4406,7 +4406,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                         LoanOverviewRow("Original principal", if (importedSchedule.isNotEmpty()) LoanMoney.formatPaise(importedOriginalPrincipalPaise) else Money.format(loan.originalPrincipal))
                         LoanOverviewRow("Current outstanding", importedCurrentBalancePaise?.let { LoanMoney.formatPaise(it) } ?: Money.format(loan.balance))
                         LoanOverviewRow("Monthly EMI", importedEmiPaise?.let { LoanMoney.formatPaise(it) } ?: Money.format(loan.emi))
-                        LoanOverviewRow("Annual interest rate", if (loan.annualRatePercent > 0.0) "${loan.annualRatePercent}%" else "Not stated in source document")
+                        LoanOverviewRow("Annual interest rate", if (loan.annualRate > 0.0) "${loan.annualRate}%" else "Not stated in source document")
                         LoanOverviewRow("Payments recorded", loan.paymentsMade.toString())
                         if (!loanDocumentMetadata.isNull("apr")) LoanOverviewRow("Document APR", loanDocumentMetadata.optDouble("apr").toString() + "%")
                         if (!loanDocumentMetadata.isNull("processingFee")) LoanOverviewRow("Document processing fee", LoanMoney.formatPaise(loanDocumentMetadata.optLong("processingFee")))
@@ -4432,7 +4432,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                             if (loanDocumentMetadata.optBoolean("illustrativeSchedule")) Text("Illustrative only — confirm the final schedule with the lender.", color = Color(0xFFB45309), fontSize = 10.sp)
                             importedDocumentBreakdown.forEach { row ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("EMI " + row.installmentAmountNumber, color = Ink, fontSize = 10.sp, modifier = Modifier.weight(.7f))
+                                    Text("EMI " + row.installmentNumber, color = Ink, fontSize = 10.sp, modifier = Modifier.weight(.7f))
                                     Text("P " + LoanMoney.formatPaise(row.principal), color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
                                     Text("I " + LoanMoney.formatPaise(row.interest), color = Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
                                     Text(LoanMoney.formatPaise(row.installmentAmount), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -4558,7 +4558,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }, onLongClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(dateLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
-                            val displayedRate = breakdown?.annualRatePercent ?: loan.annualRatePercent.takeIf { it > 0.0 }
+                            val displayedRate = breakdown?.annualRatePercent ?: loan.annualRate.takeIf { it > 0.0 }
                             val rateLabel = displayedRate?.let { "Rate $it%" } ?: "Rate not stated"
                             if (breakdown != null) {
                                 Text("Principal ${LoanMoney.formatPaise(breakdown.principal)} · Interest ${LoanMoney.formatPaise(breakdown.interest)}", color = Muted, fontSize = 9.sp)
