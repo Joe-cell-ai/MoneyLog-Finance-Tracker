@@ -4142,7 +4142,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         if (persisted != null) {
             val (record, rows) = persisted
             if (rows.isNotEmpty()) {
-                importedSchedule = rows.map { (it.dueDate ?: "") to it.installmentAmountAmount }
+                importedSchedule = rows.map { (it.dueDate ?: "") to it.installmentAmount }
                 val persistedBankSchedule = JSONArray()
                 rows.forEach { row ->
                     persistedBankSchedule.put(JSONObject().put("date", row.dueDate ?: "").put("amount", row.installmentAmount).put("installment", row.installmentNumber))
@@ -4261,8 +4261,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     ?: loan.lender.takeIf { it.isNotBlank() }
                     ?: "Lender not identified"
                 val financialRowsForRoom = document.scheduleRows.map { row ->
-                    FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingBalance, row.installmentAmount,
-                        row.principal, row.interest, row.closingBalance)
+                    FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal, row.installment,
+                        row.principal, row.interest, row.closingPrincipal)
                 }
                 val roomValidation = LoanFinancialValidator.validate(
                     financialRowsForRoom, document.tenureMonths, document.principal,
