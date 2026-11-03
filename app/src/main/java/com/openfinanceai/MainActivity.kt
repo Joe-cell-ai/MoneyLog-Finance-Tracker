@@ -4978,6 +4978,10 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         } }
                     } ?: emptyList()
                     if (startDate.isBlank()) importedScheduleRows.firstOrNull()?.dueDate?.let { startDate = it }
+                    val mappedDates = LoanDocumentScheduleMapper.map(importedScheduleRows, startDate)
+                    if (importedScheduleRows.isNotEmpty() && mappedDates.size == importedScheduleRows.size) {
+                        paymentsMade = LoanPaidInstallmentPolicy.countPastDue(mappedDates, java.time.LocalDate.now()).toString()
+                    }
                     if (importedScheduleRows.isNotEmpty() && runCatching { java.time.LocalDate.parse(startDate) }.isFailure && importedScheduleRows.any { it.dueDate.isNullOrBlank() }) {
                         importedWarnings = (importedWarnings + "The PDF contains monthly repayment rows but no reliable first repayment date. Enter the exact first due date from the lender document before saving the monthly schedule.").distinct()
                     }
