@@ -2,7 +2,6 @@ package com.openfinanceai
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.LocalDate
 
