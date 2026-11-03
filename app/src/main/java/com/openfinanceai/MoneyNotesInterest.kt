@@ -25,10 +25,12 @@ internal fun calculateMoneyNoteBalance(
 ): MoneyNoteBalance {
     if (note.interestRateBasisPoints <= 0) {
         val startDate = runCatching { LocalDate.parse(note.date) }.getOrNull()
-        val paid = note.payments.filter { payment ->
+        val datedPayments = note.payments.filter { payment ->
             val paymentDate = runCatching { LocalDate.parse(payment.date) }.getOrNull()
             paymentDate != null && (startDate == null || !paymentDate.isBefore(startDate)) && !paymentDate.isAfter(asOf)
-        }.sumOf { it.amountPaise }.coerceAtMost(note.principalPaise)
+        }
+        val paid = (if (note.payments.isEmpty()) note.paidPaise else datedPayments.sumOf { it.amountPaise })
+            .coerceAtMost(note.principalPaise)
         return MoneyNoteBalance((note.principalPaise - paid).coerceAtLeast(0L), 0L)
     }
 
