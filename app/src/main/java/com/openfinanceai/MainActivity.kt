@@ -829,6 +829,18 @@ private fun FinanceApp() {
                 }
             }
             editor.apply()
+            // The restored SharedPreferences schedule is the compatibility source of truth.
+            // Remove old Room rows so a schedule from the pre-restore installation cannot
+            // override the schedule that was just restored from this backup.
+            financeScope.launch {
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val dao = LoanScheduleDatabase.get(context).loanScheduleDao()
+                    (loans.map { it.lender } + restoredLoans.map { it.lender }).distinctBy { it.lowercase(Locale.ROOT) }.forEach { lender ->
+                        dao.deleteLoanSchedules(lender)
+                        dao.deleteLoanDocuments(lender)
+                    }
+                }
+            }
             transactions = restoredTransactions
             loans = restoredLoans
             categoryRefreshToken++
