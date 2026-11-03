@@ -614,6 +614,8 @@ private fun FinanceApp() {
             Transaction("Coffee shop", "Food & drink", "20 Oct", 240, false)
         ).also { saveTransactions(context, it) })
     }
+    var moneyNotes by remember { mutableStateOf(loadMoneyNotes(context)) }
+    LaunchedEffect(moneyNotes) { saveMoneyNotes(context, moneyNotes) }
     var selectedLoan by remember { mutableStateOf<Loan?>(null) }
     var importMessage by remember { mutableStateOf("") }
     var importedPreview by remember { mutableStateOf<List<Transaction>>(emptyList()) }
@@ -922,12 +924,13 @@ private fun FinanceApp() {
                     tonalElevation = 3.dp,
                     windowInsets = NavigationBarDefaults.windowInsets
                 ) {
-                    listOf("Home", "Activity", "Reports", "Loans", "Settings").forEach { name ->
+                    listOf("Home", "Activity", "Reports", "Loans", "Money Notes", "Settings").forEach { name ->
                         val icon = when (name) {
                             "Home" -> Icons.Default.Home
                             "Activity" -> Icons.Default.ReceiptLong
                             "Reports" -> Icons.Default.BarChart
                             "Loans" -> Icons.Default.AccountBalance
+                            "Money Notes" -> Icons.Default.Notes
                             else -> Icons.Default.Settings
                         }
                         NavigationBarItem(
@@ -957,6 +960,7 @@ private fun FinanceApp() {
                         transactionForActions = transaction
                     })
                     "Loans" -> LoansScreen(loans, { navigateTo("Add loan") }, { loan -> selectedLoan = loan; navigateTo("Loan details") }, { loanForActions = it })
+                    "Money Notes" -> MoneyNotesScreen(notes = moneyNotes, onNotesChanged = { moneyNotes = it }, onBack = { navigateBack() })
                     "Settings" -> SettingsScreen { navigateTo(it) }
                     "Calendar" -> CalendarScreen(loans, transactions)
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance }, transactions)
