@@ -31,7 +31,11 @@ internal object LoanPdfTextQuality {
             """(?:₹|\bINR\b|\bRs\.?\s*\d|\d{3,}(?:,\d{3})*(?:\.\d{1,2})?|\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b)""",
             RegexOption.IGNORE_CASE
         ).containsMatchIn(normalized)
-        return hasLoanContext && hasFinancialSignal
+        val hasScheduleCue = Regex(
+            """\b(?:repayment|amortization|install?ment)\s+(?:schedule|details|table)\b""",
+            RegexOption.IGNORE_CASE
+        ).containsMatchIn(normalized)
+        return hasLoanContext && (hasFinancialSignal || hasScheduleCue)
     }
 
     /** Prefer the source with stronger financial structure; ties retain selectable PDF text. */
