@@ -34,18 +34,27 @@ data class MoneyNote(
     val date: String,
     val description: String = "",
     val paidPaise: Long = 0L,
-    val payments: List<MoneyNotePayment> = emptyList()
+    val payments: List<MoneyNotePayment> = emptyList(),
+    /** Monthly rate in basis points: 150 means 1.50% per month. Zero means no interest. */
+    val interestRateBasisPoints: Int = 0
 ) {
-    val outstandingPaise: Long get() = (principalPaise - paidPaise).coerceAtLeast(0L)
+    val balance: MoneyNoteBalance get() = calculateMoneyNoteBalance(this)
+    val outstandingPaise: Long get() = balance.totalPaise
     val status: MoneyNoteStatus get() = when {
         outstandingPaise == 0L -> MoneyNoteStatus.SETTLED
-        paidPaise > 0L -> MoneyNoteStatus.PARTIALLY_PAID
+        paidPaise > 0L || payments.isNotEmpty() -> MoneyNoteStatus.PARTIALLY_PAID
         else -> MoneyNoteStatus.PENDING
     }
 }
 enum class MoneyNoteDirection { I_NEED_TO_PAY, I_NEED_TO_COLLECT }
 enum class MoneyNoteStatus { PENDING, PARTIALLY_PAID, SETTLED }
-data class MoneyNotePayment(val amountPaise: Long, val date: String, val note: String = "")
+enum class MoneyNotePaymentAllocation { INTEREST_ONLY, PRINCIPAL_ONLY, BOTH }
+data class MoneyNotePayment(
+    val amountPaise: Long,
+    val date: String,
+    val note: String = "",
+    val allocation: MoneyNotePaymentAllocation = MoneyNotePaymentAllocation.BOTH
+)
 
 private fun moneyNotesCurrency(paise: Long): String =
     NumberFormat.getCurrencyInstance(Locale("en", "IN")).format(paise / 100.0)
@@ -143,9 +152,18 @@ private fun MoneyNoteCard(note: MoneyNote, onPayment: () -> Unit) {
                 }
             }
             if (note.description.isNotBlank()) Text(note.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Original: " + moneyNotesCurrency(note.principalPaise), style = MaterialTheme.typography.labelSmall)
-                Text("Paid: " + moneyNotesCurrency(note.paidPaise), style = MaterialTheme.typography.labelSmall)
+            if (note.interestRateBasisPoints > 0) {
+                Text("Interest: ${note.interestRateBasisPoints / 100.0}% per month · updates daily", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Principal left: " + moneyNotesCurrency(note.balance.principalPaise), style = MaterialTheme.typography.labelSmall)
+                    Text("Interest due: " + moneyNotesCurrency(note.balance.unpaidInterestPaise), style = MaterialTheme.typography.labelSmall)
+                }
+                Text("Total outstanding: " + moneyNotesCurrency(note.outstandingPaise), fontWeight = FontWeight.SemiBold)
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Original: " + moneyNotesCurrency(note.principalPaise), style = MaterialTheme.typography.labelSmall)
+                    Text("Paid: " + moneyNotesCurrency(note.paidPaise), style = MaterialTheme.typography.labelSmall)
+                }
             }
             if (note.outstandingPaise > 0L) {
                 HorizontalDivider()
@@ -162,6 +180,8 @@ private fun AddMoneyNoteDialog(onDismiss: () -> Unit, onSave: (MoneyNote) -> Uni
     var amount by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(LocalDate.now().toString()) }
     var description by remember { mutableStateOf("") }
+    var interestBearing by remember { mutableStateOf(false) }
+    var monthlyRate by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -176,7 +196,23 @@ private fun AddMoneyNoteDialog(onDismiss: () -> Unit, onSave: (MoneyNote) -> Uni
                 OutlinedTextField(amount, { amount = it.filter { c -> c.isDigit() || c == '.' }; error = "" }, label = { Text("Amount (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                 OutlinedTextField(date, { date = it; error = "" }, label = { Text("Date (YYYY-MM-DD)") }, singleLine = true)
                 OutlinedTextField(description, { description = it }, label = { Text("Description (optional)") })
-                Text("Interest: No interest (Family & Friends)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = interestBearing, onCheckedChange = { interestBearing = it })
+                    Text("Interest-bearing loan (including gold/local loan)")
+                }
+                if (interestBearing) {
+                    OutlinedTextField(
+                        monthlyRate,
+                        { monthlyRate = it.filter { ch -> ch.isDigit() || ch == '.' }; error = "" },
+                        label = { Text("Interest rate (% per month)") },
+                        placeholder = { Text("Example: 1.5") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true
+                    )
+                    Text("Interest accrues automatically each day. You can record interest-only or principal payments.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                } else {
+                    Text("No interest (Family & Friends)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                }
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
             }
         },
@@ -184,11 +220,13 @@ private fun AddMoneyNoteDialog(onDismiss: () -> Unit, onSave: (MoneyNote) -> Uni
             Button(onClick = {
                 val paise = runCatching { amount.toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()
                 val validDate = runCatching { LocalDate.parse(date); true }.getOrDefault(false)
+                val rateBps = if (interestBearing) runCatching { monthlyRate.toBigDecimal().movePointRight(2).intValueExact() }.getOrNull() else 0
                 when {
                     person.isBlank() -> error = "Enter the person's name."
                     paise == null || paise <= 0L -> error = "Enter a valid amount greater than zero."
                     !validDate -> error = "Enter a valid date (YYYY-MM-DD)."
-                    else -> onSave(MoneyNote(UUID.randomUUID().toString(), direction, person.trim(), paise, date, description.trim()))
+                    interestBearing && (rateBps == null || rateBps <= 0 || rateBps > 100_000) -> error = "Enter a valid monthly interest rate."
+                    else -> onSave(MoneyNote(UUID.randomUUID().toString(), direction, person.trim(), paise, date, description.trim(), interestRateBasisPoints = rateBps ?: 0))
                 }
             }) { Text("Save record") }
         },
@@ -201,12 +239,28 @@ private fun RecordMoneyNotePaymentDialog(note: MoneyNote, onDismiss: () -> Unit,
     var amount by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(LocalDate.now().toString()) }
     var error by remember { mutableStateOf("") }
+    var allocation by remember { mutableStateOf(MoneyNotePaymentAllocation.BOTH) }
+    val liveBalance = note.balance
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Record payment") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Outstanding: " + moneyNotesCurrency(note.outstandingPaise))
+                if (note.interestRateBasisPoints > 0) {
+                    Text("Principal: ${moneyNotesCurrency(liveBalance.principalPaise)} · Interest: ${moneyNotesCurrency(liveBalance.unpaidInterestPaise)}", style = MaterialTheme.typography.bodySmall)
+                    Text("Payment allocation", fontWeight = FontWeight.SemiBold)
+                    listOf(
+                        MoneyNotePaymentAllocation.INTEREST_ONLY to "Interest only",
+                        MoneyNotePaymentAllocation.PRINCIPAL_ONLY to "Principal only",
+                        MoneyNotePaymentAllocation.BOTH to "Interest first, then principal"
+                    ).forEach { (value, label) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = allocation == value, onClick = { allocation = value })
+                            Text(label)
+                        }
+                    }
+                }
                 OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text("Payment amount (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
                 OutlinedTextField(date, { date = it }, label = { Text("Payment date (YYYY-MM-DD)") }, singleLine = true)
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
@@ -220,7 +274,9 @@ private fun RecordMoneyNotePaymentDialog(note: MoneyNote, onDismiss: () -> Unit,
                     paise == null || paise <= 0L -> error = "Enter a payment greater than zero."
                     paise > note.outstandingPaise -> error = "Payment cannot exceed the outstanding amount."
                     !validDate -> error = "Enter a valid payment date."
-                    else -> onSave(MoneyNotePayment(paise, date))
+                    allocation == MoneyNotePaymentAllocation.INTEREST_ONLY && paise > liveBalance.unpaidInterestPaise -> error = "Payment cannot exceed accrued interest."
+                    allocation == MoneyNotePaymentAllocation.PRINCIPAL_ONLY && paise > liveBalance.principalPaise -> error = "Payment cannot exceed remaining principal."
+                    else -> onSave(MoneyNotePayment(paise, date, allocation = allocation))
                 }
             }) { Text("Save payment") }
         },
