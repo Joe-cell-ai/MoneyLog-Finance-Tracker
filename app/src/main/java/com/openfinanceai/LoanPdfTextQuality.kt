@@ -20,7 +20,19 @@ internal object LoanPdfTextQuality {
         return labels * 10 + rows * 4 + (text.length / 500).coerceAtMost(4)
     }
 
-    fun needsOcr(text: String): Boolean = text.trim().length < 24 || score(text) < 20
+    fun needsOcr(text: String): Boolean {
+        val normalized = text.trim()
+        if (normalized.length < 24) return true
+        if (score(normalized) >= 20) return false
+        // Avoid OCR on cover, footer, terms and contact pages. OCR sparse selectable
+        // text only when it has loan context and a financial value/date signal.
+        val hasLoanContext = loanLabels.containsMatchIn(normalized)
+        val hasFinancialSignal = Regex(
+            """(?:₹|\bINR\b|\bRs\.?\s*\d|\d[0-9,]*\.\d{2}|\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b)""",
+            RegexOption.IGNORE_CASE
+        ).containsMatchIn(normalized)
+        return hasLoanContext && hasFinancialSignal
+    }
 
     /** Prefer the source with stronger financial structure; ties retain selectable PDF text. */
     fun chooseBest(selectableText: String, recognizedText: String): String =
