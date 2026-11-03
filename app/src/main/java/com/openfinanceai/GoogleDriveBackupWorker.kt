@@ -48,6 +48,22 @@ class GoogleDriveBackupWorker(context: Context, params: WorkerParameters) : Work
                 .put("userReportedCreditScore", prefs.getInt("user_reported_credit_score", 0))
                 .put("monthlyCategoryBudgets", JSONObject(prefs.getString("monthly_category_budgets", "{}") ?: "{}"))
 
+            val loanMetadata = JSONObject()
+            prefs.all.keys.filter { it.startsWith("loan_document_metadata_") }.forEach { key ->
+                loanMetadata.put(key, prefs.getString(key, "{}") ?: "{}")
+            }
+            val emiPreferences = JSONObject()
+            prefs.all.keys.filter { key ->
+                key.startsWith("emi_status_") || key.startsWith("emi_amount_") || key.startsWith("emi_rescheduled_")
+            }.forEach { key ->
+                when (val value = prefs.all[key]) {
+                    is Number -> emiPreferences.put(key, value.toLong())
+                    is String -> emiPreferences.put(key, value)
+                }
+            }
+            root.put("loanDocumentMetadata", loanMetadata)
+                .put("emiPreferences", emiPreferences)
+
             val schedules = JSONObject()
             prefs.all.keys.filter { it.startsWith("bank_schedule_") }.forEach { key ->
                 val raw = prefs.getString(key, "[]") ?: "[]"

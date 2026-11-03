@@ -720,10 +720,14 @@ private fun FinanceApp() {
                 .put("amount", t.amount).put("income", t.income).put("source", t.source)
                 .put("notificationKey", t.notificationKey).put("captureStatus", t.captureStatus)
                 .put("paymentMethod", t.paymentMethod).put("notes", t.notes).put("tag", t.tag)
-                .put("loanLender", t.loanLender).put("emiInstallmentDate", t.emiInstallmentDate).put("transactionKind", t.transactionKind)) }
+                .put("loanLender", t.loanLender).put("emiInstallmentDate", t.emiInstallmentDate).put("transactionKind", t.transactionKind)
+                .put("loanPrincipalReduction", t.loanPrincipalReduction).put("loanInterestPortion", t.loanInterestPortion)
+                .put("loanPaymentCounted", t.loanPaymentCounted).put("loanAllocationRecorded", t.loanAllocationRecorded)
+                .put("loanReceiptPrincipalAdded", t.loanReceiptPrincipalAdded)) }
             val loanArray = JSONArray()
             loans.forEach { l -> loanArray.put(JSONObject().put("lender", l.lender).put("balance", l.balance)
-                .put("emi", l.emi).put("due", l.due).put("annualRate", l.annualRate).put("originalPrincipal", l.originalPrincipal).put("paymentsMade", l.paymentsMade).put("totalPayments", l.totalPayments)) }
+                .put("emi", l.emi).put("due", l.due).put("annualRate", l.annualRate).put("originalPrincipal", l.originalPrincipal).put("paymentsMade", l.paymentsMade).put("totalPayments", l.totalPayments)
+                .put("borrowerName", l.borrowerName).put("agreementNumber", l.agreementNumber).put("loanNumber", l.loanNumber).put("startDate", l.startDate)) }
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
             val savedCategories = runCatching { JSONArray(prefs.getString("custom_categories", "[]") ?: "[]") }.getOrDefault(JSONArray())
             val savedTags = runCatching { JSONArray(prefs.getString("custom_tags", "[]") ?: "[]") }.getOrDefault(JSONArray())
@@ -731,9 +735,22 @@ private fun FinanceApp() {
             prefs.all.keys.filter { it.startsWith("bank_schedule_") }.forEach { key ->
                 runCatching { bankSchedules.put(key, JSONArray(prefs.getString(key, "[]") ?: "[]")) }
             }
+            val loanMetadata = JSONObject()
+            prefs.all.keys.filter { it.startsWith("loan_document_metadata_") }.forEach { key ->
+                loanMetadata.put(key, prefs.getString(key, "{}") ?: "{}")
+            }
+            val emiPreferences = JSONObject()
+            prefs.all.keys.filter { key -> key.startsWith("emi_status_") || key.startsWith("emi_amount_") || key.startsWith("emi_rescheduled_") }.forEach { key ->
+                when (val value = prefs.all[key]) {
+                    is Number -> emiPreferences.put(key, value.toLong())
+                    is String -> emiPreferences.put(key, value)
+                }
+            }
             root.put("transactions", transactionArray)
                 .put("loans", loanArray)
                 .put("bankSchedules", bankSchedules)
+                .put("loanDocumentMetadata", loanMetadata)
+                .put("emiPreferences", emiPreferences)
                 .put("categories", savedCategories)
                 .put("tags", savedTags)
                 .put("appearanceTheme", prefs.getString("appearance_theme", "Light"))
@@ -760,12 +777,15 @@ private fun FinanceApp() {
                 (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
                     Transaction(j.getString("title"), j.optString("category", "Other"), j.optString("date", "Today"),
                         j.getLong("amount"), j.optBoolean("income"), j.optString("source"), j.optString("notificationKey"),
-                        j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""), j.optString("loanLender", ""), j.optString("emiInstallmentDate", ""), j.optString("transactionKind", ""))
+                        j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""), j.optString("loanLender", ""), j.optString("emiInstallmentDate", ""), j.optString("transactionKind", ""), j.optLong("loanPrincipalReduction", 0L),
+                        j.optLong("loanInterestPortion", 0L), j.optBoolean("loanPaymentCounted", false),
+                        j.optBoolean("loanAllocationRecorded", false), j.optLong("loanReceiptPrincipalAdded", 0L))
                 } }
             }
             val restoredLoans = root.optJSONArray("loans")?.let { a ->
                 (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
-                    Loan(j.getString("lender"), j.getLong("balance"), j.getLong("emi"), j.optString("due", "Not set"), j.optDouble("annualRate", 0.0), j.optLong("originalPrincipal", j.getLong("balance")), j.optLong("paymentsMade", 0L), j.optLong("totalPayments", 0L))
+                    Loan(j.getString("lender"), j.getLong("balance"), j.getLong("emi"), j.optString("due", "Not set"), j.optDouble("annualRate", 0.0), j.optLong("originalPrincipal", j.getLong("balance")), j.optLong("paymentsMade", 0L), j.optLong("totalPayments", 0L), j.optString("borrowerName", ""), j.optString("agreementNumber", ""),
+                        j.optString("loanNumber", ""), j.optString("startDate", j.optString("due", "")))
                 } }
             } ?: emptyList()
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -786,6 +806,7 @@ private fun FinanceApp() {
                 else editor.remove("user_reported_credit_score")
             }
             root.optJSONObject("monthlyCategoryBudgets")?.let { editor.putString("monthly_category_budgets", it.toString()) }
+            prefs.all.keys.filter { key -> key.startsWith("bank_schedule_") || key.startsWith("loan_document_metadata_") || key.startsWith("emi_status_") || key.startsWith("emi_amount_") || key.startsWith("emi_rescheduled_") }.forEach { editor.remove(it) }
             root.optJSONObject("bankSchedules")?.let { schedules ->
                 val keys = schedules.keys()
                 while (keys.hasNext()) {
@@ -794,6 +815,17 @@ private fun FinanceApp() {
                 }
             }
             editor.apply()
+            // The restored SharedPreferences schedule is the compatibility source of truth.
+            // Remove old Room rows so a pre-restore schedule cannot override restored loan data.
+            financeScope.launch {
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val dao = LoanScheduleDatabase.get(context).loanScheduleDao()
+                    (loans.map { it.lender } + restoredLoans.map { it.lender }).distinctBy { it.lowercase(Locale.ROOT) }.forEach { lender ->
+                        dao.deleteLoanSchedules(lender)
+                        dao.deleteLoanDocuments(lender)
+                    }
+                }
+            }
             transactions = restoredTransactions
             loans = restoredLoans
             categoryRefreshToken++
