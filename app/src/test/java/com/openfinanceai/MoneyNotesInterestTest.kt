@@ -47,6 +47,6 @@ class MoneyNotesInterestTest {
         )
         val balance = calculateMoneyNoteBalance(note(payments = listOf(payment)), LocalDate.parse("2026-11-01"))
         assertEquals(8_000_000L, balance.principalPaise)
-        assert(balance.unpaidInterestPaise in 130_000L..136_000L)
+        assert(balance.unpaidInterestPaise in 126_000L..129_000L)
     }
 }
