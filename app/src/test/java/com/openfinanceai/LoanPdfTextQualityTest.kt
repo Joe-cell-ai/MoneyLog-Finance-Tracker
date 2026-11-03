@@ -7,7 +7,7 @@ import org.junit.Test
 
 class LoanPdfTextQualityTest {
     @Test fun longFooterOnlyTextStillRequestsOcr() {
-        val text = "Page 1 of 10\\nCustomer support and registered office details\\nwww.example-lender.in"
+        val text = "Page 1 of 10\nCustomer support and registered office details\nwww.example-lender.in"
         assertTrue(text.length > 24)
         assertTrue(LoanPdfTextQuality.needsOcr(text))
     }
@@ -23,7 +23,7 @@ class LoanPdfTextQualityTest {
     }
 
     @Test fun betterOcrTextWinsButSelectableTextWinsOnTie() {
-        val sparse = "Page 2 of 10\\nLender footer and contact information"
+        val sparse = "Page 2 of 10\nLender footer and contact information"
         val ocr = """
             Loan Amount: 10000
             Monthly EMI: 3500
