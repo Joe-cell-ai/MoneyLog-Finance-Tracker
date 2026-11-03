@@ -4563,7 +4563,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                             if (breakdown != null) {
                                 Text("Principal ${LoanMoney.formatPaise(breakdown.principal)} · Interest ${LoanMoney.formatPaise(breakdown.interest)}", color = Muted, fontSize = 9.sp)
                                 val balances = listOfNotNull(
-                                    breakdown.openingBalance.takeIf { it > 0L }?.let { "Opening ${LoanMoney.formatPaise(it)}" },
+                                    breakdown.openingBalance?.takeIf { it > 0L }?.let { "Opening ${LoanMoney.formatPaise(it)}" },
                                     breakdown.closingBalance?.let { "Closing ${LoanMoney.formatPaise(it)}" }
                                 )
                                 Text((balances + rateLabel).joinToString(" · "), color = Muted, fontSize = 8.sp)
