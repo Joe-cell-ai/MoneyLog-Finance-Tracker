@@ -29,7 +29,7 @@ internal object LoanScheduleDisplaySummary {
         val scheduleBalance = when {
             paid == 0 -> rows.first().openingBalance
             paid == rows.size -> rows.last().closingBalance
-            else -> rows[paid - 1].closingBalance ?: rows[paid].openingBalance
+            else -> rows[paid - 1].closingBalance ?: rows.drop(paid).firstNotNullOfOrNull { it.openingBalance }
         }
         return (scheduleBalance ?: savedBalance).coerceAtLeast(0L)
     }
