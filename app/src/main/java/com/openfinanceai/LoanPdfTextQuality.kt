@@ -6,11 +6,11 @@ package com.openfinanceai
  */
 internal object LoanPdfTextQuality {
     private val loanLabels = Regex(
-        """\\b(?:loan\\s+amount|amount\\s+financed|principal\\s+amount|emi|epi|equated\\s+monthly|interest\\s+rate|tenure|loan\\s+term|borrower|applicant|repayment\\s+schedule|install?ment\\s+no|opening\\s+principal|closing\\s+principal|agreement\\s+number|outstanding\\s+principal)\\b""",
+        """\b(?:loan\s+amount|amount\s+financed|principal\s+amount|emi|epi|equated\s+monthly|interest\s+rate|tenure|loan\s+term|borrower|applicant|repayment\s+schedule|install?ment\s+no|opening\s+principal|closing\s+principal|agreement\s+number|outstanding\s+principal)\b""",
         RegexOption.IGNORE_CASE
     )
     private val numberedFinancialRow = Regex(
-        """^\\s*\\d{1,3}\\s+.*\\d[0-9,]*(?:\\.[0-9]{1,2})?.*\\d[0-9,]*(?:\\.[0-9]{1,2})?.*$"""
+        """^\s*\d{1,3}\s+.*\d[0-9,]*(?:\.[0-9]{1,2})?.*\d[0-9,]*(?:\.[0-9]{1,2})?.*$"""
     )
 
     fun score(text: String): Int {
