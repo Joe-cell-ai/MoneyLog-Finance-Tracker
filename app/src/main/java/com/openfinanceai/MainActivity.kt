@@ -961,7 +961,19 @@ private fun FinanceApp() {
                     transaction = transaction,
                     allTransactions = transactions,
                     onDismiss = { transactionForActions = null },
-                    onEdit = { transactionToEdit = transaction; transactionForActions = null },
+                    onEdit = {
+                        when (transaction.transactionKind) {
+                            "Loan repayment / EMI" -> {
+                                android.widget.Toast.makeText(context, "Use EMI Quick Actions → Edit Amount so the loan balance stays synchronized.", android.widget.Toast.LENGTH_LONG).show()
+                                transactionForActions = null
+                            }
+                            "Loan received" -> {
+                                android.widget.Toast.makeText(context, "Loan receipt entries cannot be edited directly. Delete and re-record the receipt to keep the loan balance correct.", android.widget.Toast.LENGTH_LONG).show()
+                                transactionForActions = null
+                            }
+                            else -> { transactionToEdit = transaction; transactionForActions = null }
+                        }
+                    },
                     onDelete = {
                         var remainingTransactions = transactions.filterNot { it === transaction }
                         val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
