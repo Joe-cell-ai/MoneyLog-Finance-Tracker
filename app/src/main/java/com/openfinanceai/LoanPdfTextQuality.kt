@@ -28,7 +28,7 @@ internal object LoanPdfTextQuality {
         // text only when it has loan context and a financial value/date signal.
         val hasLoanContext = loanLabels.containsMatchIn(normalized)
         val hasFinancialSignal = Regex(
-            """(?:₹|\bINR\b|\bRs\.?\s*\d|\d[0-9,]*\.\d{2}|\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b)""",
+            """(?:₹|\bINR\b|\bRs\.?\s*\d|\d{3,}(?:,\d{3})*(?:\.\d{1,2})?|\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b)""",
             RegexOption.IGNORE_CASE
         ).containsMatchIn(normalized)
         return hasLoanContext && hasFinancialSignal
