@@ -5161,6 +5161,12 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         } else {
                             onSave(lenderName, original, balance, count, annualRate, monthlyEmi, total.toLong(), borrowerName.trim(), agreementNumber.trim(), "", startDate)
                             if (datedPdfSchedule.isNotEmpty()) {
+                                val pastDueCount = LoanPaidInstallmentPolicy.countPastDue(datedPdfSchedule, java.time.LocalDate.now())
+                                val statusEditor = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
+                                datedPdfSchedule.take(pastDueCount).forEach { row ->
+                                    statusEditor.putString("emi_status_${lenderName}_${row.date}", "Paid")
+                                }
+                                statusEditor.apply()
                                 val liveSchedule = JSONArray()
                                 datedPdfSchedule.forEach { row -> liveSchedule.put(JSONObject().put("date", row.date).put("amount", row.amount).put("installment", row.installmentNumber)) }
                                 context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
