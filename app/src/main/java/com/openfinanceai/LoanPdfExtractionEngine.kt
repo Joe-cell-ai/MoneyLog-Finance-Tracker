@@ -80,7 +80,7 @@ internal class LoanPdfExtractionEngine(private val context: Context) {
                                 pages += LoanPdfPageText(
                                     pageIndex + 1, selectedText,
                                     if (selectedByOcr) "ML_KIT_OCR" else "PDF_TEXT",
-                                    selectedByOcr && LoanPdfTextQuality.score(selectedText) < 20
+                                    LoanPdfTextQuality.score(selectedText) < 20
                                 )
                             }
                         }
