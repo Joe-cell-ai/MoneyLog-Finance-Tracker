@@ -285,13 +285,16 @@ private fun RecordMoneyNotePaymentDialog(note: MoneyNote, onDismiss: () -> Unit,
         confirmButton = {
             Button(onClick = {
                 val paise = amount.toLongOrNull()?.let { it * 100L }
-                val validDate = runCatching { LocalDate.parse(date); true }.getOrDefault(false)
+                val paymentDate = runCatching { LocalDate.parse(date) }.getOrNull()
+                val balanceAtPaymentDate = paymentDate?.let { calculateMoneyNoteBalance(note, it) }
                 when {
                     paise == null || paise <= 0L -> error = "Enter a payment greater than zero."
-                    paise > note.outstandingPaise -> error = "Payment cannot exceed the outstanding amount."
-                    !validDate -> error = "Enter a valid payment date."
-                    allocation == MoneyNotePaymentAllocation.INTEREST_ONLY && paise > liveBalance.unpaidInterestPaise -> error = "Payment cannot exceed accrued interest."
-                    allocation == MoneyNotePaymentAllocation.PRINCIPAL_ONLY && paise > liveBalance.principalPaise -> error = "Payment cannot exceed remaining principal."
+                    paymentDate == null -> error = "Enter a valid payment date."
+                    paymentDate.isAfter(LocalDate.now()) -> error = "Payment date cannot be in the future."
+                    paymentDate.isBefore(LocalDate.parse(note.date)) -> error = "Payment date cannot be before the loan start date."
+                    balanceAtPaymentDate == null || paise > balanceAtPaymentDate.totalPaise -> error = "Payment cannot exceed the outstanding amount on that date."
+                    allocation == MoneyNotePaymentAllocation.INTEREST_ONLY && paise > balanceAtPaymentDate.unpaidInterestPaise -> error = "Payment cannot exceed interest accrued by that date."
+                    allocation == MoneyNotePaymentAllocation.PRINCIPAL_ONLY && paise > balanceAtPaymentDate.principalPaise -> error = "Payment cannot exceed remaining principal."
                     else -> onSave(MoneyNotePayment(paise, date, allocation = allocation))
                 }
             }) { Text("Save payment") }
