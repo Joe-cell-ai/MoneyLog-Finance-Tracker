@@ -750,6 +750,7 @@ private fun FinanceApp() {
             }
             root.put("transactions", transactionArray)
                 .put("loans", loanArray)
+                .put("moneyNotes", runCatching { JSONArray(prefs.getString("money_notes", "[]") ?: "[]") }.getOrDefault(JSONArray()))
                 .put("bankSchedules", bankSchedules)
                 .put("loanDocumentMetadata", loanMetadata)
                 .put("emiPreferences", emiPreferences)
@@ -792,6 +793,7 @@ private fun FinanceApp() {
             } ?: emptyList()
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
             val editor = prefs.edit()
+            root.optJSONArray("moneyNotes")?.let { editor.putString("money_notes", it.toString()) }
             root.optJSONArray("categories")?.let { editor.putString("custom_categories", it.toString()) }
             root.optJSONArray("tags")?.let { editor.putString("custom_tags", it.toString()) }
             if (root.has("appearanceTheme")) editor.putString("appearance_theme", root.optString("appearanceTheme", "Light"))
@@ -848,6 +850,7 @@ private fun FinanceApp() {
             }
             transactions = restoredTransactions
             loans = restoredLoans
+            moneyNotes = loadMoneyNotes(context)
             categoryRefreshToken++
             applyAppearance(
                 prefs.getString("appearance_theme", "Light") ?: "Light",
@@ -858,7 +861,7 @@ private fun FinanceApp() {
             )
             saveTransactions(context, transactions)
             saveLoans(context, loans)
-            importMessage = "Backup restored: ${transactions.size} transactions, ${loans.size} loans, categories, tags and supported settings."
+            importMessage = "Backup restored: ${transactions.size} transactions, ${loans.size} loans, ${moneyNotes.size} money notes, categories, tags and supported settings."
         }.onFailure { importMessage = it.message ?: "Backup restore failed." }
     }
     val income = transactions.filter { it.income }.sumOf { it.amount }
