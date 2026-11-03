@@ -4137,7 +4137,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         val persisted = withContext(kotlinx.coroutines.Dispatchers.IO) {
             val dao = LoanScheduleDatabase.get(context).loanScheduleDao()
             val latest = dao.latestDocument(loan.lender) ?: return@withContext null
-            latest to dao.installmentAmounts(loan.lender, latest.documentId)
+            latest to dao.installments(loan.lender, latest.documentId)
         }
         if (persisted != null) {
             val (record, rows) = persisted
@@ -4163,7 +4163,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     .put("borrowerName", record.borrowerName ?: JSONObject.NULL)
                     .put("agreementNumber", record.agreementNumber ?: JSONObject.NULL)
                     .put("principal", record.principal ?: JSONObject.NULL)
-                    .put("emi", rows.firstOrNull()?.installmentAmountAmount ?: JSONObject.NULL)
+                    .put("emi", rows.firstOrNull()?.installmentAmount ?: JSONObject.NULL)
                     .put("annualInterestRate", record.annualRatePercent ?: JSONObject.NULL)
                     .put("apr", record.aprPercent ?: JSONObject.NULL)
                     .put("tenureMonths", record.tenureMonths ?: JSONObject.NULL)
