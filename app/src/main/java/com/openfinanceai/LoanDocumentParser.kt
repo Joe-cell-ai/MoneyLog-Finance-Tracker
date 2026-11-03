@@ -74,22 +74,22 @@ internal object LoanDocumentParser {
                 .find(text)?.groupValues?.getOrNull(1)?.replace(",", "")?.toDoubleOrNull()
 
         val lenderLabelValues = listOfNotNull(
-            Regex("""(?im)^\\s*Lender\\s*:\\s*([^\\r\\n]{3,120}?)\\s*$""").find(text)?.groupValues?.get(1)?.trim(),
-            Regex("""(?im)^\\s*Name of the Regulated Entity\\s*:\\s*([^\\r\\n]{3,120}?)\\s*$""").find(text)?.groupValues?.get(1)?.trim()
+            Regex("""(?im)^\s*Lender\s*:\s*([^\r\n]{3,120}?)\s*$""").find(text)?.groupValues?.get(1)?.trim(),
+            Regex("""(?im)^\s*Name of the Regulated Entity\s*:\s*([^\r\n]{3,120}?)\s*$""").find(text)?.groupValues?.get(1)?.trim()
         ).filter { candidate ->
-            candidate.length in 3..120 && candidate.any(Char::isLetter) &&
+            candidate.length in 3..120 && candidate.any { it.isLetter() } &&
                 !candidate.matches(Regex("""(?i)(?:n/?a|na|unknown|not identified|not available|nil|none)"""))
         }
         val distinctLenderLabels = lenderLabelValues.map {
-            it.lowercase(Locale.ROOT).filter(Char::isLetterOrDigit)
+            it.lowercase(java.util.Locale.ROOT).filter { character -> character.isLetterOrDigit() }
         }.distinct()
         val explicitLender = lenderLabelValues.firstOrNull()?.takeIf { distinctLenderLabels.size == 1 }
         // A registered-office line may name a parent, servicer or document processor.
         // Only accept the exact YES BANK issuer wording used by its statement template;
         // all other lender names must come from an explicit lender/regulated-entity label.
         val verifiedYesBankIssuer = Regex(
-            """(?im)^\\s*Corporate\\s*&\\s*Registered\\s+office\\s*:\\s*(YES\\s+BANK\\s+Limited)\\b"""
-        ).find(text)?.groupValues?.get(1)?.replace(Regex("""\\s+"""), " ")?.trim()
+            """(?im)^\s*Corporate\s*&\s*Registered\s+office\s*:\s*(YES\s+BANK\s+Limited)\b"""
+        ).find(text)?.groupValues?.get(1)?.replace(Regex("""\s+"""), " ")?.trim()
         val lender = if (distinctLenderLabels.size > 1) null else explicitLender ?: verifiedYesBankIssuer
         val loanNumber = Regex("""(?i)(?:Loan\s*ID|Loan proposal\s*/\s*account\s*No\.?|Loan account\s*(?:number|no\.?)|Agreement\s*(?:No\.?|Number))\s*[:.]?\s*([A-Z0-9/-]{5,40})""")
             .find(text)?.groupValues?.get(1)
