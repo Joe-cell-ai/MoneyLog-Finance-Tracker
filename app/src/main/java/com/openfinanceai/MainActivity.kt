@@ -614,6 +614,8 @@ private fun FinanceApp() {
             Transaction("Coffee shop", "Food & drink", "20 Oct", 240, false)
         ).also { saveTransactions(context, it) })
     }
+    var moneyNotes by remember { mutableStateOf(loadMoneyNotes(context)) }
+    LaunchedEffect(moneyNotes) { saveMoneyNotes(context, moneyNotes) }
     var selectedLoan by remember { mutableStateOf<Loan?>(null) }
     var importMessage by remember { mutableStateOf("") }
     var importedPreview by remember { mutableStateOf<List<Transaction>>(emptyList()) }
@@ -748,6 +750,7 @@ private fun FinanceApp() {
             }
             root.put("transactions", transactionArray)
                 .put("loans", loanArray)
+                .put("moneyNotes", runCatching { JSONArray(prefs.getString("money_notes", "[]") ?: "[]") }.getOrDefault(JSONArray()))
                 .put("bankSchedules", bankSchedules)
                 .put("loanDocumentMetadata", loanMetadata)
                 .put("emiPreferences", emiPreferences)
@@ -790,6 +793,7 @@ private fun FinanceApp() {
             } ?: emptyList()
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
             val editor = prefs.edit()
+            root.optJSONArray("moneyNotes")?.let { editor.putString("money_notes", it.toString()) }
             root.optJSONArray("categories")?.let { editor.putString("custom_categories", it.toString()) }
             root.optJSONArray("tags")?.let { editor.putString("custom_tags", it.toString()) }
             if (root.has("appearanceTheme")) editor.putString("appearance_theme", root.optString("appearanceTheme", "Light"))
@@ -846,6 +850,7 @@ private fun FinanceApp() {
             }
             transactions = restoredTransactions
             loans = restoredLoans
+            moneyNotes = loadMoneyNotes(context)
             categoryRefreshToken++
             applyAppearance(
                 prefs.getString("appearance_theme", "Light") ?: "Light",
@@ -856,7 +861,7 @@ private fun FinanceApp() {
             )
             saveTransactions(context, transactions)
             saveLoans(context, loans)
-            importMessage = "Backup restored: ${transactions.size} transactions, ${loans.size} loans, categories, tags and supported settings."
+            importMessage = "Backup restored: ${transactions.size} transactions, ${loans.size} loans, ${moneyNotes.size} money notes, categories, tags and supported settings."
         }.onFailure { importMessage = it.message ?: "Backup restore failed." }
     }
     val income = transactions.filter { it.income }.sumOf { it.amount }
@@ -922,12 +927,13 @@ private fun FinanceApp() {
                     tonalElevation = 3.dp,
                     windowInsets = NavigationBarDefaults.windowInsets
                 ) {
-                    listOf("Home", "Activity", "Reports", "Loans", "Settings").forEach { name ->
+                    listOf("Home", "Activity", "Reports", "Loans", "Money Notes", "Settings").forEach { name ->
                         val icon = when (name) {
                             "Home" -> Icons.Default.Home
                             "Activity" -> Icons.Default.ReceiptLong
                             "Reports" -> Icons.Default.BarChart
                             "Loans" -> Icons.Default.AccountBalance
+                            "Money Notes" -> Icons.Default.Notes
                             else -> Icons.Default.Settings
                         }
                         NavigationBarItem(
@@ -957,6 +963,7 @@ private fun FinanceApp() {
                         transactionForActions = transaction
                     })
                     "Loans" -> LoansScreen(loans, { navigateTo("Add loan") }, { loan -> selectedLoan = loan; navigateTo("Loan details") }, { loanForActions = it })
+                    "Money Notes" -> MoneyNotesScreen(notes = moneyNotes, onNotesChanged = { moneyNotes = it }, onBack = { navigateBack() })
                     "Settings" -> SettingsScreen { navigateTo(it) }
                     "Calendar" -> CalendarScreen(loans, transactions)
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance }, transactions)
