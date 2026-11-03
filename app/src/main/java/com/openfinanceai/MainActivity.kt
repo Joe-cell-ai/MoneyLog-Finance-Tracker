@@ -5076,7 +5076,8 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp)
                     )
-                    OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    automaticPastDueCount?.let { count -> Text("$count instalments are due before today; this historical count is prefilled. Future instalments will be tracked monthly.", color = Muted, fontSize = 10.sp) }
                     OutlinedTextField(statementOutstanding, { statementOutstanding = it.filter { c -> c.isDigit() || c == '.' }; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Statement outstanding principal (optional, ₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     if (statementDate.isNotBlank()) Text("Statement date: $statementDate", color = Muted, fontSize = 11.sp)
                     if (importedApr != null || importedProcessingFee != null || importedTotalInterest != null || importedDeclaredTotal != null || importedNetDisbursed != null || importedDocumentLoanId != null || importedPrepaymentCharge != null || importedForeclosureCharge != null || importedBounceCharge != null) {
