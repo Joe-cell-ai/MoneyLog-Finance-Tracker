@@ -76,7 +76,7 @@ internal class LoanPdfExtractionEngine(private val context: Context) {
                                     bitmap.recycle()
                                 }
                                 val selectedText = LoanPdfTextQuality.chooseBest(text, recognized)
-                                val selectedByOcr = selectedText == recognized && recognized.isNotBlank()
+                                val selectedByOcr = selectedText == recognized && (recognized != text || text.isBlank())
                                 pages += LoanPdfPageText(
                                     pageIndex + 1, selectedText,
                                     if (selectedByOcr) "ML_KIT_OCR" else "PDF_TEXT",
