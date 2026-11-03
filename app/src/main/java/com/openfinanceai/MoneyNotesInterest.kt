@@ -6,7 +6,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 /** Live balance for a Money Note. Interest is simple interest, accrued daily against remaining principal. */
-internal data class MoneyNoteBalance(
+data class MoneyNoteBalance(
     val principalPaise: Long,
     val unpaidInterestPaise: Long
 ) {
