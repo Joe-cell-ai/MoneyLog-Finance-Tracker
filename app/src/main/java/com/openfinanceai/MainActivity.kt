@@ -806,6 +806,7 @@ private fun FinanceApp() {
                 else editor.remove("user_reported_credit_score")
             }
             root.optJSONObject("monthlyCategoryBudgets")?.let { editor.putString("monthly_category_budgets", it.toString()) }
+            prefs.all.keys.filter { key -> key.startsWith("bank_schedule_") || key.startsWith("loan_document_metadata_") || key.startsWith("emi_status_") || key.startsWith("emi_amount_") || key.startsWith("emi_rescheduled_") }.forEach { editor.remove(it) }
             root.optJSONObject("bankSchedules")?.let { schedules ->
                 val keys = schedules.keys()
                 while (keys.hasNext()) {
@@ -813,7 +814,6 @@ private fun FinanceApp() {
                     if (key.startsWith("bank_schedule_")) editor.putString(key, schedules.optJSONArray(key)?.toString() ?: "[]")
                 }
             }
-            prefs.all.keys.filter { key -> key.startsWith("bank_schedule_") || key.startsWith("loan_document_metadata_") || key.startsWith("emi_status_") || key.startsWith("emi_amount_") || key.startsWith("emi_rescheduled_") }.forEach { editor.remove(it) }
             root.optJSONObject("loanDocumentMetadata")?.let { metadata ->
                 val keys = metadata.keys()
                 while (keys.hasNext()) { val key = keys.next(); if (key.startsWith("loan_document_metadata_")) editor.putString(key, metadata.optString(key, "{}")) }
