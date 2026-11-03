@@ -209,6 +209,49 @@ class LoanDocumentParserTest {
     }
 
 
+    @Test fun extractsAllSixtyDatedYesBankInstallmentsWithoutDroppingMonthlyInterest() {
+        val firstDue = java.time.LocalDate.of(2026, 2, 4)
+        val rows = (1..60).joinToString("\n") { number ->
+            val due = firstDue.plusMonths((number - 1).toLong())
+                .format(java.time.format.DateTimeFormatter.ofPattern("dd-MMM-yy", java.util.Locale.ENGLISH))
+                .uppercase(java.util.Locale.ENGLISH)
+            val opening = (61L - number) * 1_000L
+            val closing = opening - 1_000L
+            "%2d %s %,d.00 1,100.00 1,000.00 100.00 %,d.00".format(
+                java.util.Locale.ENGLISH, number, due, opening, closing
+            )
+        }
+        val statement = """
+            Corporate & Registered office: YES BANK Limited
+            Customer Name: Sample Borrower
+            Agreement No: TEST-YES-60
+            Repayment Start Date: 04-FEB-26
+            Loan Amount(INR): INR 60,000.00
+            Tenure: 60 Months
+            Repayment Schedule
+            Serial No. Due Date Opening Principal (INR) Installment Amount (INR) Principal Amount (INR) Interest Amount (INR) Closing Principal (INR)
+            $rows
+        """.trimIndent()
+        val result = LoanDocumentParser.parse(statement)
+        assertEquals(60, result.scheduleRows.size)
+        assertEquals("2026-02-04", result.scheduleRows.first().dueDate)
+        assertEquals("2031-01-04", result.scheduleRows.last().dueDate)
+        assertEquals(6_000_000L, result.scheduleRows.sumOf { it.principal })
+        assertEquals(600_000L, result.scheduleRows.sumOf { it.interest })
+        assertEquals(6_600_000L, result.scheduleRows.sumOf { it.installment })
+        val validation = LoanFinancialValidator.validate(
+            result.scheduleRows.map { row ->
+                FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal,
+                    row.installment, row.principal, row.interest, row.closingPrincipal)
+            },
+            declaredTenure = 60,
+            declaredPrincipal = 6_000_000L,
+            declaredRepayment = 6_600_000L
+        )
+        assertTrue(validation.accepted)
+        assertEquals(60, LoanDocumentScheduleMapper.map(result.scheduleRows, result.repaymentStartDate).size)
+    }
+
     @Test fun mapsInterestBeforePrincipalForDifferentLenderAmortizationLayout() {
         val statement = """
             APEX NATIONAL BANK
