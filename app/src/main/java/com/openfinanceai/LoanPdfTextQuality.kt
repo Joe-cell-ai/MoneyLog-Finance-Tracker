@@ -1,8 +1,8 @@
 package com.openfinanceai
 
 /**
- * Scores selectable PDF text for loan-document usefulness. A long page containing only
- * headers/footers is not considered successfully extracted; OCR should still be attempted.
+ * Scores selectable PDF text for loan-document usefulness. OCR is reserved for scanned
+ * pages and sparse pages that contain loan or repayment-schedule evidence.
  */
 internal object LoanPdfTextQuality {
     private val loanLabels = Regex(
