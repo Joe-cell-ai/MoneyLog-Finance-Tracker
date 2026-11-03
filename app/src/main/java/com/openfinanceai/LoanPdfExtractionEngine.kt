@@ -56,7 +56,7 @@ internal class LoanPdfExtractionEngine(private val context: Context) {
                                 startPage = pageIndex + 1
                                 endPage = pageIndex + 1
                             }.getText(pdf).trim()
-                            if (text.length >= 24) {
+                            if (!LoanPdfTextQuality.needsOcr(text)) {
                                 pages += LoanPdfPageText(pageIndex + 1, text, "PDF_TEXT", false)
                             } else {
                                 val bitmap = renderer.openPage(pageIndex).use { page ->
@@ -70,7 +70,13 @@ internal class LoanPdfExtractionEngine(private val context: Context) {
                                 } finally {
                                     bitmap.recycle()
                                 }
-                                pages += LoanPdfPageText(pageIndex + 1, recognized, "ML_KIT_OCR", recognized.length < 24)
+                                val selectedText = LoanPdfTextQuality.chooseBest(text, recognized)
+                                val selectedByOcr = selectedText === recognized
+                                pages += LoanPdfPageText(
+                                    pageIndex + 1, selectedText,
+                                    if (selectedByOcr) "ML_KIT_OCR" else "PDF_TEXT",
+                                    LoanPdfTextQuality.score(selectedText) < 20
+                                )
                             }
                         }
                     }
