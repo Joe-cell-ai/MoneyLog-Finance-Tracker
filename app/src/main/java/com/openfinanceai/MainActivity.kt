@@ -4910,9 +4910,9 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         (captureAnywhere("(?:repayment|first\\s*(?:emi|installment|instalment)|emi)\\s*(?:start|commencement|starting)?\\s*date\\s*[:\\-]?\\s*([0-9]{1,2}[\\-/ ][A-Za-z]{3,9}[\\-/ ][0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})")
                             ?: aprStartDate
                             ?: captureAnywhere("commencement\\s+of\\s+repayments?[^\\n]{0,250}?([0-9]{4}-[0-9]{2}-[0-9]{2})"))?.let { raw -> fields.put("startDate", normalizeLoanDate(raw)) }
-                        captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?borrower|borrower(?:'s)?(?:\\s+(?:full\\s+)?name)?|customer(?:\\s+(?:full\\s+)?name)?|applicant(?:\\s+(?:full\\s+)?name)?|name\\s+of\\s+(?:the\\s+)?applicant)")?.let { fields.put("borrowerName", it) }
+                        LoanIdentitySanitizer.borrower(captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?borrower|borrower(?:'s)?(?:\\s+(?:full\\s+)?name)?|customer(?:\\s+(?:full\\s+)?name)?|applicant(?:\\s+(?:full\\s+)?name)?|name\\s+of\\s+(?:the\\s+)?applicant)"))?.let { fields.put("borrowerName", it) }
                         captureAnywhere("(?:agreement|contract)\\s*(?:number|no\\.?|#)\\s*[:\\-]?\\s*([A-Z0-9/-]{4,40})")?.let { fields.put("agreementNumber", it) }
-                        (captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?(?:lender|regulated\\s+entity|bank|financial\\s+institution)|(?:lender|bank|nbfc|financial\\s+institution)\\s+name|lender|bank|financial\\s+institution|nbfc)")
+                        LoanIdentitySanitizer.lender(captureLabeledText("(?:name\\s+of\\s+(?:the\\s+)?(?:lender|regulated\\s+entity|bank|financial\\s+institution)|(?:lender|bank|nbfc|financial\\s+institution)\\s+name|lender|bank|financial\\s+institution|nbfc)")
                             ?: Regex("(?im)^\\s*(?:lender|bank|financial institution|name of (?:the )?regulated entity)\\s*[:\\-]\\s*(.{2,80})$").find(extracted)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
                             ?: Regex("(?m)^\\s*([A-Z][A-Z &.-]{3,50}\\b(?:BANK|FINANCE|FINANCIAL|LIMITED|LTD\\.?))\\s*$").find(extracted)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() })?.let { fields.put("lender", it) }
                         auditedDocument.principal?.let { fields.put("principal", LoanMoney.decimalString(it)) }
@@ -4978,6 +4978,10 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         } }
                     } ?: emptyList()
                     if (startDate.isBlank()) importedScheduleRows.firstOrNull()?.dueDate?.let { startDate = it }
+                    val mappedDates = LoanDocumentScheduleMapper.map(importedScheduleRows, startDate)
+                    if (importedScheduleRows.isNotEmpty() && mappedDates.size == importedScheduleRows.size) {
+                        paymentsMade = LoanPaidInstallmentPolicy.countPastDue(mappedDates, java.time.LocalDate.now()).toString()
+                    }
                     if (importedScheduleRows.isNotEmpty() && runCatching { java.time.LocalDate.parse(startDate) }.isFailure && importedScheduleRows.any { it.dueDate.isNullOrBlank() }) {
                         importedWarnings = (importedWarnings + "The PDF contains monthly repayment rows but no reliable first repayment date. Enter the exact first due date from the lender document before saving the monthly schedule.").distinct()
                     }
@@ -5072,7 +5076,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp)
                     )
-                    OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid (optional)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(paymentsMade, { paymentsMade = it.filter(Char::isDigit); error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("EMIs already paid") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     OutlinedTextField(statementOutstanding, { statementOutstanding = it.filter { c -> c.isDigit() || c == '.' }; error = ""; saved = false }, modifier = Modifier.fillMaxWidth(), label = { Text("Statement outstanding principal (optional, ₹)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
                     if (statementDate.isNotBlank()) Text("Statement date: $statementDate", color = Muted, fontSize = 11.sp)
                     if (importedApr != null || importedProcessingFee != null || importedTotalInterest != null || importedDeclaredTotal != null || importedNetDisbursed != null || importedDocumentLoanId != null || importedPrepaymentCharge != null || importedForeclosureCharge != null || importedBounceCharge != null) {
@@ -5157,6 +5161,12 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         } else {
                             onSave(lenderName, original, balance, count, annualRate, monthlyEmi, total.toLong(), borrowerName.trim(), agreementNumber.trim(), "", startDate)
                             if (datedPdfSchedule.isNotEmpty()) {
+                                val pastDueCount = LoanPaidInstallmentPolicy.countPastDue(datedPdfSchedule, java.time.LocalDate.now())
+                                val statusEditor = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
+                                datedPdfSchedule.take(pastDueCount).forEach { row ->
+                                    statusEditor.putString("emi_status_${lenderName}_${row.date}", "Paid")
+                                }
+                                statusEditor.apply()
                                 val liveSchedule = JSONArray()
                                 datedPdfSchedule.forEach { row -> liveSchedule.put(JSONObject().put("date", row.date).put("amount", row.amount).put("installment", row.installmentNumber)) }
                                 context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
