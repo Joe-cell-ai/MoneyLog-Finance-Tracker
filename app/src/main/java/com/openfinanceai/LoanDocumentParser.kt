@@ -73,9 +73,24 @@ internal object LoanDocumentParser {
             Regex(pattern, setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                 .find(text)?.groupValues?.getOrNull(1)?.replace(",", "")?.toDoubleOrNull()
 
-        val lender = Regex("""(?im)^\s*Lender\s*:\s*(.+?)\s*$""").find(text)?.groupValues?.get(1)?.trim()
-            ?: Regex("""(?im)^Name of the Regulated Entity\s*:\s*(.+?)\s*$""").find(text)?.groupValues?.get(1)?.trim()
-            ?: Regex("""(?im)^Corporate\s*&\s*Registered\s+office\s*:\s*([A-Z][A-Z &]+Limited)\b""").find(text)?.groupValues?.get(1)?.trim()
+        val lenderLabelValues = listOfNotNull(
+            Regex("""(?im)^\s*Lender\s*:\s*([^\r\n]{3,120}?)\s*$""").find(text)?.groupValues?.get(1)?.trim(),
+            Regex("""(?im)^\s*Name of the Regulated Entity\s*:\s*([^\r\n]{3,120}?)\s*$""").find(text)?.groupValues?.get(1)?.trim()
+        ).filter { candidate ->
+            candidate.length in 3..120 && candidate.any { it.isLetter() } &&
+                !candidate.matches(Regex("""(?i)(?:n/?a|na|unknown|not identified|not available|nil|none)"""))
+        }
+        val distinctLenderLabels = lenderLabelValues.map {
+            it.lowercase(java.util.Locale.ROOT).filter { character -> character.isLetterOrDigit() }
+        }.distinct()
+        val explicitLender = lenderLabelValues.firstOrNull()?.takeIf { distinctLenderLabels.size == 1 }
+        // A registered-office line may name a parent, servicer or document processor.
+        // Only accept the exact YES BANK issuer wording used by its statement template;
+        // all other lender names must come from an explicit lender/regulated-entity label.
+        val verifiedYesBankIssuer = Regex(
+            """(?im)^\s*Corporate\s*&\s*Registered\s+office\s*:\s*(YES\s+BANK\s+Limited)\b"""
+        ).find(text)?.groupValues?.get(1)?.replace(Regex("""\s+"""), " ")?.trim()
+        val lender = if (distinctLenderLabels.size > 1) null else explicitLender ?: verifiedYesBankIssuer
         val loanNumber = Regex("""(?i)(?:Loan\s*ID|Loan proposal\s*/\s*account\s*No\.?|Loan account\s*(?:number|no\.?)|Agreement\s*(?:No\.?|Number))\s*[:.]?\s*([A-Z0-9/-]{5,40})""")
             .find(text)?.groupValues?.get(1)
         val borrowerName = Regex("""(?im)^\s*(?:Dear\s+|Customer\s+Name\s*[:：]?\s*|[0-9]{1,2}\s+Name\s+of\s+the\s+Borrower\s*\(\s*["']Borrower["']\s*\)\s+|Applicant\s+Name\s*[:：]?\s*)([A-Z][A-Z .'-]{2,80})\s*$""")
@@ -212,6 +227,13 @@ internal object LoanDocumentParser {
         }.toList()
 
         val warnings = mutableListOf<String>()
+        if (lender == null) {
+            warnings += if (distinctLenderLabels.size > 1) {
+                "The document contains conflicting lender names. Confirm the lender manually; MoneyLog will not guess."
+            } else {
+                "Lender name was not explicitly identified in the document. Select or enter the lender manually; MoneyLog will not guess."
+            }
+        }
         if (rows.any { it.dueDate != null } && rows.any { it.dueDate == null }) {
             warnings += "Only some repayment rows contain readable due dates. MoneyLog will not invent dates for the remaining rows."
         }

@@ -478,4 +478,45 @@ class LoanDocumentParserTest {
     }
 
 
+    @Test fun doesNotGuessLenderFromUnverifiedRegisteredOfficeName() {
+        val statement = """
+            Corporate & Registered office: RANDOM CAPITAL LIMITED
+            Customer Name: Sample Borrower
+            Loan Amount: INR 10,000
+            Tenure: 2 Months
+            Repayment Schedule
+            1 10000 5000 100 5100
+            2 5000 5000 50 5050
+        """.trimIndent()
+        val result = LoanDocumentParser.parse(statement)
+        assertEquals(null, result.lender)
+        assertTrue(result.warnings.any { it.contains("will not guess") })
+    }
+
+    @Test fun conflictingLenderLabelsRemainUnidentified() {
+        val statement = """
+            Lender: Alpha Finance Limited
+            Name of the Regulated Entity: Beta Credit Limited
+            Loan Amount: INR 10,000
+            Repayment Schedule
+            1 10000 5000 100 5100
+            2 5000 5000 50 5050
+        """.trimIndent()
+        val result = LoanDocumentParser.parse(statement)
+        assertEquals(null, result.lender)
+        assertTrue(result.warnings.any { it.contains("conflicting lender names") })
+    }
+
+    @Test fun extractsYesBankOnlyFromItsVerifiedStatementIssuerLine() {
+        val statement = """
+            Corporate & Registered office: YES BANK Limited, YES BANK House
+            Loan Amount(INR): INR 10,000
+            Tenure: 2 Months
+            Repayment Schedule
+            1 10000 5000 100 5100
+            2 5000 5000 50 5050
+        """.trimIndent()
+        assertEquals("YES BANK Limited", LoanDocumentParser.parse(statement).lender)
+    }
+
 }

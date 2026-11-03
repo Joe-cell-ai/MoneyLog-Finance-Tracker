@@ -47,21 +47,26 @@ internal class LoanPdfExtractionEngine(private val context: Context) {
             PDDocument.load(file).use { pdf ->
                 require(!pdf.isEncrypted) { "Password-protected PDFs are not supported. Unlock the PDF first." }
                 require(pdf.numberOfPages in 1..300) { "PDF page count must be between 1 and 300." }
+                // One PDFBox traversal avoids rescanning the document once per page.
+                val pageTexts = PDFTextStripper().apply {
+                    setSortByPosition(true)
+                    setPageEnd("\u000C")
+                }.getText(pdf).split('\u000C').take(pdf.numberOfPages)
                 val rendererDescriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
                 rendererDescriptor.use { descriptor ->
                     PdfRenderer(descriptor).use { renderer ->
                         for (pageIndex in 0 until pdf.numberOfPages) {
-                            val text = PDFTextStripper().apply {
-                                setSortByPosition(true)
-                                startPage = pageIndex + 1
-                                endPage = pageIndex + 1
-                            }.getText(pdf).trim()
+                            val text = pageTexts.getOrNull(pageIndex).orEmpty().trim()
                             if (!LoanPdfTextQuality.needsOcr(text)) {
                                 pages += LoanPdfPageText(pageIndex + 1, text, "PDF_TEXT", false)
                             } else {
                                 val bitmap = renderer.openPage(pageIndex).use { page ->
-                                    val scale = 2
-                                    Bitmap.createBitmap(page.width * scale, page.height * scale, Bitmap.Config.ARGB_8888).also {
+                                    val scale = 1.5f
+                                    Bitmap.createBitmap(
+                                        (page.width * scale).toInt().coerceAtLeast(1),
+                                        (page.height * scale).toInt().coerceAtLeast(1),
+                                        Bitmap.Config.ARGB_8888
+                                    ).also {
                                         page.render(it, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                                     }
                                 }
@@ -71,7 +76,7 @@ internal class LoanPdfExtractionEngine(private val context: Context) {
                                     bitmap.recycle()
                                 }
                                 val selectedText = LoanPdfTextQuality.chooseBest(text, recognized)
-                                val selectedByOcr = selectedText === recognized
+                                val selectedByOcr = selectedText == recognized && (recognized != text || text.isBlank())
                                 pages += LoanPdfPageText(
                                     pageIndex + 1, selectedText,
                                     if (selectedByOcr) "ML_KIT_OCR" else "PDF_TEXT",

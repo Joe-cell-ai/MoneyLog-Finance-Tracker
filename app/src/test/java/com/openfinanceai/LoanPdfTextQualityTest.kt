@@ -6,9 +6,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LoanPdfTextQualityTest {
-    @Test fun longFooterOnlyTextStillRequestsOcr() {
+    @Test fun longFooterOnlyTextDoesNotTriggerExpensiveOcr() {
         val text = "Page 1 of 10\nCustomer support and registered office details\nwww.example-lender.in"
         assertTrue(text.length > 24)
+        assertFalse(LoanPdfTextQuality.needsOcr(text))
+    }
+
+    @Test fun sparseScheduleTextStillTriggersOcr() {
+        val text = "Repayment Schedule\n1 04-Nov-2026 10000 3500"
         assertTrue(LoanPdfTextQuality.needsOcr(text))
     }
 
