@@ -24,6 +24,9 @@ import java.text.NumberFormat
 import java.time.LocalDate
 import java.util.Locale
 import java.util.UUID
+import java.time.Duration
+import java.time.LocalDateTime
+import kotlinx.coroutines.delay
 
 /** Phase 1 records: no-interest borrowing/lending between family and friends. */
 data class MoneyNote(
@@ -69,6 +72,16 @@ fun MoneyNotesScreen(
     var direction by remember { mutableStateOf(MoneyNoteDirection.I_NEED_TO_PAY) }
     var addDialog by remember { mutableStateOf(false) }
     var paymentTarget by remember { mutableStateOf<MoneyNote?>(null) }
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val now = LocalDateTime.now()
+            val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay()
+            delay(Duration.between(now, nextMidnight).toMillis().coerceAtLeast(1_000L))
+            today = LocalDate.now()
+        }
+    }
+    val hasInterestNotes = notes.any { it.interestRateBasisPoints > 0 }
     val payTotal = notes.filter { it.direction == MoneyNoteDirection.I_NEED_TO_PAY }.sumOf { it.outstandingPaise }
     val collectTotal = notes.filter { it.direction == MoneyNoteDirection.I_NEED_TO_COLLECT }.sumOf { it.outstandingPaise }
     val visible = notes.filter { it.direction == direction }.sortedByDescending { it.date }
@@ -85,6 +98,9 @@ fun MoneyNotesScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SummaryTile("I Need to Pay", payTotal, Color(0xFFFFF0E7), Color(0xFFB65C27), Modifier.weight(1f))
             SummaryTile("I Need to Collect", collectTotal, Color(0xFFE7F4EC), Color(0xFF287A4B), Modifier.weight(1f))
+        }
+        if (hasInterestNotes) {
+            Text("Daily interest automatically updated · As of $today", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(direction == MoneyNoteDirection.I_NEED_TO_PAY, { direction = MoneyNoteDirection.I_NEED_TO_PAY }, label = { Text("I Need to Pay") })
