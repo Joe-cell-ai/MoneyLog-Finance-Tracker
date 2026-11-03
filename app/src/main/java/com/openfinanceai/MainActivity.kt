@@ -4297,8 +4297,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     .put("warnings", JSONArray(sourceWarnings))
                     .put("moneyUnit", "PAISE")
                 schedulePrefs.edit()
-                    .putString("bank_schedule_${resolvedLender}", arr.toString())
-                    .putString("loan_document_metadata_${resolvedLender}", metadata.toString())
+                    .putString("bank_schedule_${loan.lender}", arr.toString())
+                    .putString("loan_document_metadata_${loan.lender}", metadata.toString())
                     .apply()
                 importedSchedule = mappedRows.map { it.date to it.amount }
                 loanDocumentMetadata = metadata
