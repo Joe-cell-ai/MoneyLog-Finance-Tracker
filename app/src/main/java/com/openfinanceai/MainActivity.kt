@@ -4246,6 +4246,9 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 Triple(document, mappedRows, (document.warnings + pageExtraction.warnings + validation.warnings).distinct())
             }
             result.onSuccess { (document, mappedRows, sourceWarnings) ->
+                val resolvedLender = document.lender
+                    ?: loan.lender.takeIf { it.isNotBlank() }
+                    ?: "Lender not identified"
                 val financialRowsForRoom = document.scheduleRows.map { row ->
                     FinancialScheduleRow(row.installmentNumber, row.dueDate, row.openingPrincipal, row.installment,
                         row.principal, row.interest, row.closingPrincipal)
@@ -4255,7 +4258,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     document.totalInterest, document.declaredTotalRepayment, document.processingFee
                 )
                 VerifiedLoanScheduleRepository(LoanScheduleDatabase.get(context).loanScheduleDao()).save(
-                    loan.lender, uri.lastPathSegment ?: "Loan PDF", document, financialRowsForRoom, roomValidation
+                    resolvedLender, uri.lastPathSegment ?: "Loan PDF", document, financialRowsForRoom, roomValidation
                 )
                 val arr = JSONArray()
                 mappedRows.forEach { row ->
@@ -4271,7 +4274,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                         .put("closingPrincipal", row.closingPrincipal ?: JSONObject.NULL))
                 }
                 val metadata = JSONObject()
-                    .put("lender", document.lender ?: loan.lender)
+                    .put("lender", resolvedLender)
                     .put("borrowerName", document.borrowerName ?: JSONObject.NULL)
                     .put("agreementNumber", document.loanNumber ?: JSONObject.NULL)
                     .put("principal", document.principal ?: JSONObject.NULL)
@@ -4294,8 +4297,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     .put("warnings", JSONArray(sourceWarnings))
                     .put("moneyUnit", "PAISE")
                 schedulePrefs.edit()
-                    .putString("bank_schedule_${loan.lender}", arr.toString())
-                    .putString("loan_document_metadata_${loan.lender}", metadata.toString())
+                    .putString("bank_schedule_${resolvedLender}", arr.toString())
+                    .putString("loan_document_metadata_${resolvedLender}", metadata.toString())
                     .apply()
                 importedSchedule = mappedRows.map { it.date to it.amount }
                 loanDocumentMetadata = metadata
@@ -4324,7 +4327,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     Text("Loan Details & EMI Schedule", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     if (loan.borrowerName.isNotBlank()) Text("Borrower: ${loan.borrowerName}", color = Muted, fontSize = 12.sp)
                         if (loan.agreementNumber.isNotBlank()) Text("Agreement / Loan No.: ${loan.agreementNumber}", color = Muted, fontSize = 12.sp)
-                        Text(loan.lender, color = Muted, fontSize = 12.sp)
+                        Text(loanDocumentMetadata.optString("lender").takeIf { it.isNotBlank() } ?: loan.lender.ifBlank { "Lender not identified" }, color = Muted, fontSize = 12.sp)
                 }
                 Box(Modifier.clip(RoundedCornerShape(50)).background(mint).padding(horizontal = 10.dp, vertical = 7.dp)) {
                     Text("TRACKED", color = forest, fontSize = 9.sp, fontWeight = FontWeight.Bold)
