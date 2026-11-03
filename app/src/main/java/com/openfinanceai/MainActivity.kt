@@ -814,6 +814,24 @@ private fun FinanceApp() {
                     if (key.startsWith("bank_schedule_")) editor.putString(key, schedules.optJSONArray(key)?.toString() ?: "[]")
                 }
             }
+            root.optJSONObject("loanDocumentMetadata")?.let { metadata ->
+                val keys = metadata.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    if (key.startsWith("loan_document_metadata_")) editor.putString(key, metadata.optString(key, "{}"))
+                }
+            }
+            root.optJSONObject("emiPreferences")?.let { saved ->
+                val keys = saved.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val value = saved.opt(key)
+                    when {
+                        key.startsWith("emi_amount_") && value is Number -> editor.putLong(key, value.toLong())
+                        (key.startsWith("emi_status_") || key.startsWith("emi_rescheduled_")) && value is String -> editor.putString(key, value)
+                    }
+                }
+            }
             editor.apply()
             // The restored SharedPreferences schedule is the compatibility source of truth.
             // Remove old Room rows so a pre-restore schedule cannot override restored loan data.
