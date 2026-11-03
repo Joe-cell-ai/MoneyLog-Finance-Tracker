@@ -4258,7 +4258,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     document.totalInterest, document.declaredTotalRepayment, document.processingFee
                 )
                 VerifiedLoanScheduleRepository(LoanScheduleDatabase.get(context).loanScheduleDao()).save(
-                    resolvedLender, uri.lastPathSegment ?: "Loan PDF", document, financialRowsForRoom, roomValidation
+                    loan.lender, uri.lastPathSegment ?: "Loan PDF", document, financialRowsForRoom, roomValidation
                 )
                 val arr = JSONArray()
                 mappedRows.forEach { row ->
