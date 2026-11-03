@@ -17,7 +17,10 @@ internal fun loadMoneyNotes(context: Context): List<MoneyNote> = runCatching {
             MoneyNotePayment(
                 amountPaise = payment.optLong("amountPaise", 0L),
                 date = payment.optString("date", ""),
-                note = payment.optString("note", "")
+                note = payment.optString("note", ""),
+                allocation = runCatching {
+                    MoneyNotePaymentAllocation.valueOf(payment.optString("allocation", "BOTH"))
+                }.getOrDefault(MoneyNotePaymentAllocation.BOTH)
             )
         }
         val direction = runCatching {
@@ -33,7 +36,8 @@ internal fun loadMoneyNotes(context: Context): List<MoneyNote> = runCatching {
             date = item.optString("date"),
             description = item.optString("description", ""),
             paidPaise = item.optLong("paidPaise", 0L).coerceIn(0L, principal),
-            payments = payments
+            payments = payments,
+            interestRateBasisPoints = item.optInt("interestRateBasisPoints", 0).coerceAtLeast(0)
         )
     }
 }.getOrDefault(emptyList())
@@ -46,7 +50,8 @@ internal fun saveMoneyNotes(context: Context, notes: List<MoneyNote>) {
             payments.put(JSONObject()
                 .put("amountPaise", payment.amountPaise)
                 .put("date", payment.date)
-                .put("note", payment.note))
+                .put("note", payment.note)
+                .put("allocation", payment.allocation.name))
         }
         array.put(JSONObject()
             .put("id", note.id)
@@ -56,7 +61,8 @@ internal fun saveMoneyNotes(context: Context, notes: List<MoneyNote>) {
             .put("date", note.date)
             .put("description", note.description)
             .put("paidPaise", note.paidPaise)
-            .put("payments", payments))
+            .put("payments", payments)
+            .put("interestRateBasisPoints", note.interestRateBasisPoints))
     }
     context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
         .edit().putString("money_notes", array.toString()).apply()
