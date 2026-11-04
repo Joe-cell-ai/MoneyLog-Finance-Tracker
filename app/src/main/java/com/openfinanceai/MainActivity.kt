@@ -1663,7 +1663,7 @@ private fun HomeScreen(
                 IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }, modifier = Modifier.size(34.dp)) { Icon(Icons.Default.ChevronRight, "Next month", tint = Green) }
             }
         }
-        item { MoneyLogCashFlowHero(monthIncome, monthExpenses, trackedBalance, sixMonthNetTrend) }
+        item { MoneyLogCashFlowHero(trackedBalance, sixMonthNetTrend) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 CashFlowStatCard("Income", monthIncome, IncomeGreen, Color(0xFFBDF4E4), Icons.Default.ArrowDownward, Modifier.weight(1f))
@@ -1761,27 +1761,39 @@ private fun CashFlowStatCard(title: String, amount: Long, accent: Color, tint: C
 }
 
 @Composable
-private fun MoneyLogCashFlowHero(income: Long, expenses: Long, trackedBalance: Long, trend: List<Long>) {
+private fun MoneyLogCashFlowHero(trackedBalance: Long, trend: List<Long>) {
     val maxMagnitude = (trend.maxOfOrNull { kotlin.math.abs(it.toDouble()) } ?: 0.0).coerceAtLeast(1.0)
+    val latestNet = trend.lastOrNull() ?: 0L
+    val previousNet = trend.getOrNull(trend.lastIndex - 1) ?: latestNet
+    val movement = latestNet - previousNet
+    val movementLabel = when {
+        trend.size < 2 -> "Your recorded money at a glance"
+        movement > 0L -> "+${Money.format(movement)} vs previous month"
+        movement < 0L -> "−${Money.format(kotlin.math.abs(movement))} vs previous month"
+        else -> "No change vs previous month"
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(26.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF167DE5))
     ) {
-        Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFF04C6EF), Color(0xFF167DE5), Color(0xFF7154EC)))).padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFF04C6EF), Color(0xFF167DE5), Color(0xFF7154EC)))).padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text("TOTAL BALANCE", color = Color.White.copy(alpha = .88f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
-                    Text("Tracked net balance", color = Color.White.copy(alpha = .8f), fontSize = 11.sp)
+                    Text("Recorded transaction balance", color = Color.White.copy(alpha = .8f), fontSize = 11.sp)
                 }
                 Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = .18f)), contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(23.dp))
                 }
             }
-            Text((if (trackedBalance < 0L) "−" else "") + Money.format(kotlin.math.abs(trackedBalance)), color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
-            Text("Net total from recorded income and expenses", color = Color.White.copy(alpha = .82f), fontSize = 10.sp)
-            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(60.dp)) {
+            Text((if (trackedBalance < 0L) "−" else "") + Money.format(kotlin.math.abs(trackedBalance)), color = Color.White, fontSize = 29.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icon(if (movement >= 0L) Icons.Default.TrendingUp else Icons.Default.TrendingDown, null, tint = if (movement >= 0L) Color(0xFFB9F5E3) else Color(0xFFFFD5E2), modifier = Modifier.size(14.dp))
+                Text(movementLabel, color = Color.White.copy(alpha = .9f), fontSize = 10.sp, fontWeight = FontWeight.Medium)
+            }
+            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(68.dp)) {
                 if (trend.size >= 2) {
                     val points = trend.mapIndexed { index, value ->
                         val x = size.width * index / (trend.lastIndex).coerceAtLeast(1)
@@ -1803,24 +1815,8 @@ private fun MoneyLogCashFlowHero(income: Long, expenses: Long, trackedBalance: L
                             drawCircle(Color(0xFF1689F4), radius = 2.1f, center = point)
                         }
                     }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).background(Color.White.copy(alpha = .16f)).padding(11.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.TrendingUp, null, tint = Color(0xFFB9F5E3), modifier = Modifier.size(15.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text("Income", color = Color.White.copy(alpha = .86f), fontSize = 10.sp)
-                    }
-                    Text(Money.format(income), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
-                }
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).background(Color.White.copy(alpha = .16f)).padding(11.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.TrendingDown, null, tint = Color(0xFFFFD5E2), modifier = Modifier.size(15.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text("Expenses", color = Color.White.copy(alpha = .86f), fontSize = 10.sp)
-                    }
-                    Text(Money.format(expenses), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                } else {
+                    drawLine(Color.White.copy(alpha = .55f), androidx.compose.ui.geometry.Offset(0f, size.height / 2f), androidx.compose.ui.geometry.Offset(size.width, size.height / 2f), strokeWidth = 2.dp.toPx())
                 }
             }
         }
