@@ -3,6 +3,7 @@
         <package android:name="com.google.android.apps.docs" />
     </queries>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"

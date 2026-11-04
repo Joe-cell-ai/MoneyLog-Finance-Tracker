@@ -681,6 +681,31 @@ private fun FinanceApp() {
             }
         }
     }
+    fun scanBankSms() {
+        runCatching { readRecentBankSms(context) }
+            .onSuccess { parsed ->
+                val existingKeys = transactions.map { transactionKey(it) }.toSet()
+                val unique = parsed.distinctBy { transactionKey(it) }
+                    .filterNot { transactionKey(it) in existingKeys }
+                importedPreview = unique
+                importMessage = if (parsed.isEmpty()) {
+                    "No clear bank transaction alerts found in recent SMS. No messages were saved."
+                } else {
+                    "Scanned recent SMS on this device. Found " + parsed.size + " possible transaction(s); " +
+                        (parsed.size - unique.size) + " duplicate(s) will be skipped. Review below before importing."
+                }
+            }.onFailure {
+                importedPreview = emptyList()
+                importMessage = it.message ?: "Could not read SMS messages."
+            }
+    }
+    val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) scanBankSms()
+        else {
+            importedPreview = emptyList()
+            importMessage = "SMS permission was not granted. You can still import a bank CSV file."
+        }
+    }
     var loans by remember {
         mutableStateOf(loadLoans(context) ?: listOf(
             Loan("Fibe", 31000, 6200, "5 Nov"),
@@ -1059,12 +1084,22 @@ private fun FinanceApp() {
                         onExportCsv = { csvExportLauncher.launch("open-finance-transactions.csv") },
                         message = importMessage
                     )
-                    "Import transactions" -> ImportTransactionsScreen(importMessage, importedPreview.size, { csvPicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) }, {
-                        transactions = (importedPreview + transactions).distinctBy { transactionKey(it) }
-                        saveTransactions(context, transactions)
-                        importMessage = "Imported ${importedPreview.size} transaction(s). Saved on this device."
-                        importedPreview = emptyList()
-                    })
+                    "Import transactions" -> ImportTransactionsScreen(
+                        message = importMessage,
+                        preview = importedPreview,
+                        onChooseFile = { csvPicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) },
+                        onScanSms = {
+                            if (context.checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED) scanBankSms()
+                            else smsPermissionLauncher.launch(Manifest.permission.READ_SMS)
+                        },
+                        onImport = {
+                            val count = importedPreview.size
+                            transactions = (importedPreview + transactions).distinctBy { transactionKey(it) }
+                            saveTransactions(context, transactions)
+                            importMessage = "Imported " + count + " transaction(s). Saved on this device."
+                            importedPreview = emptyList()
+                        }
+                    )
                     "Appearance" -> AppearanceScreen()
                     "Privacy & Security" -> PrivacySecurityScreen { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) }
                     "Notifications" -> NotificationsSettingsScreen(
@@ -6690,8 +6725,9 @@ private fun csvEscape(value: String): String =
 @Composable
 private fun ImportTransactionsScreen(
     message: String,
-    previewCount: Int,
+    preview: List<Transaction>,
     onChooseFile: () -> Unit,
+    onScanSms: () -> Unit,
     onImport: () -> Unit
 ) {
     LazyColumn(
@@ -6700,34 +6736,120 @@ private fun ImportTransactionsScreen(
     ) {
         item {
             Text("Import transactions", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Choose a bank statement CSV file. Review the detected rows before importing.", color = Muted)
+            Text("Import a bank statement or detect transaction alerts from SMS. Nothing is saved until you confirm.", color = Muted)
+        }
+        item {
+            InfoCard(
+                "Scan bank SMS",
+                "With your permission, MoneyLog checks recent SMS messages on this device for clear debit and credit alerts. Message contents are processed locally and are not uploaded. OTPs and unclear messages are ignored.",
+                Icons.Default.Sms
+            )
+        }
+        item {
+            Button(onClick = onScanSms, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.MarkEmailRead, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Allow access & scan bank SMS")
+            }
+            Text("Android will ask for SMS permission. You can deny it and continue using CSV import.", color = Muted, fontSize = 12.sp)
         }
         item {
             InfoCard(
                 "CSV import",
-                "Use a CSV with columns such as Date, Description/Narration, Amount, and optionally Category or separate Debit and Credit columns. Duplicate transactions are skipped.",
-                Icons.Default.Info
+                "Choose a bank statement CSV with columns such as Date, Description/Narration, Amount, and optionally Category or separate Debit and Credit columns. Duplicate transactions are skipped.",
+                Icons.Default.FolderOpen
             )
         }
         item {
-            Button(onClick = onChooseFile, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = onChooseFile, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.FolderOpen, null)
                 Spacer(Modifier.width(8.dp))
                 Text("Choose CSV file")
             }
         }
-        if (message.isNotBlank()) item {
-            Text(message, color = Ink)
+        if (message.isNotBlank()) item { Text(message, color = Ink) }
+        if (preview.isNotEmpty()) {
+            item { Text("Review before saving (" + preview.size + ")", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+            items(preview.take(100)) { transaction ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder())
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(
+                            Modifier.size(42.dp).clip(CircleShape).background((if (transaction.income) IncomeGreen else ExpenseRed).copy(alpha = .13f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(if (transaction.income) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward, null, tint = if (transaction.income) IncomeGreen else ExpenseRed)
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(transaction.title, color = Ink, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                            Text(transaction.date + " · " + transaction.category, color = Muted, fontSize = 12.sp)
+                            Text(if (transaction.income) "Income" else "Expense", color = if (transaction.income) IncomeGreen else ExpenseRed, fontSize = 12.sp)
+                        }
+                        Text((if (transaction.income) "+" else "−") + NumberFormat.getCurrencyInstance(Locale("en", "IN")).format(transaction.amount), color = if (transaction.income) IncomeGreen else ExpenseRed, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            if (preview.size > 100) item { Text("Showing the first 100 of " + preview.size + " detected transactions.", color = Muted, fontSize = 12.sp) }
         }
         item {
-            Text("New transactions ready: $previewCount", color = Ink, fontWeight = FontWeight.SemiBold)
-            Button(
-                onClick = onImport,
-                enabled = previewCount > 0,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Import transactions") }
+            Text("New transactions ready: " + preview.size, color = Ink, fontWeight = FontWeight.SemiBold)
+            Button(onClick = onImport, enabled = preview.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Import reviewed transactions") }
         }
     }
+}
+
+private fun readRecentBankSms(context: Context): List<Transaction> {
+    val cutoff = System.currentTimeMillis() - 90L * 24L * 60L * 60L * 1000L
+    val results = mutableListOf<Transaction>()
+    val amountPattern = Regex("""(?i)(?:₹|rs\.?|inr)\s*([0-9][0-9,]*(?:\.\d{1,2})?)""")
+    val debitPattern = Regex("""(?i)\b(debited|debit|withdrawn|withdrawal|spent|paid|purchase|sent|transferred to|payment successful|upi txn debit)\b""")
+    val creditPattern = Regex("""(?i)\b(credited|credit|received|deposited|refund received|cashback received|transferred from)\b""")
+    val ignorePattern = Regex("""(?i)\b(otp|one[- ]time password|verification code|failed|declined|unsuccessful|not debited|not credited|will be debited)\b""")
+    val projection = arrayOf(android.provider.Telephony.Sms._ID, android.provider.Telephony.Sms.ADDRESS, android.provider.Telephony.Sms.BODY, android.provider.Telephony.Sms.DATE)
+    context.contentResolver.query(
+        android.provider.Telephony.Sms.Inbox.CONTENT_URI,
+        projection,
+        android.provider.Telephony.Sms.DATE + " >= ?",
+        arrayOf(cutoff.toString()),
+        android.provider.Telephony.Sms.DATE + " DESC"
+    )?.use { cursor ->
+        val idIndex = cursor.getColumnIndex(android.provider.Telephony.Sms._ID)
+        val addressIndex = cursor.getColumnIndex(android.provider.Telephony.Sms.ADDRESS)
+        val bodyIndex = cursor.getColumnIndex(android.provider.Telephony.Sms.BODY)
+        val dateIndex = cursor.getColumnIndex(android.provider.Telephony.Sms.DATE)
+        var scanned = 0
+        while (cursor.moveToNext() && scanned < 500) {
+            scanned++
+            val body = cursor.getString(bodyIndex).orEmpty()
+            if (body.isBlank() || ignorePattern.containsMatchIn(body)) continue
+            val match = amountPattern.find(body) ?: continue
+            val amount = match.groupValues[1].replace(",", "").substringBefore(".").toLongOrNull() ?: continue
+            if (amount <= 0L) continue
+            val isDebit = debitPattern.containsMatchIn(body)
+            val isCredit = creditPattern.containsMatchIn(body)
+            if (isDebit == isCredit) continue
+            val smsDate = cursor.getLong(dateIndex)
+            val date = java.time.Instant.ofEpochMilli(smsDate).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+            val sender = if (addressIndex >= 0) cursor.getString(addressIndex).orEmpty().trim() else ""
+            val id = if (idIndex >= 0) cursor.getString(idIndex).orEmpty() else sender + "-" + smsDate
+            results += Transaction(
+                title = if (sender.isBlank()) "Bank SMS transaction" else "SMS transaction · " + sender,
+                category = if (isCredit) "Other income" else "Bank transfer",
+                date = date,
+                amount = amount,
+                income = isCredit,
+                source = "SMS import",
+                notificationKey = "sms-import:" + id,
+                captureStatus = "Needs review",
+                notes = "Detected from a bank SMS. Verify details before relying on this entry."
+            )
+        }
+    }
+    return results
 }
 
 private fun parseTransactionCsv(csv: String): List<Transaction> {
