@@ -119,7 +119,7 @@ fun MoneyNotesScreen(
     }.sortedByDescending { it.date }
 
     Column(
-        modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFF5FAFF), Color(0xFFF8F5FF), Color(0xFFEAFBFF)))).padding(horizontal = 16.dp),
+        modifier.fillMaxSize().background(appPageBrush()).padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -136,7 +136,7 @@ fun MoneyNotesScreen(
             MoneyNotesSummary("I Need to Pay", payTotal, "${notes.count { it.direction == MoneyNoteDirection.I_NEED_TO_PAY && it.status != MoneyNoteStatus.SETTLED }} Active", MnPaleBlue, MnBlue, Modifier.weight(1f), Icons.Default.ArrowUpward)
             MoneyNotesSummary("I Need to Collect", collectTotal, "${notes.count { it.direction == MoneyNoteDirection.I_NEED_TO_COLLECT && it.status != MoneyNoteStatus.SETTLED }} Active", MnPaleGreen, Color(0xFF169B69), Modifier.weight(1f), Icons.Default.ArrowDownward)
         }
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = .88f)).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(if (AppBlueGlass) Color(0xBFFFFFFF) else Color.White.copy(alpha = .88f)).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             listOf("All", "Pay", "Collect", "History").forEach { item ->
                 val active = filter == item
                 Surface(
@@ -155,7 +155,7 @@ fun MoneyNotesScreen(
             Text("${visible.size} records", color = MnMuted, style = MaterialTheme.typography.labelSmall)
         }
         if (visible.isEmpty()) {
-            Surface(Modifier.fillMaxWidth(), color = Color.White, shape = RoundedCornerShape(24.dp), shadowElevation = 3.dp) {
+            Surface(Modifier.fillMaxWidth(), color = appGlassSurface(), shape = RoundedCornerShape(24.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null, shadowElevation = if (AppBlueGlass) 7.dp else 3.dp) {
                 Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Surface(color = MnPaleBlue, shape = CircleShape) { Icon(Icons.Default.Wallet, null, tint = MnBlue, modifier = Modifier.padding(16.dp).size(30.dp)) }
                     Text(if (filter == "History") "No payment history yet" else "No money notes yet", color = MnInk, fontWeight = FontWeight.Bold)
@@ -169,7 +169,7 @@ fun MoneyNotesScreen(
                     MoneyNoteCardV2(note, onClick = { selectedNoteId = note.id }, onPayment = { paymentTarget = note })
                 }
                 item {
-                    Surface(Modifier.fillMaxWidth(), color = Color.White.copy(alpha = .8f), shape = RoundedCornerShape(18.dp)) {
+                    Surface(Modifier.fillMaxWidth(), color = if (AppBlueGlass) Color(0xBFFFFFFF) else Color.White.copy(alpha = .8f), shape = RoundedCornerShape(18.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null) {
                         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.History, null, tint = MnCyan)
                             Spacer(Modifier.width(8.dp))
@@ -212,10 +212,10 @@ fun MoneyNotesScreen(
 
 @Composable
 private fun MoneyNotesSummary(title: String, amount: Long, caption: String, bg: Color, accent: Color, modifier: Modifier, icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Surface(modifier, color = bg, shape = RoundedCornerShape(22.dp), shadowElevation = 2.dp) {
+    Surface(modifier, color = if (AppBlueGlass) appGlassSurface() else bg, shape = RoundedCornerShape(22.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null, shadowElevation = if (AppBlueGlass) 7.dp else 2.dp) {
         Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Surface(color = Color.White.copy(alpha = .8f), shape = CircleShape) { Icon(icon, null, tint = accent, modifier = Modifier.padding(7.dp).size(17.dp)) }
+                Surface(color = if (AppBlueGlass) Color(0xBFFFFFFF) else Color.White.copy(alpha = .8f), shape = CircleShape) { Icon(icon, null, tint = accent, modifier = Modifier.padding(7.dp).size(17.dp)) }
                 Text(title, color = accent, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
             }
             Text(moneyNotesCurrency(amount), color = MnInk, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
@@ -229,10 +229,10 @@ private fun MoneyNoteCardV2(note: MoneyNote, onClick: () -> Unit, onPayment: () 
     val owes = note.direction == MoneyNoteDirection.I_NEED_TO_PAY
     val accent = if (owes) MnBlue else Color(0xFF169B69)
     val statusColor = when (note.status) { MoneyNoteStatus.PENDING -> Color(0xFFB7791F); MoneyNoteStatus.PARTIALLY_PAID -> MnPurple; MoneyNoteStatus.SETTLED -> Color(0xFF15965F) }
-    Surface(onClick = onClick, modifier = Modifier.fillMaxWidth(), color = Color.White, shape = RoundedCornerShape(20.dp), shadowElevation = 3.dp) {
+    Surface(onClick = onClick, modifier = Modifier.fillMaxWidth(), color = appGlassSurface(), shape = RoundedCornerShape(20.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null, shadowElevation = if (AppBlueGlass) 7.dp else 3.dp) {
         Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(color = when (note.loanType) { MoneyNoteLoanType.GOLD_LOAN -> Color(0xFFFFF0C7); MoneyNoteLoanType.LOCAL_LOAN -> MnPalePurple; MoneyNoteLoanType.FAMILY_FRIENDS -> MnPaleGreen; MoneyNoteLoanType.OTHER -> MnPaleBlue }, shape = RoundedCornerShape(14.dp)) {
+                Surface(color = when (note.loanType) { MoneyNoteLoanType.GOLD_LOAN -> Color(0xFFFFF0C7); MoneyNoteLoanType.LOCAL_LOAN -> MnPalePurple; MoneyNoteLoanType.FAMILY_FRIENDS -> MnPaleGreen; MoneyNoteLoanType.OTHER -> MnPaleBlue }, shape = RoundedCornerShape(14.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null) {
                     Icon(note.loanType.icon(), null, tint = accent, modifier = Modifier.padding(11.dp).size(23.dp))
                 }
                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
@@ -264,7 +264,7 @@ private fun MoneyNoteDetailDialogV2(note: MoneyNote, onDismiss: () -> Unit, onEd
     val balance = note.balance
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFFF8FBFF),
+        containerColor = if (AppBlueGlass) appGlassSurface() else Color(0xFFF8FBFF),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(color = MnPaleBlue, shape = RoundedCornerShape(12.dp)) { Icon(note.loanType.icon(), null, tint = MnBlue, modifier = Modifier.padding(10.dp)) }
@@ -278,7 +278,7 @@ private fun MoneyNoteDetailDialogV2(note: MoneyNote, onDismiss: () -> Unit, onEd
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Surface(color = Color.White, shape = RoundedCornerShape(18.dp)) {
+                Surface(color = appGlassSurface(), shape = RoundedCornerShape(18.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null) {
                     Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Total Due", color = MnMuted)
                         Text(moneyNotesCurrency(note.outstandingPaise), color = MnBlue, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
@@ -361,7 +361,7 @@ private fun AddMoneyNoteDialogV2(existing: MoneyNote? = null, onDismiss: () -> U
                             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                 rowTypes.forEach { item ->
                                     val selected = type == item
-                                    Surface(onClick = { type = item }, modifier = Modifier.weight(1f), color = if (selected) MnPaleBlue else Color.White, shape = RoundedCornerShape(14.dp), border = androidx.compose.foundation.BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) MnBlue else MnLine)) {
+                                    Surface(onClick = { type = item }, modifier = Modifier.weight(1f), color = if (selected) MnPaleBlue else appGlassSurface(), shape = RoundedCornerShape(14.dp), border = androidx.compose.foundation.BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) MnBlue else if (AppBlueGlass) appGlassBorder() else MnLine)) {
                                         Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                             Icon(item.icon(), null, tint = if (selected) MnBlue else MnMuted, modifier = Modifier.size(23.dp))
                                             Text(item.label, color = if (selected) MnBlue else MnInk, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
@@ -417,7 +417,7 @@ private fun RecordMoneyNotePaymentDialogV2(note: MoneyNote, onDismiss: () -> Uni
         title = { Text("Record Payment", color = MnInk, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Surface(color = Color.White, shape = RoundedCornerShape(16.dp)) {
+                Surface(color = appGlassSurface(), shape = RoundedCornerShape(16.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null) {
                     Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(note.loanType.icon(), null, tint = MnBlue, modifier = Modifier.size(28.dp))
                         Column(Modifier.weight(1f).padding(start = 10.dp)) {
@@ -467,7 +467,7 @@ private fun RecordMoneyNotePaymentDialogV2(note: MoneyNote, onDismiss: () -> Uni
 private fun PaymentSuccessDialogV2(note: MoneyNote, payment: MoneyNotePayment, onDismiss: () -> Unit, onDetails: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
+        containerColor = appGlassSurface(),
         icon = { Surface(color = MnPaleGreen, shape = CircleShape) { Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF16A765), modifier = Modifier.padding(14.dp).size(38.dp)) } },
         title = { Text("Payment Successful!", color = Color(0xFF147443), fontWeight = FontWeight.ExtraBold) },
         text = {
