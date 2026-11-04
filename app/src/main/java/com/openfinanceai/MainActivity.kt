@@ -702,7 +702,7 @@ private fun FinanceApp() {
         if (granted) scanBankSms()
         else {
             importedPreview = emptyList()
-            importMessage = "SMS permission was not granted. You can still import a bank CSV file."
+            importMessage = "Android blocked SMS access. If this app was installed from an APK, open App Info, tap the three-dot menu and choose Allow restricted settings (if shown), then open Permissions > SMS and allow access. Return to MoneyLog and try again. You can always use CSV import instead."
         }
     }
     var loans by remember {
@@ -1090,6 +1090,12 @@ private fun FinanceApp() {
                         onScanSms = {
                             if (context.checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED) scanBankSms()
                             else smsPermissionLauncher.launch(Manifest.permission.READ_SMS)
+                        },
+                        onOpenAppSettings = {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = android.net.Uri.parse("package:" + context.packageName)
+                            }
+                            context.startActivity(intent)
                         },
                         onImport = {
                             val count = importedPreview.size
@@ -6735,6 +6741,7 @@ private fun ImportTransactionsScreen(
     preview: List<Transaction>,
     onChooseFile: () -> Unit,
     onScanSms: () -> Unit,
+    onOpenAppSettings: () -> Unit,
     onImport: () -> Unit
 ) {
     LazyColumn(
@@ -6758,7 +6765,16 @@ private fun ImportTransactionsScreen(
                 Spacer(Modifier.width(8.dp))
                 Text("Allow access & scan bank SMS")
             }
-            Text("Android will ask for SMS permission. You can deny it and continue using CSV import.", color = Muted, fontSize = 12.sp)
+            Text(
+                "If Android says access was denied or restricted, open App Info. On some APK installs, use the three-dot menu > Allow restricted settings (if shown), then Permissions > SMS. Android controls this restriction; MoneyLog cannot bypass it.",
+                color = Muted,
+                fontSize = 12.sp
+            )
+            OutlinedButton(onClick = onOpenAppSettings, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Settings, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Open app settings")
+            }
         }
         item {
             InfoCard(
