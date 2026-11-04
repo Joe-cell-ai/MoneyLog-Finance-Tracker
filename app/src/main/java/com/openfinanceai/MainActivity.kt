@@ -47,6 +47,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -79,11 +81,14 @@ private var Orange by mutableStateOf(Color(0xFFE69A45))
 private var Purple by mutableStateOf(Color(0xFF8A63D2))
 private var Blue by mutableStateOf(Color(0xFF0284C7))
 private var AppDarkTheme by mutableStateOf(false)
+private var AppBlueGlass by mutableStateOf(false)
+private fun appPageBrush(): Brush = if (AppBlueGlass) Brush.linearGradient(listOf(Color(0xFFEAF8FF), Color(0xFFF0ECFF), Color(0xFFDDFBFF))) else SolidColor(Page)
 private var AppCompactLayout by mutableStateOf(false)
 private var AppFontScale by mutableStateOf(1f)
 
 private fun applyAppearance(theme: String, accent: String, layout: String, fontSize: String, systemDark: Boolean = false) {
-    val accentColor = when (accent) {
+    AppBlueGlass = theme == "Blue Glass"
+    val accentColor = if (AppBlueGlass) Color(0xFF06B6D4) else when (accent) {
         "Green" -> Color(0xFF07966F)
         "Blue" -> Color(0xFF0284C7)
         "Purple" -> Color(0xFF8B4DE8)
@@ -98,9 +103,9 @@ private fun applyAppearance(theme: String, accent: String, layout: String, fontS
     Mint = accentColor.copy(alpha = if (AppDarkTheme) 0.24f else 0.12f)
     IncomeTint = Mint
     LavenderTint = Mint
-    Page = if (AppDarkTheme) Color(0xFF121713) else Color(0xFFF7F7FB)
-    Ink = if (AppDarkTheme) Color(0xFFF1F5F2) else Color(0xFF22243A)
-    Muted = if (AppDarkTheme) Color(0xFFB0BDB5) else Color(0xFF74788D)
+    Page = if (AppDarkTheme) Color(0xFF10182D) else if (AppBlueGlass) Color(0xFFEAF6FF) else Color(0xFFF7F7FB)
+    Ink = if (AppDarkTheme) Color(0xFFF1F5F2) else Color(0xFF172554)
+    Muted = if (AppDarkTheme) Color(0xFFB0BBD0) else Color(0xFF78849A)
 }
 private var Money by mutableStateOf(NumberFormat.getCurrencyInstance(Locale("en", "IN")))
 private fun applyCurrency(currency: String) {
@@ -1779,7 +1784,7 @@ private fun ActivityScreen(transactions: List<Transaction>, onTransactionLongPre
         .filter { query.isBlank() || listOf(it.title, it.category, it.source, it.notes, it.date).any { field -> field.contains(query.trim(), ignoreCase = true) } }
     val grouped = visible.groupBy { it.date }
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Page),
+        modifier = Modifier.fillMaxSize().background(appPageBrush()),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -1917,7 +1922,7 @@ private fun ReportsScreen(
     }.groupBy { it.first }.mapValues { entry -> entry.value.sumOf { it.second } }.toList().sortedByDescending { it.second }
     val views = listOf("Calendar", "By category", "By tag", "Total")
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Page),
+        modifier = Modifier.fillMaxSize().background(appPageBrush()),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -2893,7 +2898,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
         store.saveCategories(values)
         onCategoriesChanged()
     }
-    Column(Modifier.fillMaxSize().background(Page)) {
+    Column(Modifier.fillMaxSize().background(appPageBrush())) {
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
             item {
                 Text("Category Management", fontSize = 25.sp, color = Ink, fontWeight = FontWeight.Bold)
@@ -3028,7 +3033,7 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
     fun persistTags(values: List<String>) {
         store.saveTags(values)
     }
-    Column(Modifier.fillMaxSize().background(Page).padding(horizontal = 10.dp, vertical = 8.dp)
+    Column(Modifier.fillMaxSize().background(appPageBrush()).padding(horizontal = 10.dp, vertical = 8.dp)
         .clip(RoundedCornerShape(24.dp)).background(Color(0xFFFCFBFF))
         .border(1.dp, Color(0xFFDCE8F7), RoundedCornerShape(24.dp))) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -3150,7 +3155,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
         Triple("About", "App version and information", Icons.Default.Info)
     )
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Page),
+        modifier = Modifier.fillMaxSize().background(appPageBrush()),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -3333,7 +3338,7 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
     var newPin by remember { mutableStateOf("") }
     var confirmPin by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf("") }
-    LazyColumn(modifier = Modifier.fillMaxSize().background(Page), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+    LazyColumn(modifier = Modifier.fillMaxSize().background(appPageBrush()), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { Text("Privacy & Security", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold); Text("Understand how your data is handled", color = Muted, fontSize = 13.sp) }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(19.dp)) {
@@ -3447,7 +3452,7 @@ private fun NotificationsSettingsScreen(onOpenPaymentSettings: () -> Unit, onPre
     var budgetAlerts by remember { mutableStateOf(preferences.getBoolean("settings_budget_alerts", true)) }
     var monthlySummary by remember { mutableStateOf(preferences.getBoolean("settings_monthly_summary", false)) }
     fun persist(key: String, value: Boolean) { preferences.edit().putBoolean(key, value).apply() }
-    LazyColumn(modifier = Modifier.fillMaxSize().background(Page), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+    LazyColumn(modifier = Modifier.fillMaxSize().background(appPageBrush()), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { Text("Notifications", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold); Text("Choose which MoneyLog alerts you want", color = Muted, fontSize = 13.sp) }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(19.dp)) {
@@ -3493,7 +3498,7 @@ private fun SettingToggleRow(title: String, subtitle: String, checked: Boolean, 
 
 @Composable
 private fun AboutSettingsScreen() {
-    LazyColumn(modifier = Modifier.fillMaxSize().background(Page), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+    LazyColumn(modifier = Modifier.fillMaxSize().background(appPageBrush()), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(22.dp)) {
                 Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -3643,7 +3648,7 @@ private fun BackupSecurityScreen(
         if (automaticBackup) backupScheduleMessage = scheduleAutomaticBackup(backupContext)
     }
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Page),
+        modifier = Modifier.fillMaxSize().background(appPageBrush()),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -3815,13 +3820,13 @@ private fun AppearanceScreen() {
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
     LaunchedEffect(theme, accent, layout, fontSize, systemDark) { applyAppearance(theme, accent, layout, fontSize, systemDark) }
     LaunchedEffect(currency) { applyCurrency(currency) }
-    val accents = listOf("Green" to Color(0xFF07966F), "Blue" to Color(0xFF0284C7), "Purple" to Color(0xFF8B4DE8), "Orange" to Color(0xFFF59E0B), "Pink" to Color(0xFFEC4899))
+    val accents = listOf("Green" to Color(0xFF07966F), "Blue" to Color(0xFF1D4ED8), "Purple" to Color(0xFF9333EA), "Orange" to Color(0xFFF59E0B), "Pink" to Color(0xFFF472B6), "Cyan" to Color(0xFF06B6D4))
     val selectedAccent = accents.firstOrNull { it.first == accent }?.second ?: Green
     fun save(key: String, value: String) { preferences.edit().putString(key, value).apply() }
     val cardShape = RoundedCornerShape(24.dp)
     val softSurface = if (AppDarkTheme) Color(0xFF1B2430) else Color.White
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Page),
+        modifier = Modifier.fillMaxSize().background(appPageBrush()),
         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -3843,7 +3848,7 @@ private fun AppearanceScreen() {
                             Text("ACTIVE", Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = selectedAccent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                         }
                     }
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(19.dp)).background(Page).padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(19.dp)).background(appPageBrush()).padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(43.dp).clip(RoundedCornerShape(15.dp)).background(selectedAccent), contentAlignment = Alignment.Center) {
                             Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(23.dp))
                         }
@@ -3859,7 +3864,7 @@ private fun AppearanceScreen() {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                         listOf("Income" to "₹42,000", "Expense" to "₹18,500").forEachIndexed { index, pair ->
-                            Column(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).background(Page).padding(11.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Column(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).background(appPageBrush()).padding(11.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(pair.first, color = Muted, fontSize = 10.sp)
                                 Text(pair.second, color = if (index == 0) Color(0xFF0E9F85) else ExpenseRed, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                             }
@@ -3870,25 +3875,27 @@ private fun AppearanceScreen() {
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = softSurface), shape = cardShape) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
-                    Text("Display mode", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("Choose how MoneyLog looks", color = Muted, fontSize = 11.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                        listOf("Light", "Dark", "System").forEach { value ->
-                            val selected = theme == value
-                            Column(
-                                Modifier.weight(1f).clip(RoundedCornerShape(17.dp))
-                                    .background(if (selected) selectedAccent.copy(alpha = .10f) else Page)
-                                    .then(if (selected) Modifier.border(1.5.dp, selectedAccent, RoundedCornerShape(17.dp)) else Modifier)
-                                    .clickable { theme = value; save("appearance_theme", value) }
-                                    .padding(vertical = 13.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(7.dp)
-                            ) {
-                                Icon(when (value) { "Light" -> Icons.Default.LightMode; "Dark" -> Icons.Default.DarkMode; else -> Icons.Default.SettingsBrightness }, null, tint = if (selected) selectedAccent else Muted, modifier = Modifier.size(23.dp))
-                                Text(value, color = if (selected) selectedAccent else Ink, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
-                                if (selected) Icon(Icons.Default.CheckCircle, null, tint = selectedAccent, modifier = Modifier.size(15.dp))
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Choose your theme", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Your choice updates the app immediately", color = Muted, fontSize = 11.sp)
+                    listOf("Blue Glass", "Classic", "Dark Mode", "Custom Colors").forEach { value ->
+                        val selected = when (value) { "Blue Glass" -> theme == "Blue Glass"; "Classic" -> theme == "Light" || theme == "System"; "Dark Mode" -> theme == "Dark"; else -> theme == "Custom Colors" }
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (selected) selectedAccent.copy(alpha = .10f) else Page)
+                            .then(if (selected) Modifier.border(1.5.dp, selectedAccent, RoundedCornerShape(16.dp)) else Modifier)
+                            .clickable {
+                                theme = when (value) { "Blue Glass" -> "Blue Glass"; "Classic" -> "Light"; "Dark Mode" -> "Dark"; else -> "Custom Colors" }
+                                if (value == "Blue Glass") { accent = "Cyan"; save("appearance_accent", accent) }
+                                save("appearance_theme", theme)
+                            }.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(when(value) { "Blue Glass" -> Brush.linearGradient(listOf(Color(0xFF38A3E5), Color(0xFF9333EA))); "Dark Mode" -> SolidColor(Color(0xFF0B1530)); "Custom Colors" -> SolidColor(selectedAccent); else -> SolidColor(Color(0xFFE5E7EB)) }), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Palette, null, tint = if (value == "Classic") Color(0xFF64748B) else Color.White)
                             }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(value, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                Text(when(value) { "Blue Glass" -> "Blue · cyan · purple glass style"; "Classic" -> "Clean and simple"; "Dark Mode" -> "Dark surfaces and accents"; else -> "Choose a color below" }, color = Muted, fontSize = 10.sp)
+                            }
+                            if (selected) Icon(Icons.Default.CheckCircle, null, tint = selectedAccent)
                         }
                     }
                 }
@@ -3929,7 +3936,7 @@ private fun AppearanceScreen() {
                         }
                     }
                     Text("Text size", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Page).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(appPageBrush()).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf("Small", "Medium", "Large").forEach { value ->
                             val selected = fontSize == value
                             Box(Modifier.weight(1f).clip(RoundedCornerShape(11.dp)).background(if (selected) selectedAccent else Color.Transparent).clickable { fontSize = value; save("appearance_font_size", value) }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
@@ -6135,7 +6142,7 @@ private fun ImportTransactionsScreen(
     onImport: () -> Unit
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Page).padding(16.dp),
+        modifier = Modifier.fillMaxSize().background(appPageBrush()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
