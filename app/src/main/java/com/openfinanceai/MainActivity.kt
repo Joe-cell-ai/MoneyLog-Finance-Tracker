@@ -927,27 +927,34 @@ private fun FinanceApp() {
             containerColor = Page,
             topBar = {},
             bottomBar = {
-                NavigationBar(
-                    containerColor = Color.White,
-                    tonalElevation = 3.dp,
-                    windowInsets = NavigationBarDefaults.windowInsets
+                Surface(
+                    modifier = if (AppBlueGlass) Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp) else Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(if (AppBlueGlass) 28.dp else 0.dp),
+                    color = Color.White,
+                    shadowElevation = if (AppBlueGlass) 12.dp else 0.dp
                 ) {
-                    listOf("Home", "Activity", "Reports", "Loans", "Money Notes", "Settings").forEach { name ->
-                        val icon = when (name) {
-                            "Home" -> Icons.Default.Home
-                            "Activity" -> Icons.Default.ReceiptLong
-                            "Reports" -> Icons.Default.BarChart
-                            "Loans" -> Icons.Default.AccountBalance
-                            "Money Notes" -> Icons.Default.Notes
-                            else -> Icons.Default.Settings
+                    NavigationBar(
+                        containerColor = Color.White,
+                        tonalElevation = if (AppBlueGlass) 0.dp else 3.dp,
+                        windowInsets = NavigationBarDefaults.windowInsets
+                    ) {
+                        listOf("Home", "Activity", "Reports", "Loans", "Money Notes", "Settings").forEach { name ->
+                            val icon = when (name) {
+                                "Home" -> Icons.Default.Home
+                                "Activity" -> Icons.Default.ReceiptLong
+                                "Reports" -> Icons.Default.BarChart
+                                "Loans" -> Icons.Default.AccountBalance
+                                "Money Notes" -> Icons.Default.Notes
+                                else -> Icons.Default.Settings
+                            }
+                            NavigationBarItem(
+                                selected = tab == name,
+                                onClick = { navigateTo(name) },
+                                icon = { Icon(icon, name) },
+                                label = { Text(name, fontSize = 10.sp) },
+                                colors = NavigationBarItemDefaults.colors(selectedIconColor = Green, selectedTextColor = Green, unselectedIconColor = Muted, unselectedTextColor = Muted, indicatorColor = Mint)
+                            )
                         }
-                        NavigationBarItem(
-                            selected = tab == name,
-                            onClick = { navigateTo(name) },
-                            icon = { Icon(icon, name) },
-                            label = { Text(name, fontSize = 10.sp) },
-                            colors = NavigationBarItemDefaults.colors(selectedIconColor = Green, selectedTextColor = Green, unselectedIconColor = Muted, unselectedTextColor = Muted, indicatorColor = Mint)
-                        )
                     }
                 }
             },
