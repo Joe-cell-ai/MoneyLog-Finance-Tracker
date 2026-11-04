@@ -7016,61 +7016,26 @@ private fun readRecentBankSms(context: Context): List<Transaction> {
         while (cursor.moveToNext() && scanned < 500) {
             scanned++
             val body = cursor.getString(bodyIndex).orEmpty()
-            if (body.isBlank() || ignorePattern.containsMatchIn(body)) continue
-            val match = amountPattern.find(body) ?: continue
-            val amountText = match.groupValues[1].replace(",", "")
-            val amount = amountText.toBigDecimalOrNull()?.setScale(0, java.math.RoundingMode.HALF_UP)?.longValueExactOrNull() ?: continue
-            if (amount <= 0L) continue
-
-            // Decide direction from the wording immediately before the amount first.
-            // Some bank SMS messages also say the payee was "credited", even though
-            // the customer's account was debited; looking at the entire SMS is ambiguous.
-            val beforeAmount = body.substring(0, match.range.first)
-            val debitBeforeAmount = debitPattern.containsMatchIn(beforeAmount)
-            val creditBeforeAmount = creditPattern.containsMatchIn(beforeAmount)
-            val isDebit: Boolean
-            val isCredit: Boolean
-            when {
-                debitBeforeAmount && !creditBeforeAmount -> { isDebit = true; isCredit = false }
-                creditBeforeAmount && !debitBeforeAmount -> { isDebit = false; isCredit = true }
-                else -> {
-                    isDebit = debitPattern.containsMatchIn(body)
-                    isCredit = creditPattern.containsMatchIn(body)
-                }
-            }
-            if (isDebit == isCredit) continue
-
             val smsDate = cursor.getLong(dateIndex)
-            val receivedDate = java.time.Instant.ofEpochMilli(smsDate).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-            val date = bankDatePattern.find(body)?.groupValues?.getOrNull(1)?.let { rawDate ->
-                val cleaned = rawDate.replace(' ', '-')
-                val patterns = listOf("d-MMM-yy", "d-MMM-yyyy", "dd-MMM-yy", "dd-MMM-yyyy")
-                patterns.firstNotNullOfOrNull { pattern ->
-                    runCatching {
-                        java.time.LocalDate.parse(
-                            cleaned,
-                            java.time.format.DateTimeFormatter.ofPattern(pattern, java.util.Locale.ENGLISH)
-                                .withResolverStyle(java.time.format.ResolverStyle.SMART)
-                        ).toString()
-                    }.getOrNull()
-                }
-            } ?: receivedDate.toString()
+            val receivedDate = java.time.Instant.ofEpochMilli(smsDate)
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            val parsed = BankSmsParser.parse(body, receivedDate) ?: continue
             val sender = if (addressIndex >= 0) cursor.getString(addressIndex).orEmpty().trim() else ""
             val id = if (idIndex >= 0) cursor.getString(idIndex).orEmpty() else sender + "-" + smsDate
-            val merchant = extractSmsMerchant(body, match.range.last + 1)
-            val exactAmountNote = amountText.toBigDecimalOrNull()?.stripTrailingZeros()?.toPlainString()
-                ?.takeIf { it.contains('.') && it.substringAfter('.').isNotEmpty() }
             val notes = buildString {
                 append("Detected from a bank SMS. Verify details before relying on this entry.")
-                if (exactAmountNote != null) append(" Exact SMS amount: ₹").append(exactAmountNote)
+                if (parsed.exactAmount.contains('.')) {
+                    append(" Exact SMS amount: ₹").append(parsed.exactAmount)
+                    append(". Stored amount is rounded to the nearest rupee; verify before import.")
+                }
             }
             results += Transaction(
-                title = merchant?.let { (if (isCredit) "From " else "To ") + it }
+                title = parsed.merchant?.let { (if (parsed.income) "From " else "To ") + it }
                     ?: if (sender.isBlank()) "Bank SMS transaction" else "Bank SMS · " + sender,
-                category = if (isCredit) "Other income" else "Bank transfer",
-                date = date,
-                amount = amount,
-                income = isCredit,
+                category = if (parsed.income) "Other income" else "Bank transfer",
+                date = parsed.date,
+                amount = parsed.amount,
+                income = parsed.income,
                 source = "SMS import",
                 notificationKey = "sms-import:" + id,
                 captureStatus = "Needs review",
@@ -7079,47 +7044,6 @@ private fun readRecentBankSms(context: Context): List<Transaction> {
         }
     }
     return results
-}
-
-private fun java.math.BigDecimal.longValueExactOrNull(): Long? = try {
-    longValueExact()
-} catch (_: ArithmeticException) {
-    null
-}
-
-private fun extractSmsMerchant(body: String, amountEnd: Int): String? {
-    val afterAmount = body.substring(amountEnd.coerceIn(0, body.length))
-    val cleaned = afterAmount
-        .replace(Regex("""(?i)\bUPI\s*[:#].*$"""), "")
-        .replace(Regex("""(?i)\b(call|customer care|sms block)\b.*$"""), "")
-        .replace(Regex("""(?i)\b(unique mandate number)\b.*$"""), "")
-        .trim(' ', '.', ',', ';', ':', '-', '\n', '\r')
-
-    // Merchant names vary by bank, payment app and transaction type. Extract them
-    // from message structure instead of maintaining a hard-coded merchant list.
-    val patterns = listOf(
-        Regex("""(?i)\bon\s+\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4}\s+from\s+([^.;]+)"""),
-        Regex("""(?i)\b(?:to|at|from|towards)\s+([A-Za-z0-9][A-Za-z0-9 &._'-]{1,58}?)(?=\s+(?:on\s+\d{1,2}[- ]|UPI\b|ref(?:erence)?\b|txn\b|transaction\b|for dispute\b|is successful\b)|[.;,]|$)""")
-    )
-    val extracted = patterns.firstNotNullOfOrNull { pattern ->
-        pattern.find(cleaned)?.groupValues?.getOrNull(1)?.trim()
-    }
-
-    // Many bank alerts put the payee after a semicolon:
-    // "... debited ...; MERCHANT credited. UPI:..."
-    val afterSemicolon = cleaned.substringAfter(';', "").trim()
-    val fallback = afterSemicolon
-        .replace(Regex("""(?i)\b(?:was\s+)?(?:credited|debited)\b.*$"""), "")
-        .replace(Regex("""(?i)\b(?:payment|transaction)\s+(?:is\s+)?(?:successful|completed)\b.*$"""), "")
-        .trim(' ', '.', ',', ';', ':', '-')
-    val candidate = (extracted ?: fallback).trim()
-        .replace(Regex("""(?i)\s+on\s+\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4}.*$"""), "")
-        .trim(' ', '.', ',', ';', ':', '-')
-    if (candidate.isBlank()) return null
-
-    val normalized = candidate.replace(Regex("""\s+"""), " ").take(60)
-    if (normalized.matches(Regex("""(?i)(icici bank|bank account|savings account|current account|acct|account|upi|payment|payment successful|transaction|available balance|minimum balance)"""))) return null
-    return normalized
 }
 
 private fun parseTransactionCsv(csv: String): List<Transaction> {
