@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
@@ -379,7 +380,7 @@ private fun AddMoneyNoteDialogV2(existing: MoneyNote? = null, onDismiss: () -> U
                     OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; error = "" }, modifier = Modifier.fillMaxWidth(), label = { Text("Interest Rate (% per month)") }, placeholder = { Text("0 for no interest") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                     Text("Interest is calculated daily from the start date using the monthly rate.", color = MnMuted, style = MaterialTheme.typography.labelSmall)
                 }
-                item { OutlinedTextField(date, { date = it; error = "" }, modifier = Modifier.fillMaxWidth(), label = { Text("Start Date (YYYY-MM-DD) *") }, singleLine = true) }
+                item { MoneyNoteDateField("Start Date", date) { date = it; error = "" } }
                 item { OutlinedTextField(description, { description = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description (optional)") }, minLines = 2) }
                 if (error.isNotBlank()) item { Text(error, color = MaterialTheme.colorScheme.error) }
             }
@@ -437,7 +438,7 @@ private fun RecordMoneyNotePaymentDialogV2(note: MoneyNote, onDismiss: () -> Uni
                     }
                 }
                 OutlinedTextField(amount, { amount = it.filter { c -> c.isDigit() || c == '.' }; error = "" }, modifier = Modifier.fillMaxWidth(), label = { Text("Amount (₹) *") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                OutlinedTextField(date, { date = it; error = "" }, modifier = Modifier.fillMaxWidth(), label = { Text("Payment Date (YYYY-MM-DD) *") }, singleLine = true)
+                MoneyNoteDateField("Payment Date", date) { date = it; error = "" }
                 OutlinedTextField(remark, { remark = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Remarks (optional)") }, singleLine = true)
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
             }
@@ -486,4 +487,54 @@ private fun PaymentSuccessDialogV2(note: MoneyNote, payment: MoneyNotePayment, o
         confirmButton = { Button(onClick = onDetails, colors = ButtonDefaults.buttonColors(containerColor = MnBlue)) { Text("View Details") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Done", color = MnBlue) } }
     )
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MoneyNoteDateField(label: String, date: String, onDateChange: (String) -> Unit) {
+    var showPicker by remember { mutableStateOf(false) }
+    val initialMillis = remember(date) {
+        runCatching { LocalDate.parse(date).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli() }
+            .getOrDefault(System.currentTimeMillis())
+    }
+    OutlinedTextField(
+        value = date,
+        onValueChange = {},
+        readOnly = true,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("$label (YYYY-MM-DD) *") },
+        leadingIcon = { Icon(Icons.Default.CalendarMonth, null, tint = MnBlue) },
+        trailingIcon = { IconButton(onClick = { showPicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date", tint = MnBlue) } },
+        shape = RoundedCornerShape(14.dp),
+        singleLine = true
+    )
+    if (showPicker) {
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            shape = RoundedCornerShape(28.dp),
+            colors = DatePickerDefaults.colors(containerColor = Color(0xEAF5FCFF)),
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { millis ->
+                        onDateChange(java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString())
+                    }
+                    showPicker = false
+                }) { Text("Select", color = MnBlue) }
+            },
+            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Cancel", color = MnMuted) } }
+        ) {
+            DatePicker(
+                state = pickerState,
+                showModeToggle = false,
+                colors = DatePickerDefaults.colors(
+                    containerColor = Color(0xEAF5FCFF),
+                    selectedDayContainerColor = MnBlue,
+                    todayDateBorderColor = MnCyan,
+                    todayContentColor = MnBlue
+                )
+            )
+        }
+    }
 }
