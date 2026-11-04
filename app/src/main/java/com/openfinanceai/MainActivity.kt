@@ -87,7 +87,14 @@ private var AppGlassTheme by mutableStateOf("Blue Glass")
 private var GlassSurface by mutableStateOf(Color(0xDFFFFFFF))
 private var GlassBorder by mutableStateOf(Color(0xA6FFFFFF))
 internal fun appGlassSurface(): Color = if (AppBlueGlass) GlassSurface else if (AppDarkTheme) Color(0xFF1B2430) else Color.White
-internal fun appGlassBorder(): Color = GlassBorder
+internal fun appGlassBorder(): Color = if (!AppBlueGlass) GlassBorder else when (AppGlassTheme) {
+    "Purple Glass" -> Color(0xD9FFFFFF)
+    "Emerald Glass" -> Color(0xC9F3FFF8)
+    "Rose Glass" -> Color(0xD9FFFFFF)
+    "Amber Glass" -> Color(0xD9FFFCF0)
+    "Midnight Glass" -> Color(0xD9E6E9FF)
+    else -> GlassBorder
+}
 internal fun appPageBrush(): Brush = if (AppBlueGlass) when (AppGlassTheme) {
     "Purple Glass" -> Brush.linearGradient(listOf(Color(0xFFF1E7FF), Color(0xFFAA83F5), Color(0xFF6254D9), Color(0xFFE9DFFF)))
     "Emerald Glass" -> Brush.linearGradient(listOf(Color(0xFFD8FFF0), Color(0xFF35C9A1), Color(0xFF087E9B), Color(0xFFDDFBF1)))
@@ -96,7 +103,46 @@ internal fun appPageBrush(): Brush = if (AppBlueGlass) when (AppGlassTheme) {
     "Midnight Glass" -> Brush.linearGradient(listOf(Color(0xFFDDE5FF), Color(0xFF879BEE), Color(0xFF686ACD), Color(0xFFE5DEFF)))
     else -> Brush.linearGradient(listOf(Color(0xFFB8F2FF), Color(0xFF16B5F4), Color(0xFF4D73F5), Color(0xFF9C79F7), Color(0xFFE5F5FF)))
 } else SolidColor(Page)
-private fun appCardSurface(original: Color): Color = if (AppBlueGlass) Color(0xDDFBFEFF) else original
+internal fun appGlassAccentBrush(): Brush = when (AppGlassTheme) {
+    "Purple Glass" -> Brush.horizontalGradient(listOf(Color(0xFF7048E8), Color(0xFFB14EFF)))
+    "Emerald Glass" -> Brush.horizontalGradient(listOf(Color(0xFF00A982), Color(0xFF087E9B)))
+    "Rose Glass" -> Brush.horizontalGradient(listOf(Color(0xFFEF4C9B), Color(0xFF9657E8)))
+    "Amber Glass" -> Brush.horizontalGradient(listOf(Color(0xFFF59E0B), Color(0xFFEA5B64)))
+    "Midnight Glass" -> Brush.horizontalGradient(listOf(Color(0xFF3949AB), Color(0xFF8B5CF6)))
+    else -> Brush.horizontalGradient(listOf(Color(0xFF06B6D4), Color(0xFF2563EB), Color(0xFF9333EA)))
+}
+internal fun appGlassCardShape(): RoundedCornerShape = RoundedCornerShape(when (AppGlassTheme) {
+    "Purple Glass" -> 30.dp
+    "Emerald Glass" -> 18.dp
+    "Rose Glass" -> 32.dp
+    "Amber Glass" -> 20.dp
+    "Midnight Glass" -> 14.dp
+    else -> 25.dp
+})
+internal fun appGlassControlShape(): RoundedCornerShape = RoundedCornerShape(when (AppGlassTheme) {
+    "Purple Glass" -> 24.dp
+    "Emerald Glass" -> 12.dp
+    "Rose Glass" -> 28.dp
+    "Amber Glass" -> 16.dp
+    "Midnight Glass" -> 10.dp
+    else -> 18.dp
+})
+internal fun appGlassCardElevation(): androidx.compose.ui.unit.Dp = when (AppGlassTheme) {
+    "Purple Glass" -> 7.dp
+    "Emerald Glass" -> 2.dp
+    "Rose Glass" -> 8.dp
+    "Amber Glass" -> 4.dp
+    "Midnight Glass" -> 1.dp
+    else -> 5.dp
+}
+private fun appCardSurface(original: Color): Color = if (AppBlueGlass) when (AppGlassTheme) {
+    "Purple Glass" -> Color(0xE8FBF8FF)
+    "Emerald Glass" -> Color(0xDDF5FFF9)
+    "Rose Glass" -> Color(0xE8FFF7FB)
+    "Amber Glass" -> Color(0xE8FFFCF4)
+    "Midnight Glass" -> Color(0xDDEEF0FF)
+    else -> Color(0xDDFBFEFF)
+} else original
 private fun parseThemeAccentHex(raw: String, fallback: Color = Color(0xFF9333EA)): Color =
     runCatching { Color(android.graphics.Color.parseColor(raw)) }.getOrDefault(fallback)
 private var AppCompactLayout by mutableStateOf(false)
@@ -113,8 +159,20 @@ private fun applyAppearance(
     val glassThemes = setOf("Blue Glass", "Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass")
     AppBlueGlass = theme in glassThemes
     AppGlassTheme = if (AppBlueGlass) theme else "Blue Glass"
-    GlassSurface = if (AppBlueGlass) Color(0xDFFFFFFF) else if (theme == "Dark" || (theme == "System" && systemDark)) Color(0xFF1B2430) else Color.White
-    GlassBorder = if (AppBlueGlass) Color(0xDFFFFFFF) else Color(0xFFE1E7F0)
+    GlassSurface = if (AppBlueGlass) when (theme) {
+        "Purple Glass" -> Color(0xE8FBF8FF)
+        "Emerald Glass" -> Color(0xDDF5FFF9)
+        "Rose Glass" -> Color(0xE8FFF7FB)
+        "Amber Glass" -> Color(0xE8FFFCF4)
+        "Midnight Glass" -> Color(0xDDEEF0FF)
+        else -> Color(0xDFFFFFFF)
+    } else if (theme == "Dark" || (theme == "System" && systemDark)) Color(0xFF1B2430) else Color.White
+    GlassBorder = if (AppBlueGlass) when (theme) {
+        "Emerald Glass" -> Color(0xC9F3FFF8)
+        "Amber Glass" -> Color(0xD9FFFCF0)
+        "Midnight Glass" -> Color(0xD9E6E9FF)
+        else -> Color(0xD9FFFFFF)
+    } else Color(0xFFE1E7F0)
     val accentColor = when {
         AppBlueGlass -> when (theme) {
             "Purple Glass" -> Color(0xFF7547D8)
@@ -4514,8 +4572,22 @@ private fun AppearanceScreen() {
                             "Dark Mode" -> theme == "Dark"
                             else -> theme == "Custom Colors"
                         }
-                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (selected) selectedAccent.copy(alpha = .10f) else Page)
-                            .then(if (selected) Modifier.border(1.5.dp, selectedAccent, RoundedCornerShape(16.dp)) else Modifier)
+                        Row(Modifier.fillMaxWidth().clip(when (value) {
+                            "Purple Glass" -> RoundedCornerShape(25.dp)
+                            "Emerald Glass" -> RoundedCornerShape(14.dp)
+                            "Rose Glass" -> RoundedCornerShape(30.dp)
+                            "Amber Glass" -> RoundedCornerShape(18.dp)
+                            "Midnight Glass" -> RoundedCornerShape(10.dp)
+                            else -> RoundedCornerShape(22.dp)
+                        }).background(if (selected) selectedAccent.copy(alpha = .13f) else appCardSurface(Page))
+                            .then(if (selected) Modifier.border(1.5.dp, selectedAccent, when (value) {
+                                "Purple Glass" -> RoundedCornerShape(25.dp)
+                                "Emerald Glass" -> RoundedCornerShape(14.dp)
+                                "Rose Glass" -> RoundedCornerShape(30.dp)
+                                "Amber Glass" -> RoundedCornerShape(18.dp)
+                                "Midnight Glass" -> RoundedCornerShape(10.dp)
+                                else -> RoundedCornerShape(22.dp)
+                            }) else Modifier)
                             .clickable {
                                 theme = when (value) {
                                     "Blue Glass", "Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass" -> value
@@ -4536,7 +4608,7 @@ private fun AppearanceScreen() {
                                 }
                                 save("appearance_theme", theme)
                             }.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(when(value) {
+                            Box(Modifier.size(38.dp).clip(when (value) { "Purple Glass" -> RoundedCornerShape(18.dp); "Emerald Glass" -> RoundedCornerShape(8.dp); "Rose Glass" -> RoundedCornerShape(20.dp); "Amber Glass" -> RoundedCornerShape(11.dp); "Midnight Glass" -> RoundedCornerShape(7.dp); else -> RoundedCornerShape(14.dp) }).background(when(value) {
                                 "Blue Glass" -> Brush.linearGradient(listOf(Color(0xFF38A3E5), Color(0xFF9333EA)))
                                 "Purple Glass" -> Brush.linearGradient(listOf(Color(0xFFE2D4FF), Color(0xFF7547D8)))
                                 "Emerald Glass" -> Brush.linearGradient(listOf(Color(0xFFB6F5D8), Color(0xFF078A78)))
@@ -4553,12 +4625,12 @@ private fun AppearanceScreen() {
                             Column(Modifier.weight(1f)) {
                                 Text(value, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                                 Text(when(value) {
-                                    "Blue Glass" -> "Blue · cyan · purple glass style"
-                                    "Purple Glass" -> "Lavender · violet · indigo glass"
-                                    "Emerald Glass" -> "Mint · emerald · deep teal glass"
-                                    "Rose Glass" -> "Blush pink · rose · violet glass"
-                                    "Amber Glass" -> "Warm gold · peach · coral glass"
-                                    "Midnight Glass" -> "Deep navy · indigo · luminous violet"
+                                    "Blue Glass" -> "Layered aqua glass · luminous gradient · rounded cards"
+                                    "Purple Glass" -> "Soft floating cards · extra-rounded corners · violet glow"
+                                    "Emerald Glass" -> "Crisp compact cards · teal accents · subtle elevation"
+                                    "Rose Glass" -> "Soft pill controls · blush panels · vivid rose gradients"
+                                    "Amber Glass" -> "Warm layered surfaces · medium corners · golden highlights"
+                                    "Midnight Glass" -> "Sharper edges · cool frosted panels · indigo depth"
                                     "Classic" -> "Clean and simple"
                                     "Dark Mode" -> "Dark surfaces and accents"
                                     else -> "Choose a color below"
@@ -6353,25 +6425,37 @@ private fun AddTransactionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(30.dp),
+        shape = if (AppBlueGlass) appGlassCardShape() else RoundedCornerShape(30.dp),
         containerColor = if (AppBlueGlass) appGlassSurface() else Color(0xFFFCFBFF),
-        titleContentColor = Color(0xFF151B3D),
-        textContentColor = Color(0xFF151B3D),
+        titleContentColor = Ink,
+        textContentColor = Ink,
         title = {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("Add Transaction", color = Color(0xFF151B3D), fontWeight = FontWeight.Bold, fontSize = 21.sp)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    Modifier.size(54.dp).clip(appGlassControlShape())
+                        .background(if (AppBlueGlass) appGlassAccentBrush() else SolidColor(Green)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null, tint = Color.White, modifier = Modifier.size(27.dp))
                 }
-                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close", tint = Color(0xFF47516E)) }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("Add Transaction", color = Ink, fontWeight = FontWeight.Bold, fontSize = 21.sp)
+                    Text("Record your transaction details", color = Muted, fontSize = 12.sp)
+                }
+                IconButton(onClick = onDismiss) {
+                    Box(Modifier.size(38.dp).clip(CircleShape).background(if (AppBlueGlass) Color.White.copy(alpha = .56f) else Page), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Close, "Close", tint = Ink)
+                    }
+                }
             }
         },
         text = {
             Column(Modifier.fillMaxWidth().heightIn(max = 590.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(13.dp)) {
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color(0xFFF0F2F8)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(Modifier.fillMaxWidth().clip(appGlassCardShape()).background(if (AppBlueGlass) Color.White.copy(alpha = .48f) else Color(0xFFF0F2F8)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("Expense", "Income", "Loan").forEach { option ->
                         val selected = if (option == "Loan") transactionKind.startsWith("Loan") else transactionKind == option
                         val accent = when (option) { "Expense" -> ExpenseRed; "Income" -> IncomeGreen; else -> Purple }
-                        Box(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (selected) accent else Color.Transparent).clickable {
+                        Box(Modifier.weight(1f).clip(appGlassControlShape()).background(if (selected) { if (AppBlueGlass) appGlassAccentBrush() else SolidColor(accent) } else SolidColor(Color.Transparent)).clickable {
                             transactionKind = option
                             isIncome = option == "Income"
                             if (option == "Expense" && (category.equals("Salary", true) || category.equals("Other income", true) || category.equals("Income", true))) category = "Other"
@@ -6386,7 +6470,7 @@ private fun AddTransactionDialog(
                         }
                     }
                 }
-                Card(shape = RoundedCornerShape(19.dp), colors = CardDefaults.cardColors(containerColor = appCardSurface(Color(0xFFF1F3F7)))) {
+                Card(shape = appGlassCardShape(), colors = CardDefaults.cardColors(containerColor = appCardSurface(Color(0xFFF1F3F7))), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null, elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) appGlassCardElevation() else 1.dp)) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text("Amount", color = Color(0xFF25365C), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         OutlinedTextField(
@@ -6402,7 +6486,7 @@ private fun AddTransactionDialog(
                     }
                 }
                 Text("Transaction Details", color = Color(0xFF151B3D), fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = appGlassSurface()), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Card(shape = appGlassCardShape(), colors = CardDefaults.cardColors(containerColor = appGlassSurface()), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null, elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) appGlassCardElevation() else 1.dp)) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 5.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         ExposedDropdownMenuBox(expanded = categoryMenuExpanded, onExpandedChange = { categoryMenuExpanded = it }) {
                             Row(Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable).padding(vertical = 10.dp),
@@ -6554,7 +6638,7 @@ private fun AddTransactionDialog(
                 contentAlignment = Alignment.Center
             ) { Text("Save Transaction", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = if (AppBlueGlass) Green else Green) } }
     )
     if (showCreateTag) {
         AlertDialog(
