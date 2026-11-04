@@ -6995,11 +6995,11 @@ private fun ImportTransactionsScreen(
 private fun readRecentBankSms(context: Context): List<Transaction> {
     val cutoff = System.currentTimeMillis() - 90L * 24L * 60L * 60L * 1000L
     val results = mutableListOf<Transaction>()
-    val amountPattern = Regex("""(?i)(?:₹|rs\\.?|inr)\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)""")
-    val debitPattern = Regex("""(?i)\\b(debited|debit|withdrawn|withdrawal|spent|paid|purchase|sent|transferred to|payment successful|upi txn debit)\\b""")
-    val creditPattern = Regex("""(?i)\\b(credited|credit|received|deposited|refund received|cashback received|transferred from)\\b""")
-    val ignorePattern = Regex("""(?i)\\b(otp|one[- ]time password|verification code|failed|declined|unsuccessful|not debited|not credited|will be debited|mandate created|mandate registered|autopay scheduled)\\b""")
-    val bankDatePattern = Regex("""(?i)\\bon\\s+(\\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\\d{2,4})\\b""")
+    val amountPattern = Regex("""(?i)(?:₹|rs\.?|inr)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
+    val debitPattern = Regex("""(?i)\b(debited|debit|withdrawn|withdrawal|spent|paid|purchase|sent|transferred to|payment successful|upi txn debit)\b""")
+    val creditPattern = Regex("""(?i)\b(credited|credit|received|deposited|refund received|cashback received|transferred from)\b""")
+    val ignorePattern = Regex("""(?i)\b(otp|one[- ]time password|verification code|failed|declined|unsuccessful|not debited|not credited|will be debited|mandate created|mandate registered|autopay scheduled)\b""")
+    val bankDatePattern = Regex("""(?i)\bon\s+(\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4})\b""")
     val projection = arrayOf(android.provider.Telephony.Sms._ID, android.provider.Telephony.Sms.ADDRESS, android.provider.Telephony.Sms.BODY, android.provider.Telephony.Sms.DATE)
     context.contentResolver.query(
         android.provider.Telephony.Sms.Inbox.CONTENT_URI,
@@ -7081,8 +7081,8 @@ private fun readRecentBankSms(context: Context): List<Transaction> {
     return results
 }
 
-private fun Long?.longValueExactOrNull(): Long? = try {
-    this
+private fun java.math.BigDecimal.longValueExactOrNull(): Long? = try {
+    longValueExact()
 } catch (_: ArithmeticException) {
     null
 }
@@ -7090,18 +7090,19 @@ private fun Long?.longValueExactOrNull(): Long? = try {
 private fun extractSmsMerchant(body: String, amountEnd: Int): String? {
     val afterAmount = body.substring(amountEnd.coerceIn(0, body.length))
     val cleaned = afterAmount
-        .replace(Regex("""(?i)\\bUPI\\s*[:#].*$"""), "")
-        .replace(Regex("""(?i)\\b(call|customer care|sms block)\\b.*$"""), "")
-        .replace(Regex("""(?i)\\b(unique mandate number)\\b.*$"""), "")
-        .trim(' ', '.', ',', ';', ':', '-', '\\n', '\\r')
+        .replace(Regex("""(?i)\bUPI\s*[:#].*$"""), "")
+        .replace(Regex("""(?i)\b(call|customer care|sms block)\b.*$"""), "")
+        .replace(Regex("""(?i)\b(unique mandate number)\b.*$"""), "")
+        .trim(' ', '.', ',', ';', ':', '-', '\n', '\r')
     // Bank debit/credit alerts usually put the payee after a semicolon, or after
     // the transaction date. Prefer that segment to account and payment-reference text.
     val candidate = cleaned.substringAfter(';', cleaned).trim()
-        .replace(Regex("""(?i)\\b(credited|debited)\\.?$"""), "")
-        .replace(Regex("""(?i)\\s+on\\s+\\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\\d{2,4}.*$"""), "")
+        .replace(Regex("""(?i)^on\s+\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4}\s+(from|by)\s+"""), "$1 ")
+        .replace(Regex("""(?i)\b(credited|debited)\.?$"""), "")
+        .replace(Regex("""(?i)\s+on\s+\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4}.*$"""), "")
         .trim(' ', '.', ',', ';', ':', '-')
     if (candidate.isBlank()) return null
-    val normalized = candidate.replace(Regex("""\\s+"""), " ").take(60)
+    val normalized = candidate.replace(Regex("""\s+"""), " ").take(60)
     if (normalized.matches(Regex("""(?i)(icici bank|bank account|savings account|acct|account|upi|payment successful)"""))) return null
     return normalized
 }
