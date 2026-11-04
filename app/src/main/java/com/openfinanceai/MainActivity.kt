@@ -7094,17 +7094,31 @@ private fun extractSmsMerchant(body: String, amountEnd: Int): String? {
         .replace(Regex("""(?i)\b(call|customer care|sms block)\b.*$"""), "")
         .replace(Regex("""(?i)\b(unique mandate number)\b.*$"""), "")
         .trim(' ', '.', ',', ';', ':', '-', '\n', '\r')
-    val dateFromMerchant = Regex("""(?i)\bon\s+\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4}\s+from\s+([^.;]+)""")
-        .find(cleaned)?.groupValues?.getOrNull(1)
-    // Debit alerts often put the payee after a semicolon; credit alerts may say
-    // "on DATE from Merchant". Prefer those segments over UPI references and boilerplate.
-    val candidate = (dateFromMerchant ?: cleaned.substringAfter(';', cleaned)).trim()
-        .replace(Regex("""(?i)\b(credited|debited)\.?$"""), "")
+
+    // Merchant names vary by bank, payment app and transaction type. Extract them
+    // from message structure instead of maintaining a hard-coded merchant list.
+    val patterns = listOf(
+        Regex("""(?i)\bon\s+\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4}\s+from\s+([^.;]+)"""),
+        Regex("""(?i)\b(?:to|at|from|towards)\s+([A-Za-z0-9][A-Za-z0-9 &._'-]{1,58}?)(?=\s+(?:on\s+\d{1,2}[- ]|UPI\b|ref(?:erence)?\b|txn\b|transaction\b|for dispute\b|is successful\b)|[.;,]|$)""")
+    )
+    val extracted = patterns.firstNotNullOfOrNull { pattern ->
+        pattern.find(cleaned)?.groupValues?.getOrNull(1)?.trim()
+    }
+
+    // Many bank alerts put the payee after a semicolon:
+    // "... debited ...; MERCHANT credited. UPI:..."
+    val afterSemicolon = cleaned.substringAfter(';', "").trim()
+    val fallback = afterSemicolon
+        .replace(Regex("""(?i)\b(?:was\s+)?(?:credited|debited)\b.*$"""), "")
+        .replace(Regex("""(?i)\b(?:payment|transaction)\s+(?:is\s+)?(?:successful|completed)\b.*$"""), "")
+        .trim(' ', '.', ',', ';', ':', '-')
+    val candidate = (extracted ?: fallback).trim()
         .replace(Regex("""(?i)\s+on\s+\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4}.*$"""), "")
         .trim(' ', '.', ',', ';', ':', '-')
     if (candidate.isBlank()) return null
+
     val normalized = candidate.replace(Regex("""\s+"""), " ").take(60)
-    if (normalized.matches(Regex("""(?i)(icici bank|bank account|savings account|acct|account|upi|payment successful)"""))) return null
+    if (normalized.matches(Regex("""(?i)(icici bank|bank account|savings account|current account|acct|account|upi|payment|payment successful|transaction|available balance|minimum balance)"""))) return null
     return normalized
 }
 
