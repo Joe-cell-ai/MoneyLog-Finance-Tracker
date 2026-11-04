@@ -703,7 +703,7 @@ private fun FinanceApp() {
         if (granted) scanBankSms()
         else {
             importedPreview = emptyList()
-            importMessage = "SMS permission was not granted. You can still import a bank CSV file."
+            importMessage = "Android blocked SMS access. If this app was installed from an APK, open App Info, tap the three-dot menu and choose Allow restricted settings (if shown), then open Permissions > SMS and allow access. Return to MoneyLog and try again. You can always use CSV import instead."
         }
     }
     var loans by remember {
@@ -1091,6 +1091,12 @@ private fun FinanceApp() {
                         onScanSms = {
                             if (context.checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED) scanBankSms()
                             else smsPermissionLauncher.launch(Manifest.permission.READ_SMS)
+                        },
+                        onOpenAppSettings = {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = android.net.Uri.parse("package:" + context.packageName)
+                            }
+                            context.startActivity(intent)
                         },
                         onImport = {
                             val count = importedPreview.size
@@ -3673,6 +3679,8 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
 private fun SettingsScreen(onOpen: (String) -> Unit) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
+    var showClearDataConfirm by remember { mutableStateOf(false) }
+    var clearDataMessage by remember { mutableStateOf("") }
     val mainItems = listOf(
         Triple("Appearance", "Theme, colors and layout", Icons.Default.Palette),
         Triple("Budgets", "Set monthly spending limits", Icons.Default.TrackChanges),
@@ -3789,6 +3797,67 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
             Text("Your financial records stay on this device unless you choose to export or share a file.", color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
             Text("MoneyLog · Finance Tracker", color = Green, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
+                shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ExpenseRed.copy(alpha = .35f))
+            ) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(Icons.Default.DeleteForever, null, tint = ExpenseRed, modifier = Modifier.size(24.dp))
+                        Text("Clear app data", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                    Text(
+                        "Permanently removes locally saved transactions, loans, budgets, notes, tags, categories, and app preferences. Export a backup first. This cannot be undone.",
+                        color = Muted,
+                        fontSize = 12.sp
+                    )
+                    Button(
+                        onClick = { showClearDataConfirm = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed),
+                        shape = RoundedCornerShape(13.dp)
+                    ) {
+                        Icon(Icons.Default.DeleteForever, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Clear all app data")
+                    }
+                    if (clearDataMessage.isNotBlank()) Text(clearDataMessage, color = Muted, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+    if (showClearDataConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearDataConfirm = false },
+            title = { Text("Delete all MoneyLog data?", color = Ink, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "This permanently deletes all locally saved transactions, loans, budgets, money notes, tags, categories, app lock settings, and preferences on this device. Export a backup first if you may need these records. This action cannot be undone.",
+                    color = Muted
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val cleared = prefs.edit().clear().commit()
+                    showClearDataConfirm = false
+                    if (cleared) {
+                        AppLockRuntime.isLocked = false
+                        clearDataMessage = "Local app data cleared."
+                        (context as? android.app.Activity)?.recreate()
+                    } else {
+                        clearDataMessage = "Could not clear app data. Please try again."
+                    }
+                }) { Text("Delete all data", color = ExpenseRed, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDataConfirm = false }) { Text("Cancel", color = Ink) }
+            },
+            containerColor = appGlassSurface(),
+            shape = RoundedCornerShape(24.dp)
+        )
     }
 }
 
@@ -6608,6 +6677,9 @@ private fun transactionKey(transaction: Transaction): String {
     fun normalize(value: String): String = value.trim()
         .replace(Regex("\\s+"), " ")
         .lowercase(Locale.ROOT)
+    // Inbox message IDs make SMS re-scans idempotent without merging two legitimate
+    // same-amount purchases from the same sender on the same day.
+    if (transaction.notificationKey.startsWith("sms-import:")) return transaction.notificationKey
     val normalizedDate = transactionDateOrNull(transaction)?.toString() ?: normalize(transaction.date)
     return "${normalize(transaction.title)}|${normalizedDate}|${transaction.amount}|${transaction.income}"
 }
@@ -6728,6 +6800,7 @@ private fun ImportTransactionsScreen(
     preview: List<Transaction>,
     onChooseFile: () -> Unit,
     onScanSms: () -> Unit,
+    onOpenAppSettings: () -> Unit,
     onImport: () -> Unit
 ) {
     LazyColumn(
@@ -6751,7 +6824,16 @@ private fun ImportTransactionsScreen(
                 Spacer(Modifier.width(8.dp))
                 Text("Allow access & scan bank SMS")
             }
-            Text("Android will ask for SMS permission. You can deny it and continue using CSV import.", color = Muted, fontSize = 12.sp)
+            Text(
+                "If Android says access was denied or restricted, open App Info. On some APK installs, use the three-dot menu > Allow restricted settings (if shown), then Permissions > SMS. Android controls this restriction; MoneyLog cannot bypass it.",
+                color = Muted,
+                fontSize = 12.sp
+            )
+            OutlinedButton(onClick = onOpenAppSettings, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Settings, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Open app settings")
+            }
         }
         item {
             InfoCard(
