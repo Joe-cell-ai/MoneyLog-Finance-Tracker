@@ -1620,177 +1620,113 @@ private fun HomeScreen(
     onTransactionLongPress: (Transaction) -> Unit
 ) {
     var showMonthPicker by remember { mutableStateOf(false) }
-    // Keep dashboard totals consistent with the month currently selected.
     val monthIncome = monthTransactions.filter { it.income }.sumOf { it.amount }
     val monthExpenses = monthTransactions.filterNot { it.income }.sumOf { it.amount }
-    LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
+    val trackedBalance = transactions.sumOf { if (it.income) it.amount else -it.amount }
+    val sixMonthNetTrend = (5 downTo 0).map { offset ->
+        val month = selectedMonth.minusMonths(offset.toLong())
+        transactions.filter { transaction ->
+            parseScheduleDate(transaction.date)?.let { YearMonth.from(it) == month } == true
+        }.sumOf { if (it.income) it.amount else -it.amount }
+    }
+    val monthLabel = selectedMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH))
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(appPageBrush()),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
         item {
-            Text(selectedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH).uppercase(Locale.ENGLISH) + " " + selectedMonth.year, color = Muted, fontSize = 11.sp, letterSpacing = 1.sp)
-            Text("Good morning 👋", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { onOpen("Calendar") }) { Icon(Icons.Default.CalendarMonth, null); Text(" Calendar") }
-                OutlinedButton(onClick = { onOpen("Insights") }) { Icon(Icons.Default.Insights, null); Text(" Insights") }
-            }
-        }
-        val trackedBalance = transactions.sumOf { if (it.income) it.amount else -it.amount }
-        val sixMonthNetTrend = (5 downTo 0).map { offset ->
-            val month = selectedMonth.minusMonths(offset.toLong())
-            transactions.filter { transaction ->
-                parseScheduleDate(transaction.date)?.let { YearMonth.from(it) == month } == true
-            }.sumOf { if (it.income) it.amount else -it.amount }
-        }
-        item { MoneyLogCashFlowHero(monthIncome, monthExpenses, trackedBalance, sixMonthNetTrend) }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Quick Actions", modifier = Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text("Shortcuts", color = Green, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(selectedMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)).uppercase(Locale.ENGLISH), color = Muted, fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.Bold)
+                    Text("Hello there 👋", color = Ink, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("Track. Plan. Grow.", color = Muted, fontSize = 11.sp)
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    QuickAction("Add Transaction", Icons.Default.AddCircle, Modifier.weight(1f)) { onAdd(false) }
-                    QuickAction("Set Budget", Icons.Default.Savings, Modifier.weight(1f)) { onOpen("Budgets") }
-                    QuickAction("Money Notes", Icons.Default.Notes, Modifier.weight(1f)) { onOpen("Money Notes") }
-                    QuickAction("Loans", Icons.Default.AccountBalance, Modifier.weight(1f)) { onOpen("Loans") }
+                Box {
+                    IconButton(onClick = { onOpen("Loans") }, modifier = Modifier.size(42.dp).clip(CircleShape).background(Color(0xBFFFFFFF))) {
+                        Icon(Icons.Default.AccountBalance, "Loans", tint = Green)
+                    }
+                }
+                IconButton(onClick = { onOpen("Calendar") }, modifier = Modifier.size(42.dp).clip(CircleShape).background(Color(0xBFFFFFFF))) {
+                    Icon(Icons.Default.CalendarMonth, "Calendar", tint = Green)
                 }
             }
         }
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Monthly overview", modifier = Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    modifier = Modifier.background(MaterialTheme.colorScheme.surface, RoundedCornerShape(14.dp))
-                ) {
-                    IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month", tint = Purple)
-                    }
-                    TextButton(onClick = { showMonthPicker = true }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
-                        Text(
-                            selectedMonth.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH) + " " + selectedMonth.year,
-                            color = Ink,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Choose month", tint = Purple)
-                    }
-                    IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Default.ChevronRight, contentDescription = "Next month", tint = Purple)
+                Text("Overview", Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Surface(onClick = { showMonthPicker = true }, shape = RoundedCornerShape(13.dp), color = appGlassSurface(), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null) {
+                    Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(monthLabel, color = Ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Icon(Icons.Default.ExpandMore, null, tint = Green, modifier = Modifier.size(17.dp))
                     }
                 }
+                IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }, modifier = Modifier.size(34.dp)) { Icon(Icons.Default.ChevronLeft, "Previous month", tint = Green) }
+                IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }, modifier = Modifier.size(34.dp)) { Icon(Icons.Default.ChevronRight, "Next month", tint = Green) }
+            }
+        }
+        item { MoneyLogCashFlowHero(monthIncome, monthExpenses, trackedBalance, sixMonthNetTrend) }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CashFlowStatCard("Income", monthIncome, IncomeGreen, Color(0xFFBDF4E4), Icons.Default.ArrowDownward, Modifier.weight(1f))
+                CashFlowStatCard("Expenses", monthExpenses, ExpenseRed, Color(0xFFFFD8E5), Icons.Default.ShoppingCart, Modifier.weight(1f))
             }
         }
         item {
-            val context = LocalContext.current
-            val savedBudgets = remember {
-                runCatching {
-                    val json = JSONObject(context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE).getString("monthly_category_budgets", "{}") ?: "{}")
-                    buildMap { val keys = json.keys(); while (keys.hasNext()) { val key = keys.next(); put(key, json.optLong(key, 0L)) } }
-                }.getOrDefault(emptyMap())
-            }
-            val budgetTotal = savedBudgets.values.sum()
-            val monthSpent = monthTransactions.filterNot { it.income }.sumOf { it.amount }
-            val monthExpenseCategories = monthTransactions.filterNot { it.income }.groupBy { it.category }
-                .map { entry -> entry.key to entry.value.sumOf { it.amount } }.sortedByDescending { it.second }
-            val categorySpend = monthExpenseCategories.sumOf { it.second }
-            Card(colors = CardDefaults.cardColors(containerColor = appCardSurface(LavenderTint)), shape = RoundedCornerShape(20.dp)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("MONTHLY BUDGET", color = Purple, fontSize = 11.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold)
-                            Text(if (budgetTotal > 0L) "${Money.format(monthSpent)} of ${Money.format(budgetTotal)}" else "Set your monthly budget", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                        }
-                        TextButton(onClick = { onOpen("Budgets") }) { Text("Manage") }
-                    }
-                    LinearProgressIndicator(progress = { if (budgetTotal > 0L) (monthSpent.toFloat() / budgetTotal).coerceIn(0f, 1f) else 0f }, modifier = Modifier.fillMaxWidth().height(7.dp), color = if (budgetTotal > 0L && monthSpent > budgetTotal) ExpenseRed else Purple, trackColor = Color(0xFFDCD5FA))
-                    Text(if (budgetTotal > 0L && monthSpent <= budgetTotal) "${Money.format(budgetTotal - monthSpent)} remaining this month" else if (budgetTotal > 0L) "${Money.format(monthSpent - budgetTotal)} over budget" else "Add category limits to track your monthly budget here.", color = Muted, fontSize = 12.sp)
-                    BudgetFlowMiniChart(monthSpent, budgetTotal, monthExpenseCategories)
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Quick Actions", modifier = Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text("See all →", Modifier.clickable { onOpen("Settings") }, color = Green, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
-            }
-            Spacer(Modifier.height(2.dp))
-            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(20.dp)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Spending by category", color = Color(0xFF173D70), fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(Modifier.weight(0.86f), contentAlignment = Alignment.Center) {
-                            androidx.compose.foundation.Canvas(Modifier.size(126.dp)) {
-                                if (categorySpend > 0L) {
-                                    var start = -90f
-                                    monthExpenseCategories.forEach { entry ->
-                                        val sweep = entry.second.toFloat() / categorySpend * 360f
-                                        drawArc(categoryColor(entry.first), start, sweep, false, style = Stroke(width = size.minDimension * .22f))
-                                        start += sweep
-                                    }
-                                } else drawArc(Mint, 0f, 360f, false, style = Stroke(width = size.minDimension * .22f))
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Total Expense", color = Color(0xFF8094B0), fontSize = 10.sp)
-                                Text(Money.format(categorySpend).substringBeforeLast("."), color = Color(0xFF173D70), fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, softWrap = false)
-                            }
-                        }
-                        Column(Modifier.weight(1.14f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (monthExpenseCategories.isEmpty()) Text("Add expenses to see categories.", color = Muted, fontSize = 12.sp)
-                            monthExpenseCategories.take(7).forEach { (name, amount) ->
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                                    Box(Modifier.size(8.dp).background(categoryColor(name), CircleShape))
-                                    Text(name, modifier = Modifier.weight(1f), color = Color(0xFF52627A), fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
-                                    Text(if (categorySpend > 0L) "${amount * 100 / categorySpend}%" else "0%", color = Color(0xFF52627A), fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
-                                }
-                            }
-                        }
-                    }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    QuickAction("Add Transaction", Icons.Default.AddCircle, Modifier.weight(1f)) { onAdd(false) }
+                    QuickAction("Set Budget", Icons.Default.Savings, Modifier.weight(1f)) { onOpen("Budgets") }
+                    QuickAction("Money Notes", Icons.Default.Notes, Modifier.weight(1f)) { onOpen("Money Notes") }
+                    QuickAction("Reports", Icons.Default.BarChart, Modifier.weight(1f)) { onOpen("Reports") }
                 }
             }
         }
-        item {
-            val incomeCategories = monthTransactions.filter { it.income }.groupBy { it.category }
-                .map { entry -> entry.key to entry.value.sumOf { it.amount } }.sortedByDescending { it.second }
-            MonthlyIncomeBreakdownCard(monthIncome, incomeCategories)
-        }
-        item { SectionHeading("Recent transactions", "See all", onAll) }
+        item { SectionHeading("Recent Transactions", "View All", onAll) }
         if (monthTransactions.isEmpty()) {
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
-                    shape = RoundedCornerShape(18.dp)
-                ) {
-                    Column(
-                        Modifier.fillMaxWidth().padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Muted, modifier = Modifier.size(28.dp))
-                        Text("No transactions for this month", color = Ink, fontWeight = FontWeight.SemiBold)
+                Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(20.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null) {
+                    Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Icon(Icons.Default.ReceiptLong, null, tint = Muted, modifier = Modifier.size(28.dp))
+                        Text("No transactions for $monthLabel", color = Ink, fontWeight = FontWeight.SemiBold)
                         Text("Add an income or expense to see it here.", color = Muted, fontSize = 12.sp)
+                        Button(onClick = { onAdd(false) }, colors = ButtonDefaults.buttonColors(containerColor = Green), shape = RoundedCornerShape(14.dp)) { Text("Add transaction") }
                     }
                 }
             }
         } else {
-            items(monthTransactions.take(4)) { transaction ->
+            items(monthTransactions.take(6), key = { transaction -> transactionKey(transaction) + transaction.hashCode() }) { transaction ->
                 TransactionRow(transaction, onLongPress = { onTransactionLongPress(transaction) })
             }
         }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { onOpen("Budgets") }) { Icon(Icons.Default.PieChart, null, modifier = Modifier.size(16.dp)); Text("Budgets") }
+                TextButton(onClick = { onOpen("Insights") }) { Icon(Icons.Default.Insights, null, modifier = Modifier.size(16.dp)); Text("Insights") }
+                TextButton(onClick = { onOpen("Loans") }) { Icon(Icons.Default.AccountBalance, null, modifier = Modifier.size(16.dp)); Text("Loans") }
+            }
+        }
     }
-
     if (showMonthPicker) {
         AlertDialog(
             onDismissRequest = { showMonthPicker = false },
-            title = { Text("Choose month") },
+            containerColor = if (AppBlueGlass) appGlassSurface() else MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(26.dp),
+            title = { Text("Choose month", color = Ink, fontWeight = FontWeight.Bold) },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Select a month to view", color = Muted, fontSize = 13.sp)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                        IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }) {
-                            Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month")
-                        }
+                        IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }) { Icon(Icons.Default.ChevronLeft, "Previous month", tint = Green) }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(selectedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
                             Text(selectedMonth.year.toString(), color = Muted)
                         }
-                        IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }) {
-                            Icon(Icons.Default.ChevronRight, contentDescription = "Next month")
-                        }
+                        IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }) { Icon(Icons.Default.ChevronRight, "Next month", tint = Green) }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { onMonthChange(YearMonth.now()) }) { Text("This month") }
@@ -1799,11 +1735,32 @@ private fun HomeScreen(
                 }
             },
             confirmButton = {},
-            dismissButton = { TextButton(onClick = { showMonthPicker = false }) { Text("Close") } }
+            dismissButton = { TextButton(onClick = { showMonthPicker = false }) { Text("Close", color = Green) } }
         )
     }
 }
 
+@Composable
+private fun CashFlowStatCard(title: String, amount: Long, accent: Color, tint: Color, icon: ImageVector, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = appCardSurface(Color.White)),
+        shape = RoundedCornerShape(19.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) 5.dp else 1.dp),
+        border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .82f)) else null
+    ) {
+        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            Box(Modifier.size(38.dp).clip(CircleShape).background(tint), contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = accent, modifier = Modifier.size(20.dp))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                Text(Money.format(amount), color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                Text("This month", color = accent, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
 
 @Composable
 private fun MoneyLogCashFlowHero(income: Long, expenses: Long, trackedBalance: Long, trend: List<Long>) {
