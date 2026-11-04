@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.People
@@ -272,6 +273,7 @@ private fun MoneyNoteDetailDialogV2(note: MoneyNote, onDismiss: () -> Unit, onEd
                     Text(note.loanType.label, color = MnInk, fontWeight = FontWeight.Bold)
                     Text(note.personName, color = MnMuted, style = MaterialTheme.typography.bodySmall)
                 }
+                IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, "Delete money note", tint = Color(0xFFD9485F)) }
                 IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close", tint = MnMuted) }
             }
         },
