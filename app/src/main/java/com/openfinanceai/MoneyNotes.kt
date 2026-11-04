@@ -212,10 +212,10 @@ fun MoneyNotesScreen(
 
 @Composable
 private fun MoneyNotesSummary(title: String, amount: Long, caption: String, bg: Color, accent: Color, modifier: Modifier, icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Surface(modifier, color = bg, shape = RoundedCornerShape(22.dp), shadowElevation = 2.dp) {
+    Surface(modifier, color = if (AppBlueGlass) appGlassSurface() else bg, shape = RoundedCornerShape(22.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null, shadowElevation = if (AppBlueGlass) 7.dp else 2.dp) {
         Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Surface(color = Color.White.copy(alpha = .8f), shape = CircleShape) { Icon(icon, null, tint = accent, modifier = Modifier.padding(7.dp).size(17.dp)) }
+                Surface(color = if (AppBlueGlass) Color(0xBFFFFFFF) else Color.White.copy(alpha = .8f), shape = CircleShape) { Icon(icon, null, tint = accent, modifier = Modifier.padding(7.dp).size(17.dp)) }
                 Text(title, color = accent, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
             }
             Text(moneyNotesCurrency(amount), color = MnInk, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
@@ -232,7 +232,7 @@ private fun MoneyNoteCardV2(note: MoneyNote, onClick: () -> Unit, onPayment: () 
     Surface(onClick = onClick, modifier = Modifier.fillMaxWidth(), color = appGlassSurface(), shape = RoundedCornerShape(20.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null, shadowElevation = if (AppBlueGlass) 7.dp else 3.dp) {
         Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(color = when (note.loanType) { MoneyNoteLoanType.GOLD_LOAN -> Color(0xFFFFF0C7); MoneyNoteLoanType.LOCAL_LOAN -> MnPalePurple; MoneyNoteLoanType.FAMILY_FRIENDS -> MnPaleGreen; MoneyNoteLoanType.OTHER -> MnPaleBlue }, shape = RoundedCornerShape(14.dp)) {
+                Surface(color = when (note.loanType) { MoneyNoteLoanType.GOLD_LOAN -> Color(0xFFFFF0C7); MoneyNoteLoanType.LOCAL_LOAN -> MnPalePurple; MoneyNoteLoanType.FAMILY_FRIENDS -> MnPaleGreen; MoneyNoteLoanType.OTHER -> MnPaleBlue }, shape = RoundedCornerShape(14.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null) {
                     Icon(note.loanType.icon(), null, tint = accent, modifier = Modifier.padding(11.dp).size(23.dp))
                 }
                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
