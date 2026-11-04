@@ -2046,8 +2046,19 @@ private fun ActivityScreen(transactions: List<Transaction>, onTransactionLongPre
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text("Transactions", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
-                Text("Every income and expense, all in one place", color = Muted, fontSize = 12.sp)
+                Text(
+                    "Transactions",
+                    fontSize = 30.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.2.sp
+                )
+                Text(
+                    "Every income and expense, all in one place",
+                    color = Color.White.copy(alpha = 0.96f),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
         item {
