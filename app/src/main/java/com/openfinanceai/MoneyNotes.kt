@@ -35,7 +35,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import java.text.NumberFormat
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 
@@ -134,7 +133,7 @@ fun MoneyNotesScreen(
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MoneyNotesSummary("I Need to Pay", payTotal, "2 Active", MnPaleBlue, MnBlue, Modifier.weight(1f), Icons.Default.ArrowUpward)
+            MoneyNotesSummary("I Need to Pay", payTotal, "${notes.count { it.direction == MoneyNoteDirection.I_NEED_TO_PAY && it.status != MoneyNoteStatus.SETTLED }} Active", MnPaleBlue, MnBlue, Modifier.weight(1f), Icons.Default.ArrowUpward)
             MoneyNotesSummary("I Need to Collect", collectTotal, "${notes.count { it.direction == MoneyNoteDirection.I_NEED_TO_COLLECT && it.status != MoneyNoteStatus.SETTLED }} Active", MnPaleGreen, Color(0xFF169B69), Modifier.weight(1f), Icons.Default.ArrowDownward)
         }
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = .88f)).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -230,7 +229,7 @@ private fun MoneyNoteCardV2(note: MoneyNote, onClick: () -> Unit, onPayment: () 
     val owes = note.direction == MoneyNoteDirection.I_NEED_TO_PAY
     val accent = if (owes) MnBlue else Color(0xFF169B69)
     val statusColor = when (note.status) { MoneyNoteStatus.PENDING -> Color(0xFFB7791F); MoneyNoteStatus.PARTIALLY_PAID -> MnPurple; MoneyNoteStatus.SETTLED -> Color(0xFF15965F) }
-    Surface(Modifier.fillMaxWidth(), color = Color.White, shape = RoundedCornerShape(20.dp), shadowElevation = 3.dp, onClick = onClick) {
+    Surface(onClick = onClick, modifier = Modifier.fillMaxWidth(), color = Color.White, shape = RoundedCornerShape(20.dp), shadowElevation = 3.dp) {
         Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(color = when (note.loanType) { MoneyNoteLoanType.GOLD_LOAN -> Color(0xFFFFF0C7); MoneyNoteLoanType.LOCAL_LOAN -> MnPalePurple; MoneyNoteLoanType.FAMILY_FRIENDS -> MnPaleGreen; MoneyNoteLoanType.OTHER -> MnPaleBlue }, shape = RoundedCornerShape(14.dp)) {
