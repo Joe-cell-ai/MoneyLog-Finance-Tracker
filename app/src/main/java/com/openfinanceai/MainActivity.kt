@@ -10,6 +10,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.graphics.pdf.PdfRenderer
+import android.graphics.Paint as AndroidPaint
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -50,6 +51,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
@@ -2898,17 +2901,18 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text("Monthly Overview", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text("Compare income and expenses · exact amounts below", color = Muted, fontSize = 10.sp)
+                    Text("Income and expenses · last 6 months", color = Muted, fontSize = 10.sp)
                 }
                 Surface(color = Color(0xFFE7F7F1), shape = RoundedCornerShape(50)) {
                     Text("LIVE DATA", Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = IncomeGreen, fontWeight = FontWeight.Bold, fontSize = 9.sp)
                 }
             }
-            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(150.dp)) {
+            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(190.dp)) {
                 val left = 8f
                 val right = size.width - 8f
-                val top = 8f
-                val bottom = size.height - 8f
+                // Reserve space above the tallest bars so exact amount labels remain visible.
+                val top = 26.dp.toPx()
+                val bottom = size.height - 18.dp.toPx()
                 val chartHeight = bottom - top
                 repeat(4) { row ->
                     val y = top + chartHeight * row / 3f
@@ -2917,21 +2921,34 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
                 val groupWidth = (right - left) / months.size
                 val barWidth = groupWidth * 0.27f
                 val barGap = groupWidth * 0.07f
+                val labelPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+                    color = Ink.toArgb()
+                    textAlign = AndroidPaint.Align.CENTER
+                    textSize = 8.sp.toPx()
+                    typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                }
+                val labelColors = listOf(Color(0xFF078F73), Color(0xFF175ED8))
                 months.indices.forEach { index ->
                     val centerX = left + groupWidth * (index + 0.5f)
                     val values = listOf(monthlyIncome[index], monthlyExpenses[index])
                     val colors = listOf(Color(0xFF08A985), Color(0xFF2878F0))
                     values.forEachIndexed { seriesIndex, value ->
                         val height = (value.toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * chartHeight
+                        val x = centerX + if (seriesIndex == 0) -(barWidth + barGap / 2f) else barGap / 2f
+                        val barTop = bottom - height
                         if (value > 0L && height > 0f) {
-                            val x = centerX + if (seriesIndex == 0) -(barWidth + barGap / 2f) else barGap / 2f
                             drawRoundRect(
                                 color = colors[seriesIndex],
-                                topLeft = androidx.compose.ui.geometry.Offset(x, bottom - height),
+                                topLeft = androidx.compose.ui.geometry.Offset(x, barTop),
                                 size = androidx.compose.ui.geometry.Size(barWidth, height),
                                 cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx())
                             )
                         }
+                        // Stagger the two labels vertically within each month so exact values do not collide.
+                        labelPaint.color = labelColors[seriesIndex].toArgb()
+                        val labelOffset = if (seriesIndex == 0) 4.dp.toPx() else 14.dp.toPx()
+                        val labelY = if (value == 0L) bottom - labelOffset else (barTop - labelOffset).coerceAtLeast(10.dp.toPx())
+                        drawContext.canvas.nativeCanvas.drawText(Money.format(value), x + barWidth / 2f, labelY, labelPaint)
                     }
                 }
             }
@@ -2946,27 +2963,6 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF247FEB)))
                     Text("Expenses", color = Muted, fontSize = 10.sp)
-                }
-            }
-            Column(
-                Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Mint.copy(alpha = if (AppDarkTheme) .12f else .20f))
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Month", Modifier.weight(.8f), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    Text("Income", Modifier.weight(1.1f), color = IncomeGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
-                    Text("Expenses", Modifier.weight(1.1f), color = Color(0xFF247FEB), fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
-                }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(appGlassBorder().copy(alpha = .7f)))
-                months.forEachIndexed { index, month ->
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(month.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH), Modifier.weight(.8f), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Medium)
-                        Text(Money.format(monthlyIncome[index]), Modifier.weight(1.1f), color = IncomeGreen, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End, maxLines = 1, softWrap = false)
-                        Text(Money.format(monthlyExpenses[index]), Modifier.weight(1.1f), color = Color(0xFF247FEB), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End, maxLines = 1, softWrap = false)
-                    }
                 }
             }
             val delta = (monthlyIncome.lastOrNull() ?: 0L) - (monthlyExpenses.lastOrNull() ?: 0L)
