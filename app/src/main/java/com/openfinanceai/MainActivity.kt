@@ -1671,6 +1671,62 @@ private fun HomeScreen(
             }
         }
         item {
+            val homeExpenseCategories = monthTransactions.filterNot { it.income }
+                .groupBy { it.category }
+                .map { entry -> entry.key to entry.value.sumOf { it.amount } }
+                .sortedByDescending { it.second }
+            val homeExpenseTotal = homeExpenseCategories.sumOf { it.second }
+            Card(
+                colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
+                shape = RoundedCornerShape(24.dp),
+                border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null,
+                elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) 0.dp else 2.dp)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("Spending by category", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                        Text("Your expense breakdown for $monthLabel", color = Muted, fontSize = 11.sp)
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Box(Modifier.size(132.dp), contentAlignment = Alignment.Center) {
+                            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                                if (homeExpenseTotal > 0L) {
+                                    var startAngle = -90f
+                                    homeExpenseCategories.forEach { entry ->
+                                        val sweep = entry.second.toFloat() / homeExpenseTotal.toFloat() * 360f
+                                        drawArc(categoryColor(entry.first), startAngle, (sweep - 1.5f).coerceAtLeast(0f), false, style = Stroke(width = size.minDimension * .19f, cap = StrokeCap.Round))
+                                        startAngle += sweep
+                                    }
+                                } else {
+                                    drawArc(Mint, -90f, 360f, false, style = Stroke(width = size.minDimension * .19f, cap = StrokeCap.Round))
+                                }
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Total spent", color = Muted, fontSize = 10.sp)
+                                Text(Money.format(homeExpenseTotal).substringBeforeLast("."), color = Ink, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
+                            }
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                            if (homeExpenseCategories.isEmpty()) {
+                                Text("Add expenses to see your category breakdown.", color = Muted, fontSize = 11.sp)
+                            } else {
+                                homeExpenseCategories.take(5).forEach { (name, amount) ->
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Box(Modifier.size(8.dp).clip(CircleShape).background(categoryColor(name)))
+                                        Text(name, Modifier.weight(1f), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                                        Text("${if (homeExpenseTotal > 0L) amount * 100 / homeExpenseTotal else 0}%", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { onOpen("Reports") }) { Text("View report", color = if (AppBlueGlass) Color(0xFF1269D8) else Green) }
+                    }
+                }
+            }
+        }
+        item {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Quick Actions", modifier = Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
@@ -2182,6 +2238,11 @@ private fun ReportsScreen(
                             leadingIcon = { Icon(Icons.Default.LocalOffer, null) },
                             onClick = { reportView = "By tag"; showMoreReports = false }
                         )
+                        DropdownMenuItem(
+                            text = { Text("Money Notes") },
+                            leadingIcon = { Icon(Icons.Default.Notes, null) },
+                            onClick = { showMoreReports = false; onOpen("Money Notes") }
+                        )
                     }
                 }
             }
@@ -2262,7 +2323,7 @@ private fun ReportsScreen(
             item { InfoCard("Monthly cash flow", "Compare recorded income and expenses across recent months. Change the month above to move the reporting window.", Icons.Default.Insights) }
         }
         if (reportView == "Calendar") {
-            item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
+            item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(22.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null, elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) 0.dp else 2.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Daily totals", color = Ink, fontWeight = FontWeight.Bold)
                     var any = false
@@ -2271,7 +2332,7 @@ private fun ReportsScreen(
                         val daily = transactions.filter { transactionDateOrNull(it) == date }
                         if (daily.isNotEmpty()) {
                             any = true
-                            Row(Modifier.fillMaxWidth().background(Page, RoundedCornerShape(10.dp)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(appGlassSurface()).then(if (AppBlueGlass) Modifier.border(1.dp, appGlassBorder(), RoundedCornerShape(14.dp)) else Modifier).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text(date.format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM")), color = Ink, fontWeight = FontWeight.Medium)
                                     Text("${daily.size} transaction(s)", color = Muted, fontSize = 11.sp)
