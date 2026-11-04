@@ -145,12 +145,19 @@ private fun applyAppearance(
     Ink = if (AppDarkTheme) Color(0xFFF1F5F2) else Color(0xFF172554)
     Muted = if (AppDarkTheme) Color(0xFFB0BBD0) else Color(0xFF78849A)
 }
-private var Money by mutableStateOf(NumberFormat.getCurrencyInstance(Locale("en", "IN")))
+private fun currencyFormatter(locale: Locale): NumberFormat =
+    NumberFormat.getCurrencyInstance(locale).apply {
+        // Hide unnecessary .00 while preserving real fractional values if they occur.
+        minimumFractionDigits = 0
+        maximumFractionDigits = 2
+    }
+
+private var Money by mutableStateOf(currencyFormatter(Locale("en", "IN")))
 private fun applyCurrency(currency: String) {
     Money = when (currency) {
-        "USD ($)" -> NumberFormat.getCurrencyInstance(Locale.US)
-        "EUR (€)" -> NumberFormat.getCurrencyInstance(Locale.GERMANY)
-        else -> NumberFormat.getCurrencyInstance(Locale("en", "IN"))
+        "USD ($)" -> currencyFormatter(Locale.US)
+        "EUR (€)" -> currencyFormatter(Locale.GERMANY)
+        else -> currencyFormatter(Locale("en", "IN"))
     }
 }
 private val CategoryPalette = listOf(Color(0xFF356AE6), Color(0xFF159765), Color(0xFF8953D8), Color(0xFFD97732), Color(0xFFDB4765), Color(0xFF148D91), Color(0xFFB18A16), Color(0xFF477DAD), Color(0xFFAF5AB5), Color(0xFF567A35), Color(0xFFCF5A36), Color(0xFF5470C6))
@@ -1761,7 +1768,7 @@ private fun HomeScreen(
                             }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("Total spent", color = Muted, fontSize = 10.sp)
-                                Text(Money.format(homeExpenseTotal).substringBeforeLast("."), color = Ink, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
+                                Text(Money.format(homeExpenseTotal), color = Ink, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
                             }
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -1987,7 +1994,7 @@ private fun MonthlyIncomeBreakdownCard(totalIncome: Long, categories: List<Pair<
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Earned", color = Muted, fontSize = 10.sp)
-                        Text(Money.format(totalIncome).substringBeforeLast("."), color = Ink, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
+                        Text(Money.format(totalIncome), color = Ink, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
                         Text("this month", color = Muted, fontSize = 9.sp)
                     }
                 }
@@ -2457,7 +2464,7 @@ private fun ReportsScreen(
                             }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("Total Expense", color = Color(0xFF8094B0), fontSize = 11.sp)
-                                Text(Money.format(totalSpend).substringBeforeLast("."), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                                Text(Money.format(totalSpend), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                             }
                         }
                         Column(Modifier.weight(1.14f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -2532,7 +2539,7 @@ private fun ReportsScreen(
                                 Text(category, color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, softWrap = false)
                                 Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}% of expenses" else "0% of expenses", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                             }
-                            Text(Money.format(amount).substringBeforeLast(".").takeIf { Money.format(amount).contains(".") } ?: Money.format(amount), color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, softWrap = false)
+                            Text(Money.format(amount), color = Color(0xFF0E1C36), fontWeight = FontWeight.SemiBold, fontSize = 11.sp, maxLines = 1, softWrap = false)
                             Text(if (totalSpend > 0L) "${amount * 100 / totalSpend}%" else "0%", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                             Icon(Icons.Default.ChevronRight, contentDescription = "Open category", tint = Muted, modifier = Modifier.size(16.dp))
                         }
@@ -2772,7 +2779,7 @@ private fun ReportMetricCard(
                 Text(title, color = accent, fontSize = 11.sp, maxLines = 1, softWrap = false)
             }
             Text(
-                value.substringBeforeLast(".").takeIf { value.contains(".") } ?: value,
+                value,
                 modifier = Modifier.fillMaxWidth(),
                 color = accent,
                 fontWeight = FontWeight.Bold,
@@ -2815,7 +2822,7 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text("Monthly Overview", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text("Income and expenses · last 6 months", color = Muted, fontSize = 10.sp)
+                    Text("Compare income and expenses · exact amounts below", color = Muted, fontSize = 10.sp)
                 }
                 Surface(color = Color(0xFFE7F7F1), shape = RoundedCornerShape(50)) {
                     Text("LIVE DATA", Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = IncomeGreen, fontWeight = FontWeight.Bold, fontSize = 9.sp)
@@ -2863,6 +2870,27 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF247FEB)))
                     Text("Expenses", color = Muted, fontSize = 10.sp)
+                }
+            }
+            Column(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Mint.copy(alpha = if (AppDarkTheme) .12f else .20f))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Month", Modifier.weight(.8f), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text("Income", Modifier.weight(1.1f), color = IncomeGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                    Text("Expenses", Modifier.weight(1.1f), color = Color(0xFF247FEB), fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(appGlassBorder().copy(alpha = .7f)))
+                months.forEachIndexed { index, month ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(month.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH), Modifier.weight(.8f), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                        Text(Money.format(monthlyIncome[index]), Modifier.weight(1.1f), color = IncomeGreen, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End, maxLines = 1, softWrap = false)
+                        Text(Money.format(monthlyExpenses[index]), Modifier.weight(1.1f), color = Color(0xFF247FEB), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End, maxLines = 1, softWrap = false)
+                    }
                 }
             }
             val delta = (monthlyIncome.lastOrNull() ?: 0L) - (monthlyExpenses.lastOrNull() ?: 0L)
@@ -3261,7 +3289,7 @@ private fun BudgetsScreen(transactions: List<Transaction>) {
                                 }
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text("Spent", color = Muted, fontSize = 10.sp)
-                                    Text(Money.format(totalSpent).substringBeforeLast("."), color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    Text(Money.format(totalSpent), color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -4438,7 +4466,7 @@ private fun AppearanceScreen() {
                         Spacer(Modifier.width(11.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text("Total balance", color = Muted, fontSize = 10.sp)
-                            Text("₹ 84,250.00", color = Ink, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                            Text("₹ 84,250", color = Ink, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                             Text("Your money at a glance", color = Muted, fontSize = 10.sp)
                         }
                         Box(Modifier.clip(RoundedCornerShape(12.dp)).background(selectedAccent.copy(alpha = .12f)).padding(horizontal = 10.dp, vertical = 7.dp)) {
@@ -6878,7 +6906,7 @@ private fun ImportTransactionsScreen(
                             Text(transaction.date + " · " + transaction.category, color = Muted, fontSize = 12.sp)
                             Text(if (transaction.income) "Income" else "Expense", color = if (transaction.income) IncomeGreen else ExpenseRed, fontSize = 12.sp)
                         }
-                        Text((if (transaction.income) "+" else "−") + NumberFormat.getCurrencyInstance(Locale("en", "IN")).format(transaction.amount), color = if (transaction.income) IncomeGreen else ExpenseRed, fontWeight = FontWeight.Bold)
+                        Text((if (transaction.income) "+" else "−") + Money.format(transaction.amount), color = if (transaction.income) IncomeGreen else ExpenseRed, fontWeight = FontWeight.Bold)
                     }
                 }
             }
