@@ -93,8 +93,9 @@ private fun applyAppearance(theme: String, accent: String, layout: String, fontS
         "Blue" -> Color(0xFF0284C7)
         "Purple" -> Color(0xFF8B4DE8)
         "Orange" -> Color(0xFFF59E0B)
-        "Pink" -> Color(0xFFEC4899)
-        else -> Color(0xFF0284C7)
+        "Pink" -> Color(0xFFF472B6)
+        "Cyan" -> Color(0xFF06B6D4)
+        else -> Color(0xFF1D4ED8)
     }
     AppDarkTheme = theme == "Dark" || (theme == "System" && systemDark)
     AppCompactLayout = layout == "Compact"
