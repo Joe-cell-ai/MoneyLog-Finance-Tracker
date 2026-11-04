@@ -1818,7 +1818,6 @@ private fun CashFlowStatCard(title: String, amount: Long, accent: Color, tint: C
 
 @Composable
 private fun MoneyLogCashFlowHero(trackedBalance: Long, trend: List<Long>) {
-    val maxMagnitude = (trend.maxOfOrNull { kotlin.math.abs(it.toDouble()) } ?: 0.0).coerceAtLeast(1.0)
     val latestNet = trend.lastOrNull() ?: 0L
     val previousNet = trend.getOrNull(trend.lastIndex - 1) ?: latestNet
     val movement = latestNet - previousNet
@@ -1848,32 +1847,6 @@ private fun MoneyLogCashFlowHero(trackedBalance: Long, trend: List<Long>) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Icon(if (movement >= 0L) Icons.Default.TrendingUp else Icons.Default.TrendingDown, null, tint = if (movement >= 0L) Color(0xFFB9F5E3) else Color(0xFFFFD5E2), modifier = Modifier.size(14.dp))
                 Text(movementLabel, color = Color.White.copy(alpha = .9f), fontSize = 10.sp, fontWeight = FontWeight.Medium)
-            }
-            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(68.dp)) {
-                if (trend.size >= 2) {
-                    val points = trend.mapIndexed { index, value ->
-                        val x = size.width * index / (trend.lastIndex).coerceAtLeast(1)
-                        val y = size.height * .5f - (value.toDouble() / maxMagnitude).toFloat() * size.height * .38f
-                        androidx.compose.ui.geometry.Offset(x, y.coerceIn(5f, size.height - 5f))
-                    }
-                    val path = androidx.compose.ui.graphics.Path().apply {
-                        moveTo(points.first().x, points.first().y)
-                        for (index in 1 until points.size) {
-                            val previous = points[index - 1]; val current = points[index]
-                            val midpoint = (previous.x + current.x) / 2f
-                            cubicTo(midpoint, previous.y, midpoint, current.y, current.x, current.y)
-                        }
-                    }
-                    drawPath(path, Brush.horizontalGradient(listOf(Color(0xFF7DE9FF), Color.White)), style = Stroke(width = 3.5f, cap = StrokeCap.Round))
-                    points.forEachIndexed { index, point ->
-                        if (index == points.lastIndex || index == points.size / 2) {
-                            drawCircle(Color.White, radius = 4.2f, center = point)
-                            drawCircle(Color(0xFF1689F4), radius = 2.1f, center = point)
-                        }
-                    }
-                } else {
-                    drawLine(Color.White.copy(alpha = .55f), androidx.compose.ui.geometry.Offset(0f, size.height / 2f), androidx.compose.ui.geometry.Offset(size.width, size.height / 2f), strokeWidth = 2.dp.toPx())
-                }
             }
         }
     }
