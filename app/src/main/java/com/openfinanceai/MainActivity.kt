@@ -82,7 +82,10 @@ private var Purple by mutableStateOf(Color(0xFF8A63D2))
 private var Blue by mutableStateOf(Color(0xFF0284C7))
 private var AppDarkTheme by mutableStateOf(false)
 private var AppBlueGlass by mutableStateOf(false)
-private fun appPageBrush(): Brush = if (AppBlueGlass) Brush.linearGradient(listOf(Color(0xFFEAF8FF), Color(0xFFF0ECFF), Color(0xFFDDFBFF))) else SolidColor(Page)
+private var GlassSurface by mutableStateOf(Color(0xDFFFFFFF))
+private var GlassBorder by mutableStateOf(Color(0xA6FFFFFF))
+private fun appGlassSurface(): Color = if (AppBlueGlass) GlassSurface else if (AppDarkTheme) Color(0xFF1B2430) else Color.White
+private fun appPageBrush(): Brush = if (AppBlueGlass) Brush.linearGradient(listOf(Color(0xFFB8F2FF), Color(0xFF16B5F4), Color(0xFF4D73F5), Color(0xFF9C79F7), Color(0xFFE5F5FF))) else SolidColor(Page)
 private fun parseThemeAccentHex(raw: String, fallback: Color = Color(0xFF9333EA)): Color =
     runCatching { Color(android.graphics.Color.parseColor(raw)) }.getOrDefault(fallback)
 private var AppCompactLayout by mutableStateOf(false)
@@ -97,6 +100,8 @@ private fun applyAppearance(
     customAccentHex: String = "#9333EA"
 ) {
     AppBlueGlass = theme == "Blue Glass"
+    GlassSurface = if (AppBlueGlass) Color(0xDFFFFFFF) else if (theme == "Dark" || (theme == "System" && systemDark)) Color(0xFF1B2430) else Color.White
+    GlassBorder = if (AppBlueGlass) Color(0xB3FFFFFF) else Color(0xFFE1E7F0)
     val accentColor = when {
         AppBlueGlass -> Color(0xFF06B6D4)
         theme == "Custom Colors" -> parseThemeAccentHex(customAccentHex)
@@ -921,11 +926,11 @@ private fun FinanceApp() {
             onTertiary = Color.White,
             error = ExpenseRed,
             background = Page,
-            surface = Color.White,
-            surfaceVariant = Color(0xFFF0F1F8),
+            surface = appGlassSurface(),
+            surfaceVariant = if (AppBlueGlass) Color(0x99E7F5FF) else if (AppDarkTheme) Color(0xFF263249) else Color(0xFFF0F1F8),
             onSurface = Ink,
             onSurfaceVariant = Muted,
-            outline = Color(0xFFDADCE8)
+            outline = if (AppBlueGlass) GlassBorder else Color(0xFFDADCE8)
         ),
         shapes = Shapes(
             extraSmall = RoundedCornerShape(10.dp),
@@ -942,17 +947,19 @@ private fun FinanceApp() {
             )
         ) {
         Scaffold(
-            containerColor = Page,
+            modifier = Modifier.fillMaxSize().background(appPageBrush()),
+            containerColor = Color.Transparent,
             topBar = {},
             bottomBar = {
                 Surface(
                     modifier = if (AppBlueGlass) Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp) else Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(if (AppBlueGlass) 28.dp else 0.dp),
-                    color = Color.White,
-                    shadowElevation = if (AppBlueGlass) 12.dp else 0.dp
+                    color = if (AppBlueGlass) Color(0xBFEAF7FF) else Color.White,
+                    border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, Color(0xD9FFFFFF)) else null,
+                    shadowElevation = if (AppBlueGlass) 18.dp else 0.dp
                 ) {
                     NavigationBar(
-                        containerColor = Color.White,
+                        containerColor = if (AppBlueGlass) Color(0x99FFFFFF) else Color.White,
                         tonalElevation = if (AppBlueGlass) 0.dp else 3.dp,
                         windowInsets = NavigationBarDefaults.windowInsets
                     ) {
@@ -1666,7 +1673,7 @@ private fun HomeScreen(
                 }
             }
             Spacer(Modifier.height(2.dp))
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Spending by category", color = Color(0xFF173D70), fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1710,7 +1717,7 @@ private fun HomeScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
                     shape = RoundedCornerShape(18.dp)
                 ) {
                     Column(
@@ -1852,7 +1859,7 @@ private fun BudgetFlowMiniChart(spent: Long, budget: Long, categories: List<Pair
 private fun MonthlyIncomeBreakdownCard(totalIncome: Long, categories: List<Pair<String, Long>>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
         shape = RoundedCornerShape(24.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -2041,7 +2048,7 @@ private fun ActivityScreen(transactions: List<Transaction>, onTransactionLongPre
         }
         if (visible.isEmpty()) {
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(22.dp)) {
+                Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(22.dp)) {
                     Column(Modifier.fillMaxWidth().padding(26.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.ReceiptLong, null, tint = Muted, modifier = Modifier.size(34.dp))
                         Text("No transactions found", color = Ink, fontWeight = FontWeight.SemiBold)
@@ -2180,7 +2187,7 @@ private fun ReportsScreen(
             } }
         }
         if (reportView == "Overview" || reportView == "Total") {
-            item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+            item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Top spending category", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     if (categories.isEmpty()) Text("No expenses recorded this month.", color = Muted)
@@ -2200,7 +2207,7 @@ private fun ReportsScreen(
                     }
                 }
             } }
-            item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+            item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Income vs expenses", fontWeight = FontWeight.Bold, color = Ink)
                     Text("Income · " + Money.format(income), color = IncomeGreen)
@@ -2212,7 +2219,7 @@ private fun ReportsScreen(
             } }
         }
         if (reportView == "Calendar") {
-            item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+            item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Daily totals", color = Ink, fontWeight = FontWeight.Bold)
                     var any = false
@@ -2245,7 +2252,7 @@ private fun ReportsScreen(
                     ReportMetricCard("Savings", Money.format(income - expenses), Icons.Default.Savings, Modifier.weight(1f), Color(0xFFE6F0FF), Color(0xFF0066FF))
                 }
             }
-            item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
+            item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Spending by category", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2303,7 +2310,7 @@ private fun ReportsScreen(
                     }
                 }
             }
-            item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
+            item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
                     val filteredCategories = categories.filter { it.first.contains(searchQuery, ignoreCase = true) }
                     val visibleCategories = if (showAllCategories) filteredCategories else filteredCategories.take(5)
@@ -2347,7 +2354,7 @@ private fun ReportsScreen(
             } }
         }
         if (reportView == "By tag") {
-            item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+            item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Totals by tag", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     if (tagTotals.isEmpty()) Text("No tags yet. Add hashtags to transaction notes, for example #home, #travel or #work.", color = Muted, fontSize = 12.sp)
@@ -2363,7 +2370,7 @@ private fun ReportsScreen(
             } }
         }
         if (reportView == "Total") {
-            item { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+            item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Monthly totals", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     listOf(Triple("Total income", income, IncomeGreen), Triple("Total expenses", expenses, ExpenseRed), Triple("Net savings", income - expenses, Purple)).forEach { row ->
@@ -2456,7 +2463,7 @@ private fun ReportsScreen(
                                     Text("${categoryTransactions.size} transactions · average ${Money.format(averageSpend)} each", color = Muted, fontSize = 12.sp)
                                 }
                             }
-                            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(14.dp)) {
+                            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(14.dp)) {
                                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("Top spending places", color = Ink, fontWeight = FontWeight.Bold)
                                     if (topPlaces.isEmpty()) {
@@ -2627,7 +2634,7 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text("TOTAL OUTSTANDING", color = slate, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = .7.sp)
@@ -2642,7 +2649,7 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
             }
         }
         if (loans.isEmpty()) item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Box(Modifier.size(58.dp).clip(CircleShape).background(greenTint), contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.AccountBalance, null, tint = forest, modifier = Modifier.size(28.dp))
@@ -2677,7 +2684,7 @@ private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Lo
                     onClick = { onDetails(loan) },
                     onLongClick = { onLoanLongPress(loan) }
                 ),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
                 shape = RoundedCornerShape(18.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
@@ -2816,7 +2823,7 @@ private fun CalendarScreen(loans: List<Loan>, transactions: List<Transaction>) {
             Text("Tap a date to review transactions and EMI reminders", color = Muted)
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {                        IconButton(onClick = {
                             val nextMonth = visibleMonth.minusMonths(1)
@@ -2884,7 +2891,7 @@ private fun CalendarScreen(loans: List<Loan>, transactions: List<Transaction>) {
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(16.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(selectedDate.format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.ENGLISH)), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -2938,7 +2945,7 @@ private fun BudgetsScreen(transactions: List<Transaction>) {
         item { Text("Monthly budgets", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold) }
         item { Text("Set category limits and compare them with dated expenses in the current month.", color = Muted) }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(16.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     OutlinedTextField(value = amount, onValueChange = { amount = it.filter(Char::isDigit) }, label = { Text("Monthly limit (₹)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -2962,7 +2969,7 @@ private fun BudgetsScreen(transactions: List<Transaction>) {
             val limit = budgets[name] ?: 0L
             val spent = expenses[name] ?: 0L
             val ratio = if (limit > 0L) spent.toFloat() / limit else 0f
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(15.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(15.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(name, Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Bold)
@@ -3015,7 +3022,7 @@ private fun InsightsScreen(income: Long, expenses: Long, debt: Long, transaction
 
 @Composable
 private fun InfoCard(title: String, body: String, icon: ImageVector) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(17.dp)) {
+    Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(17.dp)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
             Icon(icon, null, tint = Green)
             Spacer(Modifier.width(12.dp))
@@ -3095,7 +3102,7 @@ private fun CategoriesScreen(transactions: List<Transaction> = emptyList(), onCa
             if (message.isNotBlank()) item { Text(message, color = Green, fontSize = 12.sp) }
             items(visibleCategories, key = { it }) { category ->
                 val tint = savedFinanceColor(context, "category", category)
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = appGlassSurface()), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                     Row(Modifier.fillMaxWidth().padding(start = 13.dp, top = 10.dp, bottom = 10.dp, end = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                         Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(tint.copy(alpha = .13f)), contentAlignment = Alignment.Center) {
                             FinanceIconDisplay(savedFinanceIconKey(context, "category", category), tint, Modifier.size(22.dp))
@@ -3359,7 +3366,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
             Text("Make MoneyLog work for you", color = Muted, fontSize = 13.sp)
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)) {
                     mainItems.forEachIndexed { index, item ->
                         val tint = when (item.first) {
@@ -3403,7 +3410,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
         }
         item {
             Text("More tools", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)) {
                     listOf(
                         Triple("Import transactions", "Import a bank statement CSV", Icons.Default.FileUpload),
@@ -3516,7 +3523,7 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
     LazyColumn(modifier = Modifier.fillMaxSize().background(appPageBrush()), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { Text("Privacy & Security", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold); Text("Understand how your data is handled", color = Muted, fontSize = 13.sp) }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(19.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(19.dp)) {
                 Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(42.dp).clip(CircleShape).background(IncomeTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.Lock, null, tint = IncomeGreen) }
@@ -3535,7 +3542,7 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(19.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(19.dp)) {
                 Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(42.dp).clip(CircleShape).background(LavenderTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.Fingerprint, null, tint = Purple) }
@@ -3630,7 +3637,7 @@ private fun NotificationsSettingsScreen(onOpenPaymentSettings: () -> Unit, onPre
     LazyColumn(modifier = Modifier.fillMaxSize().background(appPageBrush()), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { Text("Notifications", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold); Text("Choose which MoneyLog alerts you want", color = Muted, fontSize = 13.sp) }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(19.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(19.dp)) {
                 Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Transaction capture", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text("MoneyLog does not read payment alerts or connect to banks. Use Android settings to control whether this app may show notifications.", color = Muted, fontSize = 12.sp)
@@ -3645,7 +3652,7 @@ private fun NotificationsSettingsScreen(onOpenPaymentSettings: () -> Unit, onPre
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(19.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(19.dp)) {
                 Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Reminders & summaries", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     SettingToggleRow("EMI reminders", "Enable or disable scheduled EMI reminders", emiReminder) { emiReminder = it; persist("settings_emi_reminders", it); onPreferenceChanged() }
@@ -3675,7 +3682,7 @@ private fun SettingToggleRow(title: String, subtitle: String, checked: Boolean, 
 private fun AboutSettingsScreen() {
     LazyColumn(modifier = Modifier.fillMaxSize().background(appPageBrush()), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(22.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(22.dp)) {
                 Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Box(Modifier.size(72.dp).clip(CircleShape).background(Green), contentAlignment = Alignment.Center) { Text("M", color = Color.White, fontSize = 38.sp, fontWeight = FontWeight.Bold) }
                     Text("MoneyLog", color = Ink, fontWeight = FontWeight.Bold, fontSize = 23.sp)
@@ -3686,7 +3693,7 @@ private fun AboutSettingsScreen() {
         }
         item { Text("About MoneyLog", fontSize = 25.sp, color = Ink, fontWeight = FontWeight.Bold) }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                     Row { Text("App", Modifier.weight(1f), color = Muted); Text("MoneyLog: Finance Tracker", color = Ink, fontWeight = FontWeight.Medium) }
                     HorizontalDivider(color = Color(0xFFEDEFF4))
@@ -3832,7 +3839,7 @@ private fun BackupSecurityScreen(
             Text("Keep a safe copy of your financial records", color = Muted, fontSize = 13.sp)
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Autorenew, null, tint = IncomeGreen, modifier = Modifier.size(26.dp))
@@ -3890,7 +3897,7 @@ private fun BackupSecurityScreen(
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.CloudSync, null, tint = IncomeGreen, modifier = Modifier.size(26.dp))
@@ -3911,7 +3918,7 @@ private fun BackupSecurityScreen(
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(44.dp).clip(CircleShape).background(IncomeTint), contentAlignment = Alignment.Center) {
@@ -3930,7 +3937,7 @@ private fun BackupSecurityScreen(
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(20.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(44.dp).clip(CircleShape).background(LavenderTint), contentAlignment = Alignment.Center) {
@@ -3950,7 +3957,7 @@ private fun BackupSecurityScreen(
         }
         item {
             Text("Export data", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp)) {
                     Row(Modifier.fillMaxWidth().clickable(onClick = onExportCsv).padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(SkyTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.Description, null, tint = Blue) }
@@ -4002,7 +4009,7 @@ private fun AppearanceScreen() {
     val selectedAccent = if (theme == "Custom Colors") parseThemeAccentHex(customAccentHex) else accents.firstOrNull { it.first == accent }?.second ?: Green
     fun save(key: String, value: String) { preferences.edit().putString(key, value).apply() }
     val cardShape = RoundedCornerShape(24.dp)
-    val softSurface = if (AppDarkTheme) Color(0xFF1B2430) else Color.White
+    val softSurface = appGlassSurface()
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(appPageBrush()),
         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 20.dp),
@@ -4618,7 +4625,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(20.dp)) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 17.dp, horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("MONTHLY EMI", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
@@ -4661,7 +4668,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
             }
         }
         item {
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color.White).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (AppBlueGlass) Color(0x99FFFFFF) else Color.White).then(if (AppBlueGlass) Modifier.border(1.dp, GlassBorder, RoundedCornerShape(14.dp)) else Modifier).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf("Schedule", "Overview", "Bank Verify").forEach { section ->
                     val selected = selectedSection == section
                     Box(Modifier.weight(if (section == "Bank Verify") 1.2f else 1f).clip(RoundedCornerShape(11.dp)).background(if (selected) forest else Color.Transparent).clickable { selectedSection = section }.padding(horizontal = 5.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
@@ -4672,7 +4679,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         }
         if (selectedSection == "Overview") {
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+                Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
                     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("Loan overview", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                         LoanOverviewRow("Original principal", if (importedSchedule.isNotEmpty()) LoanMoney.formatPaise(importedOriginalPrincipalPaise) else Money.format(loan.originalPrincipal))
@@ -4750,7 +4757,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
             }
             if (selectedSection == "Bank Verify") {
                 item {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+                    Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("Compare a bank-statement installment", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                             Text("Or upload your lender's EMI schedule PDF. MoneyLog checks readable text and installment-row patterns only; it cannot authenticate the PDF or confirm that a bank/lender issued it. Verify the document through your lender before relying on it.", color = Muted, fontSize = 11.sp)
@@ -4827,7 +4834,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     val statusColor = when (importedStatus) { "Paid" -> Color(0xFF0E7490); "Overdue" -> Color(0xFFEF4444); else -> Color(0xFFF59E0B) }
                     val statusTint = when (importedStatus) { "Paid" -> Color(0xFFCCFBF1); "Overdue" -> Color(0xFFFFE4E6); else -> Color(0xFFFFF1D6) }
                     val breakdown = importedDocumentBreakdown.getOrNull(index)
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }, onLongClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(if (AppBlueGlass) Color(0xCFFFFFFF) else Color.White).then(if (AppBlueGlass) Modifier.border(1.dp, GlassBorder, RoundedCornerShape(15.dp)) else Modifier).combinedClickable(onClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }, onLongClick = { onEmiLongPress(originalDateLabel, amount, importedStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(dateLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
                             val displayedRate = breakdown?.annualRate ?: loan.annualRate.takeIf { it > 0.0 }
@@ -4868,7 +4875,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 val installmentStatus = if (paid) "Paid" else if (overdue) "Overdue" else "Upcoming"
                 val installmentStatusColor = if (paid) Color(0xFF0E7490) else if (overdue) Color(0xFFEF4444) else upcomingAmber
                 val installmentStatusTint = if (paid) Color(0xFFCCFBF1) else if (overdue) Color(0xFFFFE4E6) else upcomingTint
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Color.White).combinedClickable(onClick = { onEmiLongPress(installmentLabelOriginal, LoanMoney.rupeesToPaise(installmentAmount), installmentStatus) }, onLongClick = { onEmiLongPress(installmentLabelOriginal, LoanMoney.rupeesToPaise(installmentAmount), installmentStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(if (AppBlueGlass) Color(0xCFFFFFFF) else Color.White).then(if (AppBlueGlass) Modifier.border(1.dp, GlassBorder, RoundedCornerShape(15.dp)) else Modifier).combinedClickable(onClick = { onEmiLongPress(installmentLabelOriginal, LoanMoney.rupeesToPaise(installmentAmount), installmentStatus) }, onLongClick = { onEmiLongPress(installmentLabelOriginal, LoanMoney.rupeesToPaise(installmentAmount), installmentStatus) }).padding(horizontal = 12.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1.05f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(displayInstallmentLabel, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
                         Text("Principal ${Money.format(principalPart)}", color = Muted, fontSize = 9.sp)
@@ -5326,7 +5333,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(22.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(22.dp)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                     Text("Import or enter loan details", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text("Option 1 · Import a lender statement or EMI schedule PDF", color = Muted, fontSize = 12.sp)
@@ -5379,7 +5386,7 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
                         }
                     }
                     if (importedScheduleRows.isNotEmpty()) {
-                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(14.dp)) {
+                        Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(14.dp)) {
                             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                                 Text("Repayment rows extracted from PDF (${importedScheduleRows.size})", color = Ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 if (importedIllustrative) Text("Illustrative schedule only — not a final disbursement-based schedule.", color = Color(0xFFB45309), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
@@ -5577,7 +5584,7 @@ private fun TransactionDetailsDialog(
                             fontSize = 11.sp
                         )
                     }
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE1E6F1)), shape = RoundedCornerShape(18.dp)) {
+                    Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE1E6F1)), shape = RoundedCornerShape(18.dp)) {
                         Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 4.dp)) {
                             TransactionDetailRow(Icons.Default.FolderOpen, "Category", transaction.category)
                             TransactionDetailRow(Icons.Default.LocalOffer, "Tag", transaction.tag.ifBlank { "No tag added" })
@@ -5923,7 +5930,7 @@ private fun AddTransactionDialog(
                     }
                 }
                 Text("Transaction Details", color = Color(0xFF151B3D), fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = appGlassSurface()), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 5.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         ExposedDropdownMenuBox(expanded = categoryMenuExpanded, onExpandedChange = { categoryMenuExpanded = it }) {
                             Row(Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable).padding(vertical = 10.dp),
