@@ -37,7 +37,8 @@ internal fun loadMoneyNotes(context: Context): List<MoneyNote> = runCatching {
             description = item.optString("description", ""),
             paidPaise = item.optLong("paidPaise", 0L).coerceIn(0L, principal),
             payments = payments,
-            interestRateBasisPoints = item.optInt("interestRateBasisPoints", 0).coerceAtLeast(0)
+            interestRateBasisPoints = item.optInt("interestRateBasisPoints", 0).coerceAtLeast(0),
+            loanType = runCatching { MoneyNoteLoanType.valueOf(item.optString("loanType", "OTHER")) }.getOrDefault(MoneyNoteLoanType.OTHER)
         )
     }
 }.getOrDefault(emptyList())
@@ -62,7 +63,8 @@ internal fun saveMoneyNotes(context: Context, notes: List<MoneyNote>) {
             .put("description", note.description)
             .put("paidPaise", note.paidPaise)
             .put("payments", payments)
-            .put("interestRateBasisPoints", note.interestRateBasisPoints))
+            .put("interestRateBasisPoints", note.interestRateBasisPoints)
+            .put("loanType", note.loanType.name))
     }
     context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
         .edit().putString("money_notes", array.toString()).apply()
