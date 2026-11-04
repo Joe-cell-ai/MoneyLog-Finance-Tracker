@@ -57,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import java.text.NumberFormat
 import java.time.YearMonth
 import java.time.format.TextStyle
@@ -5235,10 +5236,7 @@ private fun LoanDateField(label: String, date: String, onDateChange: (String) ->
     var showPicker by remember { mutableStateOf(false) }
     val initialMillis = remember(date) { runCatching { java.time.LocalDate.parse(date.take(10)).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrDefault(System.currentTimeMillis()) }
     OutlinedTextField(value = date, onValueChange = {}, readOnly = true, label = { Text(label) }, trailingIcon = { IconButton(onClick = { showPicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date") } }, modifier = Modifier.fillMaxWidth().clickable { showPicker = true }, singleLine = true)
-    if (showPicker) {
-        val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-        DatePickerDialog(onDismissRequest = { showPicker = false }, shape = RoundedCornerShape(28.dp), colors = DatePickerDefaults.colors(containerColor = if (AppBlueGlass) Color(0xEAF5FCFF) else MaterialTheme.colorScheme.surface), confirmButton = { TextButton(onClick = { pickerState.selectedDateMillis?.let { millis -> onDateChange(java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()) }; showPicker = false }) { Text("Select", color = Green) } }, dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Cancel", color = Muted) } }) { DatePicker(state = pickerState, showModeToggle = false, colors = DatePickerDefaults.colors(containerColor = if (AppBlueGlass) Color(0xEAF5FCFF) else MaterialTheme.colorScheme.surface, selectedDayContainerColor = Color(0xFF167DE5), todayDateBorderColor = Green, todayContentColor = Green)) }
-    }
+    if (showPicker) GlassCalendarDialog(initialDate = date.take(10), accent = Green, onDismiss = { showPicker = false }, onSelect = { onDateChange(it); showPicker = false })
 }
 
 @Composable
@@ -5997,16 +5995,7 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
                     else FinanceIconDisplay(savedFinanceIconKey(context, "tag", primaryTag), accent, Modifier.size(20.dp))
                 }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
                 OutlinedTextField(value = date, onValueChange = {}, readOnly = true, label = { Text("Transaction date") }, leadingIcon = { Icon(Icons.Default.CalendarMonth, null, tint = accent) }, trailingIcon = { IconButton(onClick = { showDatePicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date", tint = accent) } }, modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }, singleLine = true, shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent))
-                if (showDatePicker) {
-                    val initialMillis = runCatching { transactionDateOrNull(transaction)?.atStartOfDay(java.time.ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: System.currentTimeMillis() }.getOrDefault(System.currentTimeMillis())
-                    val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-                    DatePickerDialog(onDismissRequest = { showDatePicker = false }, shape = RoundedCornerShape(28.dp), colors = DatePickerDefaults.colors(containerColor = if (AppBlueGlass) Color(0xEAF5FCFF) else MaterialTheme.colorScheme.surface), confirmButton = {
-                        TextButton(onClick = {
-                            pickerState.selectedDateMillis?.let { millis -> date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString() }
-                            showDatePicker = false
-                        }) { Text("Select", color = accent) }
-                    }, dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel", color = accent) } }) { DatePicker(state = pickerState, showModeToggle = false, colors = DatePickerDefaults.colors(containerColor = if (AppBlueGlass) Color(0xEAF5FCFF) else MaterialTheme.colorScheme.surface, selectedDayContainerColor = accent, todayDateBorderColor = accent, todayContentColor = accent)) }
-                }
+                if (showDatePicker) GlassCalendarDialog(initialDate = date, accent = accent, onDismiss = { showDatePicker = false }, onSelect = { date = it; showDatePicker = false })
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
         },
@@ -6352,20 +6341,7 @@ private fun AddTransactionDialog(
                         }
                     }
                 }
-                if (showDatePicker) {
-                    val initialMillis = runCatching { java.time.LocalDate.parse(date).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrDefault(System.currentTimeMillis())
-                    val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-                    DatePickerDialog(onDismissRequest = { showDatePicker = false }, shape = RoundedCornerShape(26.dp),
-                        colors = DatePickerDefaults.colors(containerColor = if (AppBlueGlass) Color(0xEAF5FCFF) else Color(0xFFFCFBFF)),
-                        confirmButton = {
-                            Button(onClick = {
-                                pickerState.selectedDateMillis?.let { millis -> date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString() }
-                                showDatePicker = false
-                            }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2878E8))) { Text("Done") }
-                        },
-                        dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
-                    ) { DatePicker(state = pickerState, showModeToggle = false, colors = DatePickerDefaults.colors(containerColor = if (AppBlueGlass) Color(0xEAF5FCFF) else Color(0xFFFCFBFF), selectedDayContainerColor = Color(0xFF2878E8), todayDateBorderColor = Color(0xFF2878E8), todayContentColor = Color(0xFF2878E8))) }
-                }
+                if (showDatePicker) GlassCalendarDialog(initialDate = date, accent = Color(0xFF2878E8), onDismiss = { showDatePicker = false }, onSelect = { date = it; showDatePicker = false })
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
         },
@@ -6760,4 +6736,98 @@ private fun parseTransactionCsv(csv: String): List<Transaction> {
             tag = values.getOrNull(tagIndex ?: -1).orEmpty().removePrefix("#").trim()
         )
     }.also { require(it.isNotEmpty()) { "No valid transaction rows found. Check the CSV column names and amounts." } }
+}
+
+
+@Composable
+internal fun GlassCalendarDialog(
+    initialDate: String,
+    accent: Color = Color(0xFF167DE5),
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit
+) {
+    val today = remember { java.time.LocalDate.now() }
+    var selectedDate by remember(initialDate) {
+        mutableStateOf(runCatching { java.time.LocalDate.parse(initialDate.take(10)) }.getOrDefault(today))
+    }
+    var visibleMonth by remember(initialDate) { mutableStateOf(YearMonth.from(selectedDate)) }
+    val daysInMonth = visibleMonth.lengthOfMonth()
+    val firstDayOffset = visibleMonth.atDay(1).dayOfWeek.value % 7
+    val cellCount = ((firstDayOffset + daysInMonth + 6) / 7) * 7
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().widthIn(max = 360.dp),
+            shape = RoundedCornerShape(30.dp),
+            color = if (AppBlueGlass) Color(0xF2F7FCFF) else MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = if (AppBlueGlass) .95f else .65f)),
+            shadowElevation = 22.dp
+        ) {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("SELECT DATE", color = accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                        Text(visibleMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH) + " " + visibleMonth.year, color = Ink, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Row {
+                        IconButton(onClick = { visibleMonth = visibleMonth.minusMonths(1) }) {
+                            Icon(Icons.Default.ChevronLeft, "Previous month", tint = accent)
+                        }
+                        IconButton(onClick = { visibleMonth = visibleMonth.plusMonths(1) }) {
+                            Icon(Icons.Default.ChevronRight, "Next month", tint = accent)
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    listOf("S", "M", "T", "W", "T", "F", "S").forEach { weekday ->
+                        Box(Modifier.weight(1f).height(28.dp), contentAlignment = Alignment.Center) {
+                            Text(weekday, color = Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+                (0 until cellCount / 7).forEach { week ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        (0..6).forEach { weekday ->
+                            val day = week * 7 + weekday - firstDayOffset + 1
+                            val validDay = day in 1..daysInMonth
+                            val date = if (validDay) visibleMonth.atDay(day) else null
+                            val isSelected = date == selectedDate
+                            val isToday = date == today
+                            Box(
+                                Modifier.weight(1f).aspectRatio(1f).padding(2.dp)
+                                    .clip(CircleShape)
+                                    .background(when {
+                                        isSelected -> accent
+                                        isToday -> accent.copy(alpha = .12f)
+                                        else -> Color.Transparent
+                                    })
+                                    .then(if (validDay) Modifier.clickable { selectedDate = date!! } else Modifier),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (validDay) Text(
+                                    day.toString(),
+                                    color = when {
+                                        isSelected -> Color.White
+                                        isToday -> accent
+                                        else -> Ink
+                                    },
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { selectedDate = today; visibleMonth = YearMonth.from(today) }) { Text("Today", color = accent) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
+                        Spacer(Modifier.width(4.dp))
+                        Button(onClick = { onSelect(selectedDate.toString()) }, shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = accent)) {
+                            Text("Select date", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
