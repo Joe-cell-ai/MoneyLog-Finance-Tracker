@@ -147,7 +147,7 @@ private fun applyAppearance(
 }
 private fun currencyFormatter(locale: Locale): NumberFormat =
     NumberFormat.getCurrencyInstance(locale).apply {
-        // Hide unnecessary .00 while preserving real fractional values if they occur.
+        // Hide unnecessary trailing decimal zeros while preserving real fractional values.
         minimumFractionDigits = 0
         maximumFractionDigits = 2
     }
