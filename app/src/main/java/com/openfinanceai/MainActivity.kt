@@ -92,7 +92,7 @@ internal fun appPageBrush(): Brush = if (AppBlueGlass) when (AppGlassTheme) {
     "Emerald Glass" -> Brush.linearGradient(listOf(Color(0xFFD8FFF0), Color(0xFF35C9A1), Color(0xFF087E9B), Color(0xFFDDFBF1)))
     "Rose Glass" -> Brush.linearGradient(listOf(Color(0xFFFFE0F0), Color(0xFFF58AB8), Color(0xFF9270E8), Color(0xFFFFEAF5)))
     "Amber Glass" -> Brush.linearGradient(listOf(Color(0xFFFFE9C7), Color(0xFFFFB56B), Color(0xFFEF7D79), Color(0xFFFFF1D8)))
-    "Midnight Glass" -> Brush.linearGradient(listOf(Color(0xFF111A3A), Color(0xFF263C70), Color(0xFF4C3D8F), Color(0xFF17284B)))
+    "Midnight Glass" -> Brush.linearGradient(listOf(Color(0xFFDDE5FF), Color(0xFF879BEE), Color(0xFF686ACD), Color(0xFFE5DEFF)))
     else -> Brush.linearGradient(listOf(Color(0xFFB8F2FF), Color(0xFF16B5F4), Color(0xFF4D73F5), Color(0xFF9C79F7), Color(0xFFE5F5FF)))
 } else SolidColor(Page)
 private fun appCardSurface(original: Color): Color = if (AppBlueGlass) Color(0xDDFBFEFF) else original
@@ -4392,7 +4392,7 @@ private fun AppearanceScreen() {
                                 "Emerald Glass" -> Brush.linearGradient(listOf(Color(0xFFB6F5D8), Color(0xFF078A78)))
                                 "Rose Glass" -> Brush.linearGradient(listOf(Color(0xFFFFC5DF), Color(0xFFD94691)))
                                 "Amber Glass" -> Brush.linearGradient(listOf(Color(0xFFFFD79A), Color(0xFFD97732)))
-                                "Midnight Glass" -> Brush.linearGradient(listOf(Color(0xFF111A3A), Color(0xFF9D8CFF)))
+                                "Midnight Glass" -> Brush.linearGradient(listOf(Color(0xFF5364B8), Color(0xFFB5A8FF)))
                                 "Dark Mode" -> SolidColor(Color(0xFF0B1530))
                                 "Custom Colors" -> SolidColor(selectedAccent)
                                 else -> SolidColor(Color(0xFFE5E7EB))
