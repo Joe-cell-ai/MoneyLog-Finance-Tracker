@@ -1990,10 +1990,30 @@ private fun GlassBottomNavItem(label: String, icon: ImageVector, selected: Boole
 private fun QuickAction(label: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val tint = when (label) { "Add expense" -> ExpenseTint; "Add income" -> IncomeTint; else -> LavenderTint }
     val accent = when (label) { "Add expense" -> ExpenseRed; "Add income" -> IncomeGreen; else -> Purple }
-    Card(modifier = modifier.clickable { onClick() }, colors = CardDefaults.cardColors(containerColor = appCardSurface(tint)), shape = RoundedCornerShape(17.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .72f)) else null, elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) 5.dp else 0.dp)) {
-        Column(Modifier.fillMaxWidth().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, null, tint = accent)
-            Text(label, color = Ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    Card(
+        modifier = modifier.height(108.dp).clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = appCardSurface(tint)),
+        shape = RoundedCornerShape(17.dp),
+        border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .72f)) else null,
+        elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) 5.dp else 0.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, null, tint = accent, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(
+                label,
+                color = Ink,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                minLines = 2,
+                lineHeight = 14.sp
+            )
         }
     }
 }
