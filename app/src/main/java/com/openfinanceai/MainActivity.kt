@@ -2278,17 +2278,23 @@ private fun ReportsScreen(
         if (reportView == "Overview" || reportView == "Total") {
             item { ReportsTrendCard(allTransactions, selectedMonth) }
             item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricCard("Income", Money.format(income), Modifier.weight(1f), IncomeTint, IncomeGreen)
-                MetricCard("Expenses", Money.format(expenses), Modifier.weight(1f), ExpenseTint, ExpenseRed)
+                MetricCard("Income", Money.format(income), Modifier.weight(1f).heightIn(min = 82.dp), IncomeTint, IncomeGreen)
+                MetricCard("Expenses", Money.format(expenses), Modifier.weight(1f).heightIn(min = 82.dp), ExpenseTint, ExpenseRed)
             } }
             item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricCard("Net savings", Money.format(income - expenses), Modifier.weight(1f), LavenderTint, Purple)
-                MetricCard("Transactions", transactions.size.toString(), Modifier.weight(1f), SkyTint, Blue)
+                MetricCard("Net savings", Money.format(income - expenses), Modifier.weight(1f).heightIn(min = 82.dp), LavenderTint, Purple)
+                MetricCard("Transactions", transactions.size.toString(), Modifier.weight(1f).heightIn(min = 82.dp), SkyTint, Blue)
             } }
         }
         if (reportView == "Overview" || reportView == "Total") {
-            item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item { Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
+                shape = RoundedCornerShape(20.dp),
+                border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null,
+                elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) 0.dp else 1.dp)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text("Top spending category", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     if (categories.isEmpty()) Text("No expenses recorded this month.", color = Muted)
                     else {
@@ -2299,21 +2305,31 @@ private fun ReportsScreen(
                             }
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(top.first, color = Ink, fontWeight = FontWeight.Bold)
-                                Text(if (totalSpend > 0L) "${top.second * 100 / totalSpend}% of expenses" else "0%", color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                Text(top.first, color = Ink, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, softWrap = false)
+                                Text(if (totalSpend > 0L) "${top.second * 100 / totalSpend}% of expenses" else "0%", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             }
-                            Text(Money.format(top.second), color = Ink, fontWeight = FontWeight.Bold)
+                            Text(Money.format(top.second), color = Ink, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, softWrap = false)
                         }
                     }
                 }
             } }
-            item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
+            item { Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
+                shape = RoundedCornerShape(20.dp),
+                border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null,
+                elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) 0.dp else 1.dp)
+            ) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Income vs expenses", fontWeight = FontWeight.Bold, color = Ink)
-                    Text("Income · " + Money.format(income), color = IncomeGreen)
-                    LinearProgressIndicator(progress = { if (income + expenses > 0L) income.toFloat() / (income + expenses) else 0f }, modifier = Modifier.fillMaxWidth(), color = IncomeGreen)
-                    Text("Expenses · " + Money.format(expenses), color = ExpenseRed)
-                    LinearProgressIndicator(progress = { if (income + expenses > 0L) expenses.toFloat() / (income + expenses) else 0f }, modifier = Modifier.fillMaxWidth(), color = ExpenseRed)
+                    Text("Income vs expenses", fontWeight = FontWeight.Bold, color = Ink, fontSize = 18.sp)
+                    Text("Income · " + Money.format(income), color = IncomeGreen, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Box(Modifier.fillMaxWidth().height(5.dp), contentAlignment = Alignment.CenterStart) {
+                        Box(Modifier.fillMaxWidth(if (income + expenses > 0L) income.toFloat() / (income + expenses) else 0f).fillMaxHeight().background(IncomeGreen, RoundedCornerShape(50.dp)))
+                    }
+                    Text("Expenses · " + Money.format(expenses), color = ExpenseRed, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Box(Modifier.fillMaxWidth().height(5.dp), contentAlignment = Alignment.CenterStart) {
+                        Box(Modifier.fillMaxWidth(if (income + expenses > 0L) expenses.toFloat() / (income + expenses) else 0f).fillMaxHeight().background(ExpenseRed, RoundedCornerShape(50.dp)))
+                    }
                     Text("Net cash flow · " + Money.format(income - expenses), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
                 }
             } }
@@ -2474,13 +2490,22 @@ private fun ReportsScreen(
             } }
         }
         if (reportView == "Total") {
-            item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
+            item { Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
+                shape = RoundedCornerShape(20.dp),
+                border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null,
+                elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) 0.dp else 1.dp)
+            ) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Monthly totals", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     listOf(Triple("Total income", income, IncomeGreen), Triple("Total expenses", expenses, ExpenseRed), Triple("Net savings", income - expenses, Purple)).forEach { row ->
-                        Row(Modifier.fillMaxWidth().background(categoryTint(row.first), RoundedCornerShape(12.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(row.first, Modifier.weight(1f), color = Ink)
-                            Text(Money.format(row.second), color = row.third, fontWeight = FontWeight.Bold)
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 54.dp).background(categoryTint(row.first), RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(row.first, Modifier.weight(1f), color = Ink, fontSize = 14.sp)
+                            Text(Money.format(row.second), color = row.third, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, softWrap = false)
                         }
                     }
                 }
