@@ -82,11 +82,19 @@ private var Purple by mutableStateOf(Color(0xFF8A63D2))
 private var Blue by mutableStateOf(Color(0xFF0284C7))
 private var AppDarkTheme by mutableStateOf(false)
 internal var AppBlueGlass by mutableStateOf(false)
+private var AppGlassTheme by mutableStateOf("Blue Glass")
 private var GlassSurface by mutableStateOf(Color(0xDFFFFFFF))
 private var GlassBorder by mutableStateOf(Color(0xA6FFFFFF))
 internal fun appGlassSurface(): Color = if (AppBlueGlass) GlassSurface else if (AppDarkTheme) Color(0xFF1B2430) else Color.White
 internal fun appGlassBorder(): Color = GlassBorder
-internal fun appPageBrush(): Brush = if (AppBlueGlass) Brush.linearGradient(listOf(Color(0xFFB8F2FF), Color(0xFF16B5F4), Color(0xFF4D73F5), Color(0xFF9C79F7), Color(0xFFE5F5FF))) else SolidColor(Page)
+internal fun appPageBrush(): Brush = if (AppBlueGlass) when (AppGlassTheme) {
+    "Purple Glass" -> Brush.linearGradient(listOf(Color(0xFFF1E7FF), Color(0xFFAA83F5), Color(0xFF6254D9), Color(0xFFE9DFFF)))
+    "Emerald Glass" -> Brush.linearGradient(listOf(Color(0xFFD8FFF0), Color(0xFF35C9A1), Color(0xFF087E9B), Color(0xFFDDFBF1)))
+    "Rose Glass" -> Brush.linearGradient(listOf(Color(0xFFFFE0F0), Color(0xFFF58AB8), Color(0xFF9270E8), Color(0xFFFFEAF5)))
+    "Amber Glass" -> Brush.linearGradient(listOf(Color(0xFFFFE9C7), Color(0xFFFFB56B), Color(0xFFEF7D79), Color(0xFFFFF1D8)))
+    "Midnight Glass" -> Brush.linearGradient(listOf(Color(0xFF111A3A), Color(0xFF263C70), Color(0xFF4C3D8F), Color(0xFF17284B)))
+    else -> Brush.linearGradient(listOf(Color(0xFFB8F2FF), Color(0xFF16B5F4), Color(0xFF4D73F5), Color(0xFF9C79F7), Color(0xFFE5F5FF)))
+} else SolidColor(Page)
 private fun appCardSurface(original: Color): Color = if (AppBlueGlass) Color(0xDDFBFEFF) else original
 private fun parseThemeAccentHex(raw: String, fallback: Color = Color(0xFF9333EA)): Color =
     runCatching { Color(android.graphics.Color.parseColor(raw)) }.getOrDefault(fallback)
@@ -101,11 +109,20 @@ private fun applyAppearance(
     systemDark: Boolean = false,
     customAccentHex: String = "#9333EA"
 ) {
-    AppBlueGlass = theme == "Blue Glass"
+    val glassThemes = setOf("Blue Glass", "Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass")
+    AppBlueGlass = theme in glassThemes
+    AppGlassTheme = if (AppBlueGlass) theme else "Blue Glass"
     GlassSurface = if (AppBlueGlass) Color(0xDFFFFFFF) else if (theme == "Dark" || (theme == "System" && systemDark)) Color(0xFF1B2430) else Color.White
-    GlassBorder = if (AppBlueGlass) Color(0xB3FFFFFF) else Color(0xFFE1E7F0)
+    GlassBorder = if (AppBlueGlass) Color(0xDFFFFFFF) else Color(0xFFE1E7F0)
     val accentColor = when {
-        AppBlueGlass -> Color(0xFF06B6D4)
+        AppBlueGlass -> when (theme) {
+            "Purple Glass" -> Color(0xFF7547D8)
+            "Emerald Glass" -> Color(0xFF078A78)
+            "Rose Glass" -> Color(0xFFD94691)
+            "Amber Glass" -> Color(0xFFD97732)
+            "Midnight Glass" -> Color(0xFF9D8CFF)
+            else -> Color(0xFF06B6D4)
+        }
         theme == "Custom Colors" -> parseThemeAccentHex(customAccentHex)
         else -> when (accent) {
         "Green" -> Color(0xFF07966F)
@@ -1732,11 +1749,17 @@ private fun HomeScreen(
                     Text("Quick Actions", modifier = Modifier.weight(1f), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Text("See all →", Modifier.clickable { onOpen("Settings") }, color = Green, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    QuickAction("Add Transaction", Icons.Default.AddCircle, Modifier.weight(1f)) { onAdd(false) }
-                    QuickAction("Set Budget", Icons.Default.Savings, Modifier.weight(1f)) { onOpen("Budgets") }
-                    QuickAction("Money Notes", Icons.Default.Notes, Modifier.weight(1f)) { onOpen("Money Notes") }
-                    QuickAction("Reports", Icons.Default.BarChart, Modifier.weight(1f)) { onOpen("Reports") }
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        QuickAction("Add Transaction", Icons.Default.AddCircle, Modifier.weight(1f)) { onAdd(false) }
+                        QuickAction("Set Budget", Icons.Default.Savings, Modifier.weight(1f)) { onOpen("Budgets") }
+                        QuickAction("Money Notes", Icons.Default.Notes, Modifier.weight(1f)) { onOpen("Money Notes") }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        QuickAction("Reports", Icons.Default.BarChart, Modifier.weight(1f)) { onOpen("Reports") }
+                        QuickAction("Loans", Icons.Default.AccountBalance, Modifier.weight(1f)) { onOpen("Loans") }
+                        QuickAction("Insights", Icons.Default.Insights, Modifier.weight(1f)) { onOpen("Insights") }
+                    }
                 }
             }
         }
@@ -2757,38 +2780,36 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
                     Text("LIVE DATA", Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = IncomeGreen, fontWeight = FontWeight.Bold, fontSize = 9.sp)
                 }
             }
-            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(130.dp)) {
+            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(150.dp)) {
                 val left = 8f
                 val right = size.width - 8f
                 val top = 8f
                 val bottom = size.height - 8f
+                val chartHeight = bottom - top
                 repeat(4) { row ->
-                    val y = top + (bottom - top) * row / 3f
-                    drawLine(Color(0xFF9AB8D6).copy(alpha = .22f), androidx.compose.ui.geometry.Offset(left, y), androidx.compose.ui.geometry.Offset(right, y), strokeWidth = 1.dp.toPx())
+                    val y = top + chartHeight * row / 3f
+                    drawLine(Color(0xFF9AB8D6).copy(alpha = .28f), androidx.compose.ui.geometry.Offset(left, y), androidx.compose.ui.geometry.Offset(right, y), strokeWidth = 1.dp.toPx())
                 }
-                fun drawSeries(values: List<Long>, color: Color) {
-                    if (values.size < 2) return
-                    val path = androidx.compose.ui.graphics.Path()
-                    values.forEachIndexed { index, value ->
-                        val x = left + (right - left) * index / (values.lastIndex).coerceAtLeast(1)
-                        val y = bottom - (value.toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * (bottom - top)
-                        if (index == 0) path.moveTo(x, y) else {
-                            val prevX = left + (right - left) * (index - 1) / (values.lastIndex).coerceAtLeast(1)
-                            val prevY = bottom - (values[index - 1].toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * (bottom - top)
-                            val midX = (prevX + x) / 2f
-                            path.cubicTo(midX, prevY, midX, y, x, y)
+                val groupWidth = (right - left) / months.size
+                val barWidth = groupWidth * 0.27f
+                val barGap = groupWidth * 0.07f
+                months.indices.forEach { index ->
+                    val centerX = left + groupWidth * (index + 0.5f)
+                    val values = listOf(monthlyIncome[index], monthlyExpenses[index])
+                    val colors = listOf(Color(0xFF08A985), Color(0xFF2878F0))
+                    values.forEachIndexed { seriesIndex, value ->
+                        val height = (value.toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * chartHeight
+                        if (value > 0L && height > 0f) {
+                            val x = centerX + if (seriesIndex == 0) -(barWidth + barGap / 2f) else barGap / 2f
+                            drawRoundRect(
+                                color = colors[seriesIndex],
+                                topLeft = androidx.compose.ui.geometry.Offset(x, bottom - height),
+                                size = androidx.compose.ui.geometry.Size(barWidth, height),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx())
+                            )
                         }
                     }
-                    drawPath(path, color, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
-                    values.forEachIndexed { index, value ->
-                        val x = left + (right - left) * index / (values.lastIndex).coerceAtLeast(1)
-                        val y = bottom - (value.toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * (bottom - top)
-                        drawCircle(Color.White, radius = 4.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
-                        drawCircle(color, radius = 2.6.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
-                    }
                 }
-                drawSeries(monthlyIncome, Color(0xFF089B85))
-                drawSeries(monthlyExpenses, Color(0xFF247FEB))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 months.forEach { month -> Text(month.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH), color = Muted, fontSize = 9.sp) }
@@ -4336,22 +4357,62 @@ private fun AppearanceScreen() {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Choose your theme", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text("Your choice updates the app immediately", color = Muted, fontSize = 11.sp)
-                    listOf("Blue Glass", "Classic", "Dark Mode", "Custom Colors").forEach { value ->
-                        val selected = when (value) { "Blue Glass" -> theme == "Blue Glass"; "Classic" -> theme == "Light" || theme == "System"; "Dark Mode" -> theme == "Dark"; else -> theme == "Custom Colors" }
+                    listOf("Blue Glass", "Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass", "Classic", "Dark Mode", "Custom Colors").forEach { value ->
+                        val selected = when (value) {
+                            "Blue Glass", "Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass" -> theme == value
+                            "Classic" -> theme == "Light" || theme == "System"
+                            "Dark Mode" -> theme == "Dark"
+                            else -> theme == "Custom Colors"
+                        }
                         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(if (selected) selectedAccent.copy(alpha = .10f) else Page)
                             .then(if (selected) Modifier.border(1.5.dp, selectedAccent, RoundedCornerShape(16.dp)) else Modifier)
                             .clickable {
-                                theme = when (value) { "Blue Glass" -> "Blue Glass"; "Classic" -> "Light"; "Dark Mode" -> "Dark"; else -> "Custom Colors" }
-                                if (value == "Blue Glass") { accent = "Cyan"; save("appearance_accent", accent) }
+                                theme = when (value) {
+                                    "Blue Glass", "Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass" -> value
+                                    "Classic" -> "Light"
+                                    "Dark Mode" -> "Dark"
+                                    else -> "Custom Colors"
+                                }
+                                if (value in setOf("Blue Glass", "Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass")) {
+                                    accent = when (value) {
+                                        "Purple Glass" -> "Purple"
+                                        "Emerald Glass" -> "Green"
+                                        "Rose Glass" -> "Pink"
+                                        "Amber Glass" -> "Orange"
+                                        "Midnight Glass" -> "Purple"
+                                        else -> "Cyan"
+                                    }
+                                    save("appearance_accent", accent)
+                                }
                                 save("appearance_theme", theme)
                             }.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(when(value) { "Blue Glass" -> Brush.linearGradient(listOf(Color(0xFF38A3E5), Color(0xFF9333EA))); "Dark Mode" -> SolidColor(Color(0xFF0B1530)); "Custom Colors" -> SolidColor(selectedAccent); else -> SolidColor(Color(0xFFE5E7EB)) }), contentAlignment = Alignment.Center) {
+                            Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(when(value) {
+                                "Blue Glass" -> Brush.linearGradient(listOf(Color(0xFF38A3E5), Color(0xFF9333EA)))
+                                "Purple Glass" -> Brush.linearGradient(listOf(Color(0xFFE2D4FF), Color(0xFF7547D8)))
+                                "Emerald Glass" -> Brush.linearGradient(listOf(Color(0xFFB6F5D8), Color(0xFF078A78)))
+                                "Rose Glass" -> Brush.linearGradient(listOf(Color(0xFFFFC5DF), Color(0xFFD94691)))
+                                "Amber Glass" -> Brush.linearGradient(listOf(Color(0xFFFFD79A), Color(0xFFD97732)))
+                                "Midnight Glass" -> Brush.linearGradient(listOf(Color(0xFF111A3A), Color(0xFF9D8CFF)))
+                                "Dark Mode" -> SolidColor(Color(0xFF0B1530))
+                                "Custom Colors" -> SolidColor(selectedAccent)
+                                else -> SolidColor(Color(0xFFE5E7EB))
+                            }), contentAlignment = Alignment.Center) {
                                 Icon(Icons.Default.Palette, null, tint = if (value == "Classic") Color(0xFF64748B) else Color.White)
                             }
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(value, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                Text(when(value) { "Blue Glass" -> "Blue · cyan · purple glass style"; "Classic" -> "Clean and simple"; "Dark Mode" -> "Dark surfaces and accents"; else -> "Choose a color below" }, color = Muted, fontSize = 10.sp)
+                                Text(when(value) {
+                                    "Blue Glass" -> "Blue · cyan · purple glass style"
+                                    "Purple Glass" -> "Lavender · violet · indigo glass"
+                                    "Emerald Glass" -> "Mint · emerald · deep teal glass"
+                                    "Rose Glass" -> "Blush pink · rose · violet glass"
+                                    "Amber Glass" -> "Warm gold · peach · coral glass"
+                                    "Midnight Glass" -> "Deep navy · indigo · luminous violet"
+                                    "Classic" -> "Clean and simple"
+                                    "Dark Mode" -> "Dark surfaces and accents"
+                                    else -> "Choose a color below"
+                                }, color = Muted, fontSize = 10.sp)
                             }
                             if (selected) Icon(Icons.Default.CheckCircle, null, tint = selectedAccent)
                         }
