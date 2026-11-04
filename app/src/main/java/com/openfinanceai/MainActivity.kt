@@ -1766,30 +1766,47 @@ private fun HomeScreen(
         }
     }
     if (showMonthPicker) {
+        var monthGridYear by remember(showMonthPicker) { mutableIntStateOf(selectedMonth.year) }
         AlertDialog(
             onDismissRequest = { showMonthPicker = false },
-            containerColor = if (AppBlueGlass) appGlassSurface() else MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(26.dp),
+            containerColor = if (AppBlueGlass) Color(0xEAF5FCFF) else MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(28.dp),
             title = { Text("Choose month", color = Ink, fontWeight = FontWeight.Bold) },
             text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text("Select a month to view", color = Muted, fontSize = 13.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                        IconButton(onClick = { onMonthChange(selectedMonth.minusMonths(1)) }) { Icon(Icons.Default.ChevronLeft, "Previous month", tint = Green) }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(selectedMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
-                            Text(selectedMonth.year.toString(), color = Muted)
-                        }
-                        IconButton(onClick = { onMonthChange(selectedMonth.plusMonths(1)) }) { Icon(Icons.Default.ChevronRight, "Next month", tint = Green) }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        IconButton(onClick = { monthGridYear-- }) { Icon(Icons.Default.ChevronLeft, "Previous year", tint = Green) }
+                        Text(monthGridYear.toString(), color = Ink, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { monthGridYear++ }) { Icon(Icons.Default.ChevronRight, "Next year", tint = Green) }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { onMonthChange(YearMonth.now()) }) { Text("This month") }
-                        TextButton(onClick = { showMonthPicker = false }) { Text("Done") }
+                    (0..3).forEach { row ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            (0..2).forEach { col ->
+                                val month = java.time.Month.of(row * 3 + col + 1)
+                                val target = YearMonth.of(monthGridYear, month)
+                                val selected = target == selectedMonth
+                                Surface(
+                                    onClick = { onMonthChange(target); showMonthPicker = false },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = if (selected) Color(0xFF167DE5) else Color.White.copy(alpha = if (AppBlueGlass) .62f else 1f),
+                                    border = if (!selected && AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .9f)) else null
+                                ) {
+                                    Box(Modifier.padding(vertical = 13.dp), contentAlignment = Alignment.Center) {
+                                        Text(month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH), color = if (selected) Color.White else Ink, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, fontSize = 13.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { onMonthChange(YearMonth.now()); showMonthPicker = false }) { Text("This month", color = Green) }
+                        TextButton(onClick = { showMonthPicker = false }) { Text("Cancel", color = Muted) }
                     }
                 }
             },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { showMonthPicker = false }) { Text("Close", color = Green) } }
+            confirmButton = {}
         )
     }
 }
@@ -5220,7 +5237,7 @@ private fun LoanDateField(label: String, date: String, onDateChange: (String) ->
     OutlinedTextField(value = date, onValueChange = {}, readOnly = true, label = { Text(label) }, trailingIcon = { IconButton(onClick = { showPicker = true }) { Icon(Icons.Default.CalendarMonth, "Choose date") } }, modifier = Modifier.fillMaxWidth().clickable { showPicker = true }, singleLine = true)
     if (showPicker) {
         val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-        DatePickerDialog(onDismissRequest = { showPicker = false }, confirmButton = { TextButton(onClick = { pickerState.selectedDateMillis?.let { millis -> onDateChange(java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()) }; showPicker = false }) { Text("Select") } }, dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Cancel") } }) { DatePicker(state = pickerState) }
+        DatePickerDialog(onDismissRequest = { showPicker = false }, shape = RoundedCornerShape(28.dp), colors = DatePickerDefaults.colors(containerColor = if (AppBlueGlass) Color(0xEAF5FCFF) else MaterialTheme.colorScheme.surface), confirmButton = { TextButton(onClick = { pickerState.selectedDateMillis?.let { millis -> onDateChange(java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()) }; showPicker = false }) { Text("Select", color = Green) } }, dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Cancel", color = Muted) } }) { DatePicker(state = pickerState, showModeToggle = false, colors = DatePickerDefaults.colors(containerColor = if (AppBlueGlass) Color(0xEAF5FCFF) else MaterialTheme.colorScheme.surface, selectedDayContainerColor = Color(0xFF167DE5), todayDateBorderColor = Green, todayContentColor = Green)) }
     }
 }
 
@@ -5983,12 +6000,12 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
                 if (showDatePicker) {
                     val initialMillis = runCatching { transactionDateOrNull(transaction)?.atStartOfDay(java.time.ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: System.currentTimeMillis() }.getOrDefault(System.currentTimeMillis())
                     val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-                    DatePickerDialog(onDismissRequest = { showDatePicker = false }, confirmButton = {
+                    DatePickerDialog(onDismissRequest = { showDatePicker = false }, shape = RoundedCornerShape(28.dp), colors = DatePickerDefaults.colors(containerColor = if (AppBlueGlass) Color(0xEAF5FCFF) else MaterialTheme.colorScheme.surface), confirmButton = {
                         TextButton(onClick = {
                             pickerState.selectedDateMillis?.let { millis -> date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString() }
                             showDatePicker = false
                         }) { Text("Select", color = accent) }
-                    }, dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel", color = accent) } }) { DatePicker(state = pickerState) }
+                    }, dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel", color = accent) } }) { DatePicker(state = pickerState, showModeToggle = false, colors = DatePickerDefaults.colors(containerColor = if (AppBlueGlass) Color(0xEAF5FCFF) else MaterialTheme.colorScheme.surface, selectedDayContainerColor = accent, todayDateBorderColor = accent, todayContentColor = accent)) }
                 }
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
@@ -6339,7 +6356,7 @@ private fun AddTransactionDialog(
                     val initialMillis = runCatching { java.time.LocalDate.parse(date).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrDefault(System.currentTimeMillis())
                     val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
                     DatePickerDialog(onDismissRequest = { showDatePicker = false }, shape = RoundedCornerShape(26.dp),
-                        colors = DatePickerDefaults.colors(containerColor = if (AppBlueGlass) appGlassSurface() else Color(0xFFFCFBFF)),
+                        colors = DatePickerDefaults.colors(containerColor = if (AppBlueGlass) Color(0xEAF5FCFF) else Color(0xFFFCFBFF)),
                         confirmButton = {
                             Button(onClick = {
                                 pickerState.selectedDateMillis?.let { millis -> date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString() }
@@ -6347,7 +6364,7 @@ private fun AddTransactionDialog(
                             }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2878E8))) { Text("Done") }
                         },
                         dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
-                    ) { DatePicker(state = pickerState, showModeToggle = false) }
+                    ) { DatePicker(state = pickerState, showModeToggle = false, colors = DatePickerDefaults.colors(containerColor = if (AppBlueGlass) Color(0xEAF5FCFF) else Color(0xFFFCFBFF), selectedDayContainerColor = Color(0xFF2878E8), todayDateBorderColor = Color(0xFF2878E8), todayContentColor = Color(0xFF2878E8))) }
                 }
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
