@@ -3809,53 +3809,85 @@ private fun AppearanceScreen() {
     val preferences = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
     var theme by remember { mutableStateOf(preferences.getString("appearance_theme", "Light") ?: "Light") }
     var currency by remember { mutableStateOf(preferences.getString("appearance_currency", "INR (₹)") ?: "INR (₹)") }
-    var accent by remember { mutableStateOf(preferences.getString("appearance_accent", "Green") ?: "Green") }
+    var accent by remember { mutableStateOf(preferences.getString("appearance_accent", "Blue") ?: "Blue") }
     var layout by remember { mutableStateOf(preferences.getString("appearance_layout", "Comfortable") ?: "Comfortable") }
     var fontSize by remember { mutableStateOf(preferences.getString("appearance_font_size", "Medium") ?: "Medium") }
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
     LaunchedEffect(theme, accent, layout, fontSize, systemDark) { applyAppearance(theme, accent, layout, fontSize, systemDark) }
     LaunchedEffect(currency) { applyCurrency(currency) }
-    val accents = listOf("Green" to Color(0xFF07966F), "Blue" to Color(0xFF3478F6), "Purple" to Color(0xFF8B4DE8), "Orange" to Color(0xFFF59E0B), "Pink" to Color(0xFFEC4899))
+    val accents = listOf("Green" to Color(0xFF07966F), "Blue" to Color(0xFF0284C7), "Purple" to Color(0xFF8B4DE8), "Orange" to Color(0xFFF59E0B), "Pink" to Color(0xFFEC4899))
+    val selectedAccent = accents.firstOrNull { it.first == accent }?.second ?: Green
     fun save(key: String, value: String) { preferences.edit().putString(key, value).apply() }
+    val cardShape = RoundedCornerShape(24.dp)
+    val softSurface = if (AppDarkTheme) Color(0xFF1B2430) else Color.White
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(Page),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Text("Appearance", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Make MoneyLog comfortable to use", color = Muted, fontSize = 13.sp)
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("Themes", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold)
+                Text("Shape the look and feel of your MoneyLog experience", color = Muted, fontSize = 13.sp)
+            }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Theme", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = softSurface), shape = cardShape, elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("Live preview", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("Changes apply instantly", color = Muted, fontSize = 11.sp)
+                        }
+                        Surface(color = selectedAccent.copy(alpha = .12f), shape = RoundedCornerShape(50)) {
+                            Text("ACTIVE", Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = selectedAccent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(19.dp)).background(Page).padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(43.dp).clip(RoundedCornerShape(15.dp)).background(selectedAccent), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(23.dp))
+                        }
+                        Spacer(Modifier.width(11.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("Total balance", color = Muted, fontSize = 10.sp)
+                            Text("₹ 84,250.00", color = Ink, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                            Text("Your money at a glance", color = Muted, fontSize = 10.sp)
+                        }
+                        Box(Modifier.clip(RoundedCornerShape(12.dp)).background(selectedAccent.copy(alpha = .12f)).padding(horizontal = 10.dp, vertical = 7.dp)) {
+                            Text("+8.4%", color = selectedAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        listOf("Income" to "₹42,000", "Expense" to "₹18,500").forEachIndexed { index, pair ->
+                            Column(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).background(Page).padding(11.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(pair.first, color = Muted, fontSize = 10.sp)
+                                Text(pair.second, color = if (index == 0) Color(0xFF0E9F85) else ExpenseRed, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = softSurface), shape = cardShape) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+                    Text("Display mode", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Choose how MoneyLog looks", color = Muted, fontSize = 11.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                         listOf("Light", "Dark", "System").forEach { value ->
                             val selected = theme == value
                             Column(
-                                Modifier.weight(1f).clip(RoundedCornerShape(15.dp))
-                                    .background(if (selected) IncomeTint else Page)
-                                    .then(if (selected) Modifier.border(1.5.dp, Green, RoundedCornerShape(15.dp)) else Modifier)
+                                Modifier.weight(1f).clip(RoundedCornerShape(17.dp))
+                                    .background(if (selected) selectedAccent.copy(alpha = .10f) else Page)
+                                    .then(if (selected) Modifier.border(1.5.dp, selectedAccent, RoundedCornerShape(17.dp)) else Modifier)
                                     .clickable { theme = value; save("appearance_theme", value) }
-                                    .padding(vertical = 15.dp),
+                                    .padding(vertical = 13.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(7.dp)
                             ) {
-                                Icon(when (value) { "Light" -> Icons.Default.LightMode; "Dark" -> Icons.Default.DarkMode; else -> Icons.Default.SettingsBrightness }, null, tint = if (selected) Green else Muted, modifier = Modifier.size(25.dp))
-                                Text(value, color = if (selected) Green else Ink, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
-                                if (selected) Icon(Icons.Default.CheckCircle, null, tint = Green, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    }
-                    Text("Accent color", color = Ink, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        accents.forEach { (name, color) ->
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.clickable { accent = name; save("appearance_accent", name) }) {
-                                Box(Modifier.size(34.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
-                                    if (accent == name) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(19.dp))
-                                }
-                                Text(name, color = if (accent == name) Ink else Muted, fontSize = 9.sp)
+                                Icon(when (value) { "Light" -> Icons.Default.LightMode; "Dark" -> Icons.Default.DarkMode; else -> Icons.Default.SettingsBrightness }, null, tint = if (selected) selectedAccent else Muted, modifier = Modifier.size(23.dp))
+                                Text(value, color = if (selected) selectedAccent else Ink, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                                if (selected) Icon(Icons.Default.CheckCircle, null, tint = selectedAccent, modifier = Modifier.size(15.dp))
                             }
                         }
                     }
@@ -3863,27 +3895,45 @@ private fun AppearanceScreen() {
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = softSurface), shape = cardShape) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+                    Text("Accent colour", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Pick the highlight colour used for key actions", color = Muted, fontSize = 11.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        accents.forEach { (name, color) ->
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.clickable { accent = name; save("appearance_accent", name) }) {
+                                Box(Modifier.size(39.dp).clip(CircleShape).background(color).then(if (accent == name) Modifier.border(3.dp, if (AppDarkTheme) Color.White else Color(0xFF202638), CircleShape) else Modifier), contentAlignment = Alignment.Center) {
+                                    if (accent == name) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                }
+                                Text(name, color = if (accent == name) Ink else Muted, fontSize = 9.sp, fontWeight = if (accent == name) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = softSurface), shape = cardShape) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Layout", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Compact", "Comfortable").forEach { value ->
+                    Text("Interface density", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        listOf("Comfortable", "Compact").forEach { value ->
                             val selected = layout == value
-                            Row(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if (selected) IncomeTint else Page)
-                                .then(if (selected) Modifier.border(1.dp, Green, RoundedCornerShape(14.dp)) else Modifier)
+                            Row(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).background(if (selected) selectedAccent.copy(alpha = .10f) else Page)
+                                .then(if (selected) Modifier.border(1.dp, selectedAccent, RoundedCornerShape(15.dp)) else Modifier)
                                 .clickable { layout = value; save("appearance_layout", value) }.padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                                Icon(if (value == "Compact") Icons.Default.ViewCompact else Icons.Default.ViewAgenda, null, tint = if (selected) Green else Muted)
-                                Column { Text(value, color = Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold); Text(if (value == "Compact") "More items" else "More space", color = Muted, fontSize = 9.sp) }
+                                Icon(if (value == "Compact") Icons.Default.ViewCompact else Icons.Default.ViewAgenda, null, tint = if (selected) selectedAccent else Muted, modifier = Modifier.size(19.dp))
+                                Column { Text(value, color = Ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold); Text(if (value == "Compact") "More content" else "More space", color = Muted, fontSize = 9.sp) }
                             }
                         }
                     }
-                    Text("Font size", color = Ink, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Row(Modifier.fillMaxWidth().background(Page, RoundedCornerShape(14.dp)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Text size", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Page).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf("Small", "Medium", "Large").forEach { value ->
                             val selected = fontSize == value
-                            Box(Modifier.weight(1f).clip(RoundedCornerShape(11.dp)).background(if (selected) IncomeTint else Color.Transparent).clickable { fontSize = value; save("appearance_font_size", value) }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                                Text(value, color = if (selected) Green else Muted, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                            Box(Modifier.weight(1f).clip(RoundedCornerShape(11.dp)).background(if (selected) selectedAccent else Color.Transparent).clickable { fontSize = value; save("appearance_font_size", value) }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                Text(value, color = if (selected) Color.White else Muted, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
                             }
                         }
                     }
@@ -3891,25 +3941,21 @@ private fun AppearanceScreen() {
             }
         }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
-                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Preview", color = Ink, fontWeight = FontWeight.Bold)
-                    Row(Modifier.fillMaxWidth().background(Page, RoundedCornerShape(15.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(40.dp).clip(CircleShape).background(accents.firstOrNull { it.first == accent }?.second ?: Green), contentAlignment = Alignment.Center) { Icon(Icons.Default.Restaurant, null, tint = Color.White) }
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) { Text("Food & Dining", color = Ink, fontWeight = FontWeight.SemiBold); Text("Example transaction", color = Muted, fontSize = 11.sp) }
-                        Text("−₹450", color = ExpenseRed, fontWeight = FontWeight.Bold)
-                    }
-                    Text("Theme, accent, layout and font size apply across the app and are saved on this device. Currency selection is saved locally; it does not convert stored transaction amounts.", color = Muted, fontSize = 11.sp)
-                    Text("Currency", color = Ink, fontWeight = FontWeight.Bold)
+            Card(colors = CardDefaults.cardColors(containerColor = softSurface), shape = cardShape) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text("Currency", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Display preference only. Existing transaction values are not converted.", color = Muted, fontSize = 11.sp)
                     listOf("INR (₹)", "USD ($)", "EUR (€)").forEach { value ->
-                        Row(Modifier.fillMaxWidth().clickable { currency = value; save("appearance_currency", value) }, verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = currency == value, onClick = { currency = value; save("appearance_currency", value) })
-                            Text(value, color = Ink)
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { currency = value; save("appearance_currency", value) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = currency == value, onClick = { currency = value; save("appearance_currency", value) }, colors = RadioButtonDefaults.colors(selectedColor = selectedAccent))
+                            Text(value, color = Ink, fontSize = 13.sp)
                         }
                     }
                 }
             }
+        }
+        item {
+            Text("Your theme preferences are saved on this device and restored when you reopen MoneyLog.", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 3.dp, vertical = 3.dp))
         }
     }
 }
