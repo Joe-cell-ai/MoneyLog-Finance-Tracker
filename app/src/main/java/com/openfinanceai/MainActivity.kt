@@ -1639,16 +1639,14 @@ private fun HomeScreen(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(selectedMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)).uppercase(Locale.ENGLISH), color = Muted, fontSize = 10.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.Bold)
-                    Text("Hello there 👋", color = Ink, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("Hello 👋", color = Ink, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
                     Text("Track. Plan. Grow.", color = Muted, fontSize = 11.sp)
                 }
-                Box {
-                    IconButton(onClick = { onOpen("Loans") }, modifier = Modifier.size(42.dp).clip(CircleShape).background(Color(0xBFFFFFFF))) {
-                        Icon(Icons.Default.AccountBalance, "Loans", tint = Green)
-                    }
+                IconButton(onClick = { onOpen("Settings") }, modifier = Modifier.size(42.dp).clip(CircleShape).background(Color(0xBFFFFFFF))) {
+                    Icon(Icons.Default.Person, "Profile and settings", tint = Green)
                 }
-                IconButton(onClick = { onOpen("Calendar") }, modifier = Modifier.size(42.dp).clip(CircleShape).background(Color(0xBFFFFFFF))) {
-                    Icon(Icons.Default.CalendarMonth, "Calendar", tint = Green)
+                IconButton(onClick = { onOpen("Notifications") }, modifier = Modifier.size(42.dp).clip(CircleShape).background(Color(0xBFFFFFFF))) {
+                    Icon(Icons.Default.Notifications, "Notifications", tint = Green)
                 }
             }
         }
@@ -2119,6 +2117,7 @@ private fun ReportsScreen(
     var showNotifications by remember { mutableStateOf(false) }
     var showAllCategories by remember { mutableStateOf(false) }
     var showMonthMenu by remember { mutableStateOf(false) }
+    var showMoreReports by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var categoryDetailTab by remember { mutableIntStateOf(0) }
     val categories = transactions.filterNot { it.income }.groupBy { it.category }
@@ -2127,7 +2126,7 @@ private fun ReportsScreen(
     val tagTotals = transactions.flatMap { transaction ->
         Regex("#([\\p{L}\\p{N}_-]+)").findAll(transaction.notes).map { it.groupValues[1] to transaction.amount }.toList()
     }.groupBy { it.first }.mapValues { entry -> entry.value.sumOf { it.second } }.toList().sortedByDescending { it.second }
-    val views = listOf("Total", "Trends", "By category", "By tag", "Calendar")
+    val views = listOf("Total", "Trends", "By category")
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(appPageBrush()),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
@@ -2172,6 +2171,23 @@ private fun ReportsScreen(
                     }
                     Box(Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 7.dp).size(7.dp).background(Color(0xFFEF4444), CircleShape))
                 }
+                Box {
+                    IconButton(onClick = { showMoreReports = true }) {
+                        Icon(Icons.Default.MoreHoriz, contentDescription = "More report views", tint = Ink)
+                    }
+                    DropdownMenu(expanded = showMoreReports, onDismissRequest = { showMoreReports = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Calendar") },
+                            leadingIcon = { Icon(Icons.Default.CalendarToday, null) },
+                            onClick = { reportView = "Calendar"; showMoreReports = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Tags") },
+                            leadingIcon = { Icon(Icons.Default.LocalOffer, null) },
+                            onClick = { reportView = "By tag"; showMoreReports = false }
+                        )
+                    }
+                }
             }
             Row(
                 Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(24.dp)).padding(5.dp),
@@ -2179,10 +2195,10 @@ private fun ReportsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 views.forEach { view ->
-                    val label = when (view) { "Total" -> "Overview"; "By category" -> "Categories"; "By tag" -> "Tags"; else -> view }
+                    val label = when (view) { "Total" -> "Overview"; "By category" -> "Insights"; else -> view }
                     val tabIcon = when (view) {
                         "Calendar" -> Icons.Default.CalendarToday
-                        "By category" -> Icons.Default.Category
+                        "By category" -> Icons.Default.Insights
                         "By tag" -> Icons.Default.LocalOffer
                         "Trends" -> Icons.Default.TrendingUp
                         else -> Icons.Default.Functions
