@@ -83,12 +83,24 @@ private var Blue by mutableStateOf(Color(0xFF0284C7))
 private var AppDarkTheme by mutableStateOf(false)
 private var AppBlueGlass by mutableStateOf(false)
 private fun appPageBrush(): Brush = if (AppBlueGlass) Brush.linearGradient(listOf(Color(0xFFEAF8FF), Color(0xFFF0ECFF), Color(0xFFDDFBFF))) else SolidColor(Page)
+private fun parseThemeAccentHex(raw: String, fallback: Color = Color(0xFF9333EA)): Color =
+    runCatching { Color(android.graphics.Color.parseColor(raw)) }.getOrDefault(fallback)
 private var AppCompactLayout by mutableStateOf(false)
 private var AppFontScale by mutableStateOf(1f)
 
-private fun applyAppearance(theme: String, accent: String, layout: String, fontSize: String, systemDark: Boolean = false) {
+private fun applyAppearance(
+    theme: String,
+    accent: String,
+    layout: String,
+    fontSize: String,
+    systemDark: Boolean = false,
+    customAccentHex: String = "#9333EA"
+) {
     AppBlueGlass = theme == "Blue Glass"
-    val accentColor = if (AppBlueGlass) Color(0xFF06B6D4) else when (accent) {
+    val accentColor = when {
+        AppBlueGlass -> Color(0xFF06B6D4)
+        theme == "Custom Colors" -> parseThemeAccentHex(customAccentHex)
+        else -> when (accent) {
         "Green" -> Color(0xFF07966F)
         "Blue" -> Color(0xFF0284C7)
         "Purple" -> Color(0xFF8B4DE8)
@@ -96,6 +108,7 @@ private fun applyAppearance(theme: String, accent: String, layout: String, fontS
         "Pink" -> Color(0xFFF472B6)
         "Cyan" -> Color(0xFF06B6D4)
         else -> Color(0xFF1D4ED8)
+        }
     }
     AppDarkTheme = theme == "Dark" || (theme == "System" && systemDark)
     AppCompactLayout = layout == "Compact"
@@ -548,7 +561,8 @@ private fun FinanceApp() {
             appearancePreferences.getString("appearance_accent", "Blue") ?: "Blue",
             appearancePreferences.getString("appearance_layout", "Comfortable") ?: "Comfortable",
             appearancePreferences.getString("appearance_font_size", "Medium") ?: "Medium",
-            systemDark
+            systemDark,
+            appearancePreferences.getString("appearance_custom_accent", "#9333EA") ?: "#9333EA"
         )
         applyCurrency(appearancePreferences.getString("appearance_currency", "INR (₹)") ?: "INR (₹)")
     }
@@ -767,6 +781,7 @@ private fun FinanceApp() {
                 .put("appearanceAccent", prefs.getString("appearance_accent", "Green"))
                 .put("appearanceLayout", prefs.getString("appearance_layout", "Comfortable"))
                 .put("appearanceFontSize", prefs.getString("appearance_font_size", "Medium"))
+                .put("appearanceCustomAccent", prefs.getString("appearance_custom_accent", "#9333EA"))
                 .put("settingsBudgetAlerts", prefs.getBoolean("settings_budget_alerts", true))
                 .put("settingsEmiReminders", prefs.getBoolean("settings_emi_reminders", true))
                 .put("settingsMonthlySummary", prefs.getBoolean("settings_monthly_summary", false))
@@ -807,6 +822,7 @@ private fun FinanceApp() {
             if (root.has("appearanceAccent")) editor.putString("appearance_accent", root.optString("appearanceAccent", "Green"))
             if (root.has("appearanceLayout")) editor.putString("appearance_layout", root.optString("appearanceLayout", "Comfortable"))
             if (root.has("appearanceFontSize")) editor.putString("appearance_font_size", root.optString("appearanceFontSize", "Medium"))
+            if (root.has("appearanceCustomAccent")) editor.putString("appearance_custom_accent", root.optString("appearanceCustomAccent", "#9333EA"))
             if (root.has("settingsBudgetAlerts")) editor.putBoolean("settings_budget_alerts", root.optBoolean("settingsBudgetAlerts", true))
             if (root.has("settingsEmiReminders")) editor.putBoolean("settings_emi_reminders", root.optBoolean("settingsEmiReminders", true))
             if (root.has("settingsMonthlySummary")) editor.putBoolean("settings_monthly_summary", root.optBoolean("settingsMonthlySummary", false))
@@ -863,7 +879,8 @@ private fun FinanceApp() {
                 prefs.getString("appearance_accent", "Green") ?: "Green",
                 prefs.getString("appearance_layout", "Comfortable") ?: "Comfortable",
                 prefs.getString("appearance_font_size", "Medium") ?: "Medium",
-                systemDark
+                systemDark,
+                prefs.getString("appearance_custom_accent", "#9333EA") ?: "#9333EA"
             )
             saveTransactions(context, transactions)
             saveLoans(context, loans)
@@ -3825,11 +3842,14 @@ private fun AppearanceScreen() {
     var accent by remember { mutableStateOf(preferences.getString("appearance_accent", "Blue") ?: "Blue") }
     var layout by remember { mutableStateOf(preferences.getString("appearance_layout", "Comfortable") ?: "Comfortable") }
     var fontSize by remember { mutableStateOf(preferences.getString("appearance_font_size", "Medium") ?: "Medium") }
+    var customAccentHex by remember { mutableStateOf(preferences.getString("appearance_custom_accent", "#9333EA") ?: "#9333EA") }
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
-    LaunchedEffect(theme, accent, layout, fontSize, systemDark) { applyAppearance(theme, accent, layout, fontSize, systemDark) }
+    LaunchedEffect(theme, accent, layout, fontSize, systemDark, customAccentHex) {
+        applyAppearance(theme, accent, layout, fontSize, systemDark, customAccentHex)
+    }
     LaunchedEffect(currency) { applyCurrency(currency) }
     val accents = listOf("Green" to Color(0xFF07966F), "Blue" to Color(0xFF1D4ED8), "Purple" to Color(0xFF9333EA), "Orange" to Color(0xFFF59E0B), "Pink" to Color(0xFFF472B6), "Cyan" to Color(0xFF06B6D4))
-    val selectedAccent = accents.firstOrNull { it.first == accent }?.second ?: Green
+    val selectedAccent = if (theme == "Custom Colors") parseThemeAccentHex(customAccentHex) else accents.firstOrNull { it.first == accent }?.second ?: Green
     fun save(key: String, value: String) { preferences.edit().putString(key, value).apply() }
     val cardShape = RoundedCornerShape(24.dp)
     val softSurface = if (AppDarkTheme) Color(0xFF1B2430) else Color.White
@@ -3905,6 +3925,47 @@ private fun AppearanceScreen() {
                             }
                             if (selected) Icon(Icons.Default.CheckCircle, null, tint = selectedAccent)
                         }
+                    if (theme == "Custom Colors") {
+                        Text("Custom accent colour", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        OutlinedTextField(
+                            value = customAccentHex,
+                            onValueChange = { raw ->
+                                val candidate = raw.uppercase().filter { it == '#' || it in '0'..'9' || it in 'A'..'F' }.take(7)
+                                customAccentHex = candidate
+                                if (candidate.matches(Regex("^#[0-9A-F]{6}$"))) {
+                                    save("appearance_custom_accent", candidate)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Hex colour") },
+                            placeholder = { Text("#9333EA") },
+                            supportingText = { Text("Enter # followed by six hexadecimal digits") },
+                            singleLine = true,
+                            isError = !customAccentHex.matches(Regex("^#[0-9A-Fa-f]{6}$"))
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            listOf("#9333EA", "#06B6D4", "#1D4ED8", "#F472B6", "#16A34A", "#F59E0B").forEach { hex ->
+                                Box(
+                                    Modifier.size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(parseThemeAccentHex(hex))
+                                        .then(
+                                            if (customAccentHex.equals(hex, true)) Modifier.border(3.dp, Ink, CircleShape)
+                                            else Modifier
+                                        )
+                                        .clickable {
+                                            customAccentHex = hex
+                                            save("appearance_custom_accent", hex)
+                                        }
+                                )
+                            }
+                        }
+                        Text(
+                            "This accent is applied across buttons, selections, and highlighted charts.",
+                            color = Muted,
+                            fontSize = 11.sp
+                        )
+                    }
                     }
                 }
             }
