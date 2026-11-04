@@ -6995,11 +6995,6 @@ private fun ImportTransactionsScreen(
 private fun readRecentBankSms(context: Context): List<Transaction> {
     val cutoff = System.currentTimeMillis() - 90L * 24L * 60L * 60L * 1000L
     val results = mutableListOf<Transaction>()
-    val amountPattern = Regex("""(?i)(?:₹|rs\.?|inr)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
-    val debitPattern = Regex("""(?i)\b(debited|debit|withdrawn|withdrawal|spent|paid|purchase|sent|transferred to|payment successful|upi txn debit)\b""")
-    val creditPattern = Regex("""(?i)\b(credited|credit|received|deposited|refund received|cashback received|transferred from)\b""")
-    val ignorePattern = Regex("""(?i)\b(otp|one[- ]time password|verification code|failed|declined|unsuccessful|not debited|not credited|will be debited|mandate created|mandate registered|autopay scheduled)\b""")
-    val bankDatePattern = Regex("""(?i)\bon\s+(\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4})\b""")
     val projection = arrayOf(android.provider.Telephony.Sms._ID, android.provider.Telephony.Sms.ADDRESS, android.provider.Telephony.Sms.BODY, android.provider.Telephony.Sms.DATE)
     context.contentResolver.query(
         android.provider.Telephony.Sms.Inbox.CONTENT_URI,
