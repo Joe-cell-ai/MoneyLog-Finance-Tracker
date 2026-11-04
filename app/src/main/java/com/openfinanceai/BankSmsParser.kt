@@ -88,7 +88,7 @@ internal object BankSmsParser {
                     LocalDate.parse(
                         normalized,
                         DateTimeFormatter.ofPattern(format, Locale.ENGLISH)
-                            .withResolverStyle(ResolverStyle.STRICT)
+                            .withResolverStyle(ResolverStyle.SMART)
                     )
                 }.getOrNull()
                 if (parsed != null) return parsed
