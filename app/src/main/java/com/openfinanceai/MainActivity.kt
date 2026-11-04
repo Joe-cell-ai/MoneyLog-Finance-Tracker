@@ -1611,6 +1611,7 @@ private fun HomeScreen(
                 OutlinedButton(onClick = { onOpen("Insights") }) { Icon(Icons.Default.Insights, null); Text(" Insights") }
             }
         }
+        item { MoneyLogCashFlowHero(monthIncome, monthExpenses) }
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Monthly overview", modifier = Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
@@ -1661,6 +1662,7 @@ private fun HomeScreen(
                     }
                     LinearProgressIndicator(progress = { if (budgetTotal > 0L) (monthSpent.toFloat() / budgetTotal).coerceIn(0f, 1f) else 0f }, modifier = Modifier.fillMaxWidth().height(7.dp), color = if (budgetTotal > 0L && monthSpent > budgetTotal) ExpenseRed else Purple, trackColor = Color(0xFFDCD5FA))
                     Text(if (budgetTotal > 0L && monthSpent <= budgetTotal) "${Money.format(budgetTotal - monthSpent)} remaining this month" else if (budgetTotal > 0L) "${Money.format(monthSpent - budgetTotal)} over budget" else "Add category limits to track your monthly budget here.", color = Muted, fontSize = 12.sp)
+                    BudgetFlowMiniChart(monthSpent, budgetTotal, monthExpenseCategories)
                 }
             }
             Spacer(Modifier.height(2.dp))
@@ -1697,6 +1699,11 @@ private fun HomeScreen(
                     }
                 }
             }
+        }
+        item {
+            val incomeCategories = monthTransactions.filter { it.income }.groupBy { it.category }
+                .map { entry -> entry.key to entry.value.sumOf { it.amount } }.sortedByDescending { it.second }
+            MonthlyIncomeBreakdownCard(monthIncome, incomeCategories)
         }
         item { SectionHeading("Recent transactions", "See all", onAll) }
         if (monthTransactions.isEmpty()) {
@@ -1752,6 +1759,149 @@ private fun HomeScreen(
             confirmButton = {},
             dismissButton = { TextButton(onClick = { showMonthPicker = false }) { Text("Close") } }
         )
+    }
+}
+
+
+@Composable
+private fun MoneyLogCashFlowHero(income: Long, expenses: Long) {
+    val net = income - expenses
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF167DE5))
+    ) {
+        Column(
+            Modifier.fillMaxWidth()
+                .background(Brush.linearGradient(listOf(Color(0xFF08B9E9), Color(0xFF167DE5), Color(0xFF7852E8))))
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(13.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("MONTHLY CASH FLOW", color = Color.White.copy(alpha = .86f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
+                    Text("Your money at a glance", color = Color.White.copy(alpha = .82f), fontSize = 11.sp)
+                }
+                Box(Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = .18f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(23.dp))
+                }
+            }
+            Text((if (net < 0L) "−" else "") + Money.format(kotlin.math.abs(net)), color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
+            Text(if (net >= 0L) "Remaining after this month's expenses" else "Expenses are above income this month", color = Color.White.copy(alpha = .82f), fontSize = 11.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).background(Color.White.copy(alpha = .16f)).padding(11.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.TrendingUp, null, tint = Color(0xFFB9F5E3), modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Income", color = Color.White.copy(alpha = .86f), fontSize = 10.sp)
+                    }
+                    Text(Money.format(income), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                }
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(15.dp)).background(Color.White.copy(alpha = .16f)).padding(11.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.TrendingDown, null, tint = Color(0xFFFFD5E2), modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Expenses", color = Color.White.copy(alpha = .86f), fontSize = 10.sp)
+                    }
+                    Text(Money.format(expenses), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BudgetFlowMiniChart(spent: Long, budget: Long, categories: List<Pair<String, Long>>) {
+    val topCategories = categories.take(3)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("CATEGORY BREAKDOWN", modifier = Modifier.weight(1f), color = Purple, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = .8.sp)
+            Text(if (budget > 0L) "${(spent.toDouble() / budget * 100).toInt().coerceAtLeast(0)}% of budget" else "No limits set", color = Muted, fontSize = 10.sp)
+        }
+        if (topCategories.isEmpty()) {
+            Text("Add expenses to see your category flow.", color = Muted, fontSize = 11.sp)
+        } else {
+            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(92.dp)) {
+                val centerY = size.height / 2f
+                topCategories.forEachIndexed { index, entry ->
+                    val targetY = size.height * (index + 1).toFloat() / (topCategories.size + 1)
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(size.width * .04f, centerY)
+                        cubicTo(size.width * .36f, centerY, size.width * .44f, targetY, size.width * .93f, targetY)
+                    }
+                    val share = entry.second.toFloat() / spent.coerceAtLeast(1L).toFloat()
+                    drawPath(path, categoryColor(entry.first).copy(alpha = .48f), style = Stroke(width = (7f + 18f * share).coerceIn(7f, 25f), cap = StrokeCap.Round))
+                }
+            }
+            topCategories.forEach { (name, amount) ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(categoryColor(name)))
+                    Spacer(Modifier.width(8.dp))
+                    Text(name, Modifier.weight(1f), color = Ink, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                    Text(if (budget > 0L) "${amount * 100 / budget.coerceAtLeast(1L)}% of budget" else "—", color = Muted, fontSize = 10.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(Money.format(amount), color = categoryColor(name), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthlyIncomeBreakdownCard(totalIncome: Long, categories: List<Pair<String, Long>>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Income breakdown", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text("Where this month's income came from", color = Muted, fontSize = 10.sp)
+                }
+                Surface(color = IncomeTint, shape = RoundedCornerShape(50)) {
+                    Text("INCOME", Modifier.padding(horizontal = 10.dp, vertical = 6.dp), color = IncomeGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Box(Modifier.size(132.dp), contentAlignment = Alignment.Center) {
+                    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                        if (totalIncome > 0L && categories.isNotEmpty()) {
+                            var angle = -90f
+                            categories.forEach { (name, amount) ->
+                                val sweep = amount.toFloat() / totalIncome.toFloat() * 360f
+                                drawArc(categoryColor(name), angle, (sweep - 1.8f).coerceAtLeast(0f), false, style = Stroke(width = size.minDimension * .17f, cap = StrokeCap.Round))
+                                angle += sweep
+                            }
+                        } else {
+                            drawArc(Mint, -90f, 360f, false, style = Stroke(width = size.minDimension * .17f, cap = StrokeCap.Round))
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Earned", color = Muted, fontSize = 10.sp)
+                        Text(Money.format(totalIncome).substringBeforeLast("."), color = Ink, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
+                        Text("this month", color = Muted, fontSize = 9.sp)
+                    }
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    if (categories.isEmpty()) Text("Record income to see your sources here.", color = Muted, fontSize = 11.sp)
+                    categories.take(5).forEach { (name, amount) ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).clip(CircleShape).background(categoryColor(name)))
+                            Spacer(Modifier.width(7.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(name, color = Ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                Text(if (totalIncome > 0L) "${amount * 100 / totalIncome}% of income" else "0% of income", color = Muted, fontSize = 9.sp)
+                            }
+                            Text("+${Money.format(amount)}", color = Teal, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
