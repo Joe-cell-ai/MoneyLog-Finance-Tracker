@@ -7094,10 +7094,11 @@ private fun extractSmsMerchant(body: String, amountEnd: Int): String? {
         .replace(Regex("""(?i)\b(call|customer care|sms block)\b.*$"""), "")
         .replace(Regex("""(?i)\b(unique mandate number)\b.*$"""), "")
         .trim(' ', '.', ',', ';', ':', '-', '\n', '\r')
-    // Bank debit/credit alerts usually put the payee after a semicolon, or after
-    // the transaction date. Prefer that segment to account and payment-reference text.
-    val candidate = cleaned.substringAfter(';', cleaned).trim()
-        .replace(Regex("""(?i)^on\s+\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4}\s+(from|by)\s+"""), "$1 ")
+    val dateFromMerchant = Regex("""(?i)\bon\s+\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4}\s+from\s+([^.;]+)""")
+        .find(cleaned)?.groupValues?.getOrNull(1)
+    // Debit alerts often put the payee after a semicolon; credit alerts may say
+    // "on DATE from Merchant". Prefer those segments over UPI references and boilerplate.
+    val candidate = (dateFromMerchant ?: cleaned.substringAfter(';', cleaned)).trim()
         .replace(Regex("""(?i)\b(credited|debited)\.?$"""), "")
         .replace(Regex("""(?i)\s+on\s+\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4}.*$"""), "")
         .trim(' ', '.', ',', ';', ':', '-')
