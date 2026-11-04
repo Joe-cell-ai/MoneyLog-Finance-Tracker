@@ -1349,7 +1349,7 @@ private fun FinanceApp() {
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Enter a new date, for example 04-Nov-2026.", color = Muted, fontSize = 12.sp)
-                            OutlinedTextField(value = emiRescheduleDate, onValueChange = { emiRescheduleDate = it }, label = { Text("New due date") }, singleLine = true)
+                            LoanDateField("New due date", emiRescheduleDate) { emiRescheduleDate = it }
                         }
                     },
                     confirmButton = {
@@ -6424,7 +6424,7 @@ private fun AddTransactionDialog(
                     OutlinedTextField(newLoanEmi, { newLoanEmi = it.filter(Char::isDigit); newLoanError = "" }, label = { Text("Monthly EMI (₹)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(newLoanRate, { newLoanRate = it.filter { c -> c.isDigit() || c == '.' }; newLoanError = "" }, label = { Text("Annual interest rate (%)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(newLoanTenure, { newLoanTenure = it.filter(Char::isDigit); newLoanError = "" }, label = { Text("Tenure (months)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(newLoanDue, { newLoanDue = it; newLoanError = "" }, label = { Text("First EMI date (YYYY-MM-DD)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    LoanDateField("First EMI date", newLoanDue) { newLoanDue = it; newLoanError = "" }
                     if (newLoanError.isNotBlank()) Text(newLoanError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 }
             },
@@ -6467,7 +6467,7 @@ private fun AddTransactionDialog(
                     OutlinedTextField(newLoanEmi, { newLoanEmi = it.filter(Char::isDigit); newLoanError = "" }, label = { Text("Monthly EMI (₹)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(newLoanRate, { newLoanRate = it.filter { c -> c.isDigit() || c == '.' }; newLoanError = "" }, label = { Text("Annual interest rate (%)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(newLoanTenure, { newLoanTenure = it.filter(Char::isDigit); newLoanError = "" }, label = { Text("Tenure (months)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(newLoanDue, { newLoanDue = it; newLoanError = "" }, label = { Text("First EMI date (YYYY-MM-DD)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    LoanDateField("First EMI date", newLoanDue) { newLoanDue = it; newLoanError = "" }
                     if (newLoanError.isNotBlank()) Text(newLoanError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 }
             },
