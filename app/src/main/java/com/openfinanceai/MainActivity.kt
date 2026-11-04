@@ -1009,7 +1009,7 @@ private fun FinanceApp() {
                 when (tab) {
                     "Home" -> HomeScreen(selectedMonthIncome, selectedMonthExpenses, transactions, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { navigateTo("Activity") }, { isIncome -> showAddAsIncome = isIncome; showAdd = true }, { navigateTo(it) }, { transactionForActions = it })
                     "Activity" -> ActivityScreen(transactions, { transactionForActions = it })
-                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { navigateBack() }, { navigateTo(it) }, { transaction ->
+                    "Reports" -> ReportsScreen(selectedMonthIncome, selectedMonthExpenses, selectedMonthTransactions, transactions, selectedOverviewMonth, { selectedOverviewMonth = it }, { navigateBack() }, { navigateTo(it) }, { transaction ->
                         navigateTo("Activity")
                         transactionForActions = transaction
                     })
@@ -2107,13 +2107,14 @@ private fun ReportsScreen(
     income: Long,
     expenses: Long,
     transactions: List<Transaction>,
+    allTransactions: List<Transaction>,
     selectedMonth: YearMonth,
     onMonthChange: (YearMonth) -> Unit,
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
     onTransactionClick: (Transaction) -> Unit
 ) {
-    var reportView by remember { mutableStateOf("By category") }
+    var reportView by remember { mutableStateOf("Total") }
     var searchQuery by remember { mutableStateOf("") }
     var showNotifications by remember { mutableStateOf(false) }
     var showAllCategories by remember { mutableStateOf(false) }
@@ -2126,7 +2127,7 @@ private fun ReportsScreen(
     val tagTotals = transactions.flatMap { transaction ->
         Regex("#([\\p{L}\\p{N}_-]+)").findAll(transaction.notes).map { it.groupValues[1] to transaction.amount }.toList()
     }.groupBy { it.first }.mapValues { entry -> entry.value.sumOf { it.second } }.toList().sortedByDescending { it.second }
-    val views = listOf("Calendar", "By category", "By tag", "Total")
+    val views = listOf("Total", "Trends", "By category", "By tag", "Calendar")
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(appPageBrush()),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
@@ -2178,11 +2179,12 @@ private fun ReportsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 views.forEach { view ->
-                    val label = when (view) { "By category" -> "Categories"; "By tag" -> "Tags"; else -> view }
+                    val label = when (view) { "Total" -> "Overview"; "By category" -> "Categories"; "By tag" -> "Tags"; else -> view }
                     val tabIcon = when (view) {
                         "Calendar" -> Icons.Default.CalendarToday
                         "By category" -> Icons.Default.Category
                         "By tag" -> Icons.Default.LocalOffer
+                        "Trends" -> Icons.Default.TrendingUp
                         else -> Icons.Default.Functions
                     }
                     Row(
@@ -2201,6 +2203,7 @@ private fun ReportsScreen(
             }
         }
         if (reportView == "Overview" || reportView == "Total") {
+            item { ReportsTrendCard(allTransactions, selectedMonth) }
             item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MetricCard("Income", Money.format(income), Modifier.weight(1f), IncomeTint, IncomeGreen)
                 MetricCard("Expenses", Money.format(expenses), Modifier.weight(1f), ExpenseTint, ExpenseRed)
@@ -2241,6 +2244,10 @@ private fun ReportsScreen(
                     Text("Net cash flow · " + Money.format(income - expenses), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
                 }
             } }
+        }
+        if (reportView == "Trends") {
+            item { ReportsTrendCard(allTransactions, selectedMonth, showMonthLabels = true) }
+            item { InfoCard("Monthly cash flow", "Compare recorded income and expenses across recent months. Change the month above to move the reporting window.", Icons.Default.Insights) }
         }
         if (reportView == "Calendar") {
             item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(18.dp)) {
@@ -2622,6 +2629,85 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
 }
 
 @Composable
+private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: YearMonth, showMonthLabels: Boolean = false) {
+    val months = (5 downTo 0).map { selectedMonth.minusMonths(it.toLong()) }
+    val monthlyIncome = months.map { month ->
+        allTransactions.filter { transaction -> parseScheduleDate(transaction.date)?.let { YearMonth.from(it) == month } == true && transaction.income }.sumOf { it.amount }
+    }
+    val monthlyExpenses = months.map { month ->
+        allTransactions.filter { transaction -> parseScheduleDate(transaction.date)?.let { YearMonth.from(it) == month } == true && !transaction.income }.sumOf { it.amount }
+    }
+    val maxValue = (monthlyIncome + monthlyExpenses).maxOrNull()?.coerceAtLeast(1L) ?: 1L
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
+        shape = RoundedCornerShape(22.dp),
+        border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null,
+        elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) 5.dp else 1.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("Monthly Overview", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text("Income and expenses · last 6 months", color = Muted, fontSize = 10.sp)
+                }
+                Surface(color = Color(0xFFE7F7F1), shape = RoundedCornerShape(50)) {
+                    Text("LIVE DATA", Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = IncomeGreen, fontWeight = FontWeight.Bold, fontSize = 9.sp)
+                }
+            }
+            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(130.dp)) {
+                val left = 8f
+                val right = size.width - 8f
+                val top = 8f
+                val bottom = size.height - 8f
+                repeat(4) { row ->
+                    val y = top + (bottom - top) * row / 3f
+                    drawLine(Color(0xFF9AB8D6).copy(alpha = .22f), androidx.compose.ui.geometry.Offset(left, y), androidx.compose.ui.geometry.Offset(right, y), strokeWidth = 1.dp.toPx())
+                }
+                fun drawSeries(values: List<Long>, color: Color) {
+                    if (values.size < 2) return
+                    val path = androidx.compose.ui.graphics.Path()
+                    values.forEachIndexed { index, value ->
+                        val x = left + (right - left) * index / (values.lastIndex).coerceAtLeast(1)
+                        val y = bottom - (value.toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * (bottom - top)
+                        if (index == 0) path.moveTo(x, y) else {
+                            val prevX = left + (right - left) * (index - 1) / (values.lastIndex).coerceAtLeast(1)
+                            val prevY = bottom - (values[index - 1].toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * (bottom - top)
+                            val midX = (prevX + x) / 2f
+                            path.cubicTo(midX, prevY, midX, y, x, y)
+                        }
+                    }
+                    drawPath(path, color, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
+                    values.forEachIndexed { index, value ->
+                        val x = left + (right - left) * index / (values.lastIndex).coerceAtLeast(1)
+                        val y = bottom - (value.toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * (bottom - top)
+                        drawCircle(Color.White, radius = 4.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
+                        drawCircle(color, radius = 2.6.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
+                    }
+                }
+                drawSeries(monthlyIncome, Color(0xFF089B85))
+                drawSeries(monthlyExpenses, Color(0xFF247FEB))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                months.forEach { month -> Text(month.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH), color = Muted, fontSize = 9.sp) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF089B85)))
+                    Text("Income", color = Muted, fontSize = 10.sp)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF247FEB)))
+                    Text("Expenses", color = Muted, fontSize = 10.sp)
+                }
+            }
+            val delta = (monthlyIncome.lastOrNull() ?: 0L) - (monthlyExpenses.lastOrNull() ?: 0L)
+            Text("Current month net cash flow: ${Money.format(delta)}", color = if (delta >= 0) IncomeGreen else ExpenseRed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
 private fun LoansScreen(loans: List<Loan>, onAddLoan: () -> Unit, onDetails: (Loan) -> Unit, onLoanLongPress: (Loan) -> Unit) {
     val context = LocalContext.current
     val canvas = Color(0xFFF4F7FC)
@@ -2968,6 +3054,67 @@ private fun BudgetsScreen(transactions: List<Transaction>) {
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Monthly budgets", fontSize = 27.sp, color = Ink, fontWeight = FontWeight.Bold) }
         item { Text("Set category limits and compare them with dated expenses in the current month.", color = Muted) }
+        item {
+            val totalBudget = budgets.values.sum()
+            val totalSpent = expenses.values.sum()
+            val categoryColors = expenses.toList().sortedByDescending { it.second }
+            Card(
+                colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
+                shape = RoundedCornerShape(22.dp),
+                border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null,
+                elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) 5.dp else 1.dp)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("MONTHLY BUDGET", color = Green, fontSize = 10.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold)
+                            Text(if (totalBudget > 0L) Money.format(totalBudget) else "Set your budget", color = Ink, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(if (totalBudget > 0L) "${Money.format(totalSpent)} spent this month" else "Create category limits below", color = Muted, fontSize = 11.sp)
+                        }
+                        Surface(color = Color(0xFFE7F7F1), shape = RoundedCornerShape(50)) {
+                            Text(if (totalBudget > 0L) "${(totalSpent.toDouble() / totalBudget * 100).toInt()}% USED" else "NO LIMITS", Modifier.padding(horizontal = 9.dp, vertical = 6.dp), color = IncomeGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    LinearProgressIndicator(
+                        progress = { if (totalBudget > 0L) (totalSpent.toFloat() / totalBudget).coerceIn(0f, 1f) else 0f },
+                        modifier = Modifier.fillMaxWidth().height(8.dp),
+                        color = if (totalBudget > 0L && totalSpent > totalBudget) ExpenseRed else Green,
+                        trackColor = Mint
+                    )
+                    if (categoryColors.isEmpty()) Text("Add expenses to see category spending.", color = Muted, fontSize = 11.sp)
+                    else {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(Modifier.size(122.dp), contentAlignment = Alignment.Center) {
+                                androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                                    if (totalSpent > 0L) {
+                                        var angle = -90f
+                                        categoryColors.forEach { (name, amount) ->
+                                            val sweep = amount.toFloat() / totalSpent.toFloat() * 360f
+                                            drawArc(categoryColor(name), angle, (sweep - 1.5f).coerceAtLeast(0f), false, style = Stroke(width = size.minDimension * .18f, cap = StrokeCap.Round))
+                                            angle += sweep
+                                        }
+                                    } else drawArc(Mint, -90f, 360f, false, style = Stroke(width = size.minDimension * .18f))
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Spent", color = Muted, fontSize = 10.sp)
+                                    Text(Money.format(totalSpent).substringBeforeLast("."), color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                categoryColors.take(4).forEach { (name, amount) ->
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        Box(Modifier.size(8.dp).clip(CircleShape).background(categoryColor(name)))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(name, Modifier.weight(1f), color = Ink, fontSize = 10.sp, maxLines = 1)
+                                        Text(if (totalSpent > 0L) "${amount * 100 / totalSpent}%" else "0%", color = Muted, fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
