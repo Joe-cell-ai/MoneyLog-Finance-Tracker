@@ -509,32 +509,5 @@ private fun MoneyNoteDateField(label: String, date: String, onDateChange: (Strin
         shape = RoundedCornerShape(14.dp),
         singleLine = true
     )
-    if (showPicker) {
-        val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-        DatePickerDialog(
-            onDismissRequest = { showPicker = false },
-            shape = RoundedCornerShape(28.dp),
-            colors = DatePickerDefaults.colors(containerColor = Color(0xEAF5FCFF)),
-            confirmButton = {
-                TextButton(onClick = {
-                    pickerState.selectedDateMillis?.let { millis ->
-                        onDateChange(java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString())
-                    }
-                    showPicker = false
-                }) { Text("Select", color = MnBlue) }
-            },
-            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Cancel", color = MnMuted) } }
-        ) {
-            DatePicker(
-                state = pickerState,
-                showModeToggle = false,
-                colors = DatePickerDefaults.colors(
-                    containerColor = Color(0xEAF5FCFF),
-                    selectedDayContainerColor = MnBlue,
-                    todayDateBorderColor = MnCyan,
-                    todayContentColor = MnBlue
-                )
-            )
-        }
-    }
+    if (showPicker) GlassCalendarDialog(initialDate = date, accent = MnBlue, onDismiss = { showPicker = false }, onSelect = { onDateChange(it); showPicker = false })
 }
