@@ -38,6 +38,7 @@ import java.text.NumberFormat
 import java.time.LocalDate
 import java.util.Locale
 import java.util.UUID
+import kotlinx.coroutines.delay
 
 private val MnBlue = Color(0xFF087BEA)
 private val MnCyan = Color(0xFF20B8D5)
@@ -109,8 +110,18 @@ fun MoneyNotesScreen(
     var editTarget by remember { mutableStateOf<MoneyNote?>(null) }
     var paymentTarget by remember { mutableStateOf<MoneyNote?>(null) }
     var successPayment by remember { mutableStateOf<Pair<MoneyNote, MoneyNotePayment>?>(null) }
+    var interestRefreshDay by remember { mutableStateOf(LocalDate.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val now = java.time.ZonedDateTime.now()
+            val nextDay = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+            delay(java.time.Duration.between(now, nextDay).toMillis().coerceAtLeast(1_000L))
+            interestRefreshDay = LocalDate.now()
+        }
+    }
+    val refreshDay = interestRefreshDay
     val selectedNote = notes.firstOrNull { it.id == selectedNoteId }
-    val payTotal = notes.filter { it.direction == MoneyNoteDirection.I_NEED_TO_PAY }.sumOf { it.outstandingPaise }
+    val payTotal = refreshDay.let { notes.filter { it.direction == MoneyNoteDirection.I_NEED_TO_PAY }.sumOf { it.outstandingPaise } }
     val collectTotal = notes.filter { it.direction == MoneyNoteDirection.I_NEED_TO_COLLECT }.sumOf { it.outstandingPaise }
     val visible = when (filter) {
         "Pay" -> notes.filter { it.direction == MoneyNoteDirection.I_NEED_TO_PAY && it.status != MoneyNoteStatus.SETTLED }
