@@ -651,6 +651,11 @@ class MainActivity : FragmentActivity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9001)
         }
         listOf(1005, 1008, 1010).forEach { EmiReminderReceiver.cancelReminder(this, it) }
+        val lockPrefs = getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+        val deviceKeyguard = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if (lockPrefs.getBoolean("app_lock_enabled", false) && !deviceKeyguard.isDeviceSecure) {
+            lockPrefs.edit().putBoolean("app_lock_enabled", false).remove("app_lock_pin_hash").remove("app_lock_pin_salt").apply()
+        }
         AppLockRuntime.isLocked = AppLockRuntime.isConfigured(this)
         setContent { FinanceApp() }
     }
@@ -2563,7 +2568,7 @@ private fun ReportsScreen(
         }
         item {
             if (showReportCalendarPicker) {
-                GlassCalendarDialog(initialDate = selectedReportDate, accent = Green, transactionDates = allTransactions.mapNotNull { transactionDateOrNull(it)?.toString() }.toSet(), onDismiss = { showReportCalendarPicker = false }, onSelect = { selectedReportDate = it; showReportCalendarPicker = false })
+                GlassCalendarDialog(initialDate = selectedReportDate, accent = Green, transactionDates = allTransactions.mapNotNull { transactionDateOrNull(it)?.toString() }.toSet(), selectImmediatelyOnTap = true, onDismiss = { showReportCalendarPicker = false }, onSelect = { selectedReportDate = it; showReportCalendarPicker = false })
             }
         }
         if (reportView == "By category") {
@@ -7087,7 +7092,8 @@ internal fun GlassCalendarDialog(
     accent: Color = Color(0xFF167DE5),
     onDismiss: () -> Unit,
     onSelect: (String) -> Unit,
-    transactionDates: Set<String> = emptySet()
+    transactionDates: Set<String> = emptySet(),
+    selectImmediatelyOnTap: Boolean = false
 ) {
     val today = remember { java.time.LocalDate.now() }
     var selectedDate by remember(initialDate) {
@@ -7145,7 +7151,7 @@ internal fun GlassCalendarDialog(
                                         isToday -> accent.copy(alpha = .12f)
                                         else -> Color.Transparent
                                     })
-                                    .then(if (validDay) Modifier.clickable { selectedDate = date!! } else Modifier),
+                                    .then(if (validDay) Modifier.clickable { selectedDate = date!!; if (selectImmediatelyOnTap) onSelect(date.toString()) } else Modifier),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (validDay) Text(
