@@ -3,7 +3,6 @@ package com.openfinanceai
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
-import java.time.YearMonth
 
 /** Live balance for a Money Note. Interest is simple interest, accrued daily against remaining principal. */
 data class MoneyNoteBalance(
@@ -14,8 +13,8 @@ data class MoneyNoteBalance(
 }
 
 /**
- * Monthly rate is stored in basis points: 150 = 1.50% per month.
- * Each calendar month's rate is spread over that month's actual number of days.
+ * Annual rate is stored in basis points: 150 = 1.50% per year.
+ * Interest accrues daily at annual rate / 365 against the remaining principal.
  * The start date is excluded and the as-of date is excluded, so a loan started
  * on the 3rd accrues one day by the 4th.
  */
@@ -50,11 +49,9 @@ internal fun calculateMoneyNoteBalance(
 
     fun accrueUntil(endExclusive: LocalDate) {
         while (cursor.isBefore(endExclusive)) {
-            val month = YearMonth.from(cursor)
-            val daysInMonth = month.lengthOfMonth()
             val daily = BigDecimal.valueOf(principal)
                 .multiply(BigDecimal.valueOf(note.interestRateBasisPoints.toLong()))
-                .divide(BigDecimal.valueOf(10_000L * daysInMonth), 16, RoundingMode.HALF_UP)
+                .divide(BigDecimal.valueOf(10_000L * 365L), 16, RoundingMode.HALF_UP)
             interest = interest.add(daily)
             cursor = cursor.plusDays(1)
         }

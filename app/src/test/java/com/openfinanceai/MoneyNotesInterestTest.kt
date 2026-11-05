@@ -20,16 +20,16 @@ class MoneyNotesInterestTest {
     )
 
     @Test
-    fun oneFullCalendarMonthAccruesTheEnteredMonthlyRate() {
+    fun dailyAccrualUsesAnnualRate() {
         val balance = calculateMoneyNoteBalance(note(), LocalDate.parse("2026-11-01"))
         assertEquals(9_000_000L, balance.principalPaise)
-        assertEquals(135_000L, balance.unpaidInterestPaise) // ₹1,350 at 1.5%
+        assertEquals(11_466L, balance.unpaidInterestPaise) // ₹114.66 for 31 days at 1.5% annually
     }
 
     @Test
     fun interestOnlyGoldLoanPaymentDoesNotReducePrincipal() {
         val payment = MoneyNotePayment(
-            amountPaise = 135_000L,
+            amountPaise = 11_466L,
             date = "2026-11-01",
             allocation = MoneyNotePaymentAllocation.INTEREST_ONLY
         )
@@ -47,6 +47,6 @@ class MoneyNotesInterestTest {
         )
         val balance = calculateMoneyNoteBalance(note(payments = listOf(payment)), LocalDate.parse("2026-11-01"))
         assertEquals(8_000_000L, balance.principalPaise)
-        assert(balance.unpaidInterestPaise in 126_000L..129_000L)
+        assert(balance.unpaidInterestPaise in 10_700L..10_900L)
     }
 }
