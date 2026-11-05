@@ -6954,12 +6954,12 @@ private fun ImportTransactionsScreen(
     ) {
         item {
             Text("Import transactions", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
-            Text("Import a bank statement or detect transaction alerts from SMS. Nothing is saved until you confirm.", color = Muted)
+            Text("Import a bank statement or manage bank SMS transactions. New eligible bank alerts are saved automatically after permission is granted.", color = Muted)
         }
         item {
             InfoCard(
                 "Scan bank SMS",
-                "With your permission, MoneyLog checks recent SMS messages on this device for clear debit and credit alerts. Message contents are processed locally and are not uploaded. OTPs and unclear messages are ignored.",
+                "After you grant SMS permissions, new clear bank debit and credit alerts are imported automatically and saved on this device as Needs review. Message contents are processed locally and are not uploaded. OTPs, failed payments and unclear messages are ignored. Scan older alerts below once to import your history.",
                 Icons.Default.Sms
             )
         }
@@ -6967,7 +6967,7 @@ private fun ImportTransactionsScreen(
             Button(onClick = onScanSms, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.MarkEmailRead, null)
                 Spacer(Modifier.width(8.dp))
-                Text("Allow access & scan bank SMS")
+                Text("Enable auto-import & scan older SMS")
             }
             Text(
                 "If Android says access was denied or restricted, open App Info. On some APK installs, use the three-dot menu > Allow restricted settings (if shown), then Permissions > SMS. Android controls this restriction; MoneyLog cannot bypass it.",
