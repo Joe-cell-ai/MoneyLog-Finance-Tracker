@@ -649,7 +649,7 @@ class MainActivity : FragmentActivity() {
     @Deprecated("Deprecated in Android API; retained for device-credential fallback compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 4411 && resultCode == RESULT_OK) AppLockRuntime.isLocked = false
+        if (requestCode == 4411 && resultCode == android.app.Activity.RESULT_OK) AppLockRuntime.isLocked = false
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
