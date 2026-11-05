@@ -1235,6 +1235,16 @@ private fun FinanceApp() {
                             importedPreview = emptyList()
                         }
                     )
+                    "Salary" -> SalarySettingsScreen(
+                        onSave = { enabled, amount ->
+                            context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
+                                .putBoolean("salary_auto_enabled", enabled)
+                                .putLong("salary_auto_amount", amount)
+                                .apply()
+                            SalaryAutoWorker.schedule(context)
+                            SalaryAutoWorker.runNow(context)
+                        }
+                    )
                     "Appearance" -> AppearanceScreen()
                     "Privacy & Security" -> PrivacySecurityScreen { context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)) }
                     "Notifications" -> NotificationsSettingsScreen(
@@ -3887,7 +3897,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
     val prefs = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
     val mainItems = listOf(
         Triple("Appearance", "Theme, colors and layout", Icons.Default.Palette),
-        Triple("Budgets", "Set monthly spending limits", Icons.Default.TrackChanges),
+        Triple("Budgets", "Set monthly spending limits", Icons.Default.TrackChanges),\n        Triple("Salary", "Set monthly salary and payday automation", Icons.Default.Payments),
         Triple("Backup & Export", "Save, restore and export records", Icons.Default.Security),
         Triple("Privacy & Security", "Data protection and permissions", Icons.Default.Shield),
         Triple("Notifications", "Manage app alerts and reminder preferences", Icons.Default.Notifications),
@@ -6947,6 +6957,41 @@ private fun csvEscape(value: String): String =
     } else value
 
 @Composable
+
+@Composable
+private fun SalarySettingsScreen(onSave: (Boolean, Long) -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
+    var enabled by remember { mutableStateOf(prefs.getBoolean("salary_auto_enabled", false)) }
+    var amountText by remember { mutableStateOf(prefs.getLong("salary_auto_amount", 0L).takeIf { it > 0L }?.toString().orEmpty()) }
+    var message by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxSize().background(appPageBrush()).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("Salary automation", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
+        InfoCard("Monthly payday rule", "MoneyLog records salary on the 31st when it is Monday–Friday. If the 31st is Saturday or Sunday, it uses the preceding Friday. In months with fewer than 31 days, it uses the last Monday–Friday of that month.", Icons.Default.CalendarMonth)
+        Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = appGlassCardShape()) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Automatically add salary", color = Ink, fontWeight = FontWeight.SemiBold)
+                        Text("Adds one income transaction per month.", color = Muted, fontSize = 12.sp)
+                    }
+                    Switch(checked = enabled, onCheckedChange = { enabled = it })
+                }
+                OutlinedTextField(value = amountText, onValueChange = { amountText = it.filter(Char::isDigit) }, label = { Text("Monthly salary amount") }, leadingIcon = { Text("₹") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Button(onClick = {
+                    val amount = amountText.toLongOrNull()
+                    if (enabled && (amount == null || amount <= 0L)) message = "Enter a valid salary amount before enabling automation."
+                    else {
+                        onSave(enabled, amount ?: 0L)
+                        message = if (enabled) "Salary automation saved." else "Salary automation is turned off."
+                    }
+                }, modifier = Modifier.fillMaxWidth()) { Text("Save salary settings") }
+                if (message.isNotBlank()) Text(message, color = Ink, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
 private fun ImportTransactionsScreen(
     message: String,
     preview: List<Transaction>,
