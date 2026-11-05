@@ -96,7 +96,7 @@ internal object LoanDocumentParser {
             ?.let(LoanIdentitySanitizer::lender)
         val loanNumber = Regex("""(?i)(?:Loan\s*ID|Loan\s+Reference|Loan proposal\s*/\s*account\s*No\.?|Loan account\s*(?:number|no\.?)|Agreement\s*(?:No\.?|Number))\s*[:.]?\s*([A-Z0-9/-]{5,40})""")
             .find(text)?.groupValues?.get(1)
-        val borrowerName = Regex("""(?im)^\s*(?:Dear\s+|Customer\s+Name\s*[:：]?\s*|NAME\s*[:：]?\s*|[0-9]{1,2}\s+Name\s+of\s+the\s+Borrower\s*\(\s*["']Borrower["']\s*\)\s+|Applicant\s+Name\s*[:：]?\s*)([A-Z][A-Z .'-]{2,80})\s*$""", RegexOption.IGNORE_CASE)
+        val borrowerName = Regex("""(?im)^\s*(?:Dear\s+|Customer\s+Name\s*[:：]?\s*|NAME\s*[:：]\s*|[0-9]{1,2}\s+Name\s+of\s+the\s+Borrower\s*\(\s*["']Borrower["']\s*\)\s+|Applicant\s+Name\s*[:：]?\s*)([A-Z][A-Z .'-]{2,80})\s*$""", RegexOption.IGNORE_CASE)
             .find(text)?.groupValues?.get(1)?.trim().let(LoanIdentitySanitizer::borrower)
         val principal = directAmount("""Total\s+Loan\s+Amount\s*\(\s*Principal\s+Amount\s*\)\s*[:\-]?\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Sanctioned\s+Loan\s+amount\s*\(in\s+Rupees\)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
