@@ -64,7 +64,7 @@ data class MoneyNote(
     val description: String = "",
     val paidPaise: Long = 0L,
     val payments: List<MoneyNotePayment> = emptyList(),
-    /** Monthly rate in basis points: 150 means 1.50% per month. Zero means no interest. */
+    /** Annual rate in basis points: 150 means 1.50% per year. Zero means no interest. */
     val interestRateBasisPoints: Int = 0,
     val loanType: MoneyNoteLoanType = MoneyNoteLoanType.OTHER
 ) {
@@ -87,7 +87,7 @@ data class MoneyNotePayment(
 )
 
 private fun moneyNotesCurrency(paise: Long): String =
-    NumberFormat.getCurrencyInstance(Locale("en", "IN")).format(paise / 100.0)
+    NumberFormat.getCurrencyInstance(Locale("en", "IN")).apply { minimumFractionDigits = 0; maximumFractionDigits = 2 }.format(paise / 100.0)
 
 private fun MoneyNoteLoanType.icon() = when (this) {
     MoneyNoteLoanType.GOLD_LOAN -> Icons.Default.Savings
@@ -248,7 +248,7 @@ private fun MoneyNoteCardV2(note: MoneyNote, onClick: () -> Unit, onPayment: () 
                     }
                 }
             }
-            if (note.interestRateBasisPoints > 0) Text("${note.interestRateBasisPoints / 100.0}% per month · interest updates daily", color = MnMuted, style = MaterialTheme.typography.labelSmall)
+            if (note.interestRateBasisPoints > 0) Text("${note.interestRateBasisPoints / 100.0}% per year · interest updates daily", color = MnMuted, style = MaterialTheme.typography.labelSmall)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("View details", color = MnBlue, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
                 if (note.outstandingPaise > 0L) {
@@ -323,8 +323,8 @@ private fun MoneyNoteDetailDialogV2(note: MoneyNote, onDismiss: () -> Unit, onEd
 
 @Composable
 private fun DetailMetric(label: String, amount: String, modifier: Modifier) {
-    Surface(modifier, color = MnPaleBlue.copy(alpha = .65f), shape = RoundedCornerShape(12.dp)) {
-        Column(Modifier.padding(7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Surface(modifier.heightIn(min = 68.dp), color = MnPaleBlue.copy(alpha = .65f), shape = RoundedCornerShape(12.dp)) {
+        Column(Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(horizontal = 4.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Text(label, color = MnMuted, style = MaterialTheme.typography.labelSmall)
             Text(amount, color = MnInk, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
         }
@@ -377,8 +377,8 @@ private fun AddMoneyNoteDialogV2(existing: MoneyNote? = null, onDismiss: () -> U
                 item { OutlinedTextField(person, { person = it; error = "" }, modifier = Modifier.fillMaxWidth(), label = { Text(if (direction == MoneyNoteDirection.I_NEED_TO_PAY) "Person / Lender *" else "Person / Borrower *") }, singleLine = true) }
                 item { OutlinedTextField(amount, { amount = it.filter { c -> c.isDigit() || c == '.' }; error = "" }, modifier = Modifier.fillMaxWidth(), label = { Text("Principal Amount (₹) *") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true) }
                 item {
-                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; error = "" }, modifier = Modifier.fillMaxWidth(), label = { Text("Interest Rate (% per month)") }, placeholder = { Text("0 for no interest") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                    Text("Interest is calculated daily from the start date using the monthly rate.", color = MnMuted, style = MaterialTheme.typography.labelSmall)
+                    OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' }; error = "" }, modifier = Modifier.fillMaxWidth(), label = { Text("Interest Rate (% per year)") }, placeholder = { Text("0 for no interest") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                    Text("Interest accrues daily using the annual rate and remaining principal.", color = MnMuted, style = MaterialTheme.typography.labelSmall)
                 }
                 item { MoneyNoteDateField("Start Date", date) { date = it; error = "" } }
                 item { OutlinedTextField(description, { description = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Description (optional)") }, minLines = 2) }
@@ -395,7 +395,7 @@ private fun AddMoneyNoteDialogV2(existing: MoneyNote? = null, onDismiss: () -> U
                     paise == null || paise <= 0L -> error = "Enter a valid amount greater than zero."
                     !validDate -> error = "Enter a valid date (YYYY-MM-DD)."
                     LocalDate.parse(date).isAfter(LocalDate.now()) -> error = "Start date cannot be in the future."
-                    rateBps == null || rateBps < 0 || rateBps > 100_000 -> error = "Enter a valid monthly interest rate."
+                    rateBps == null || rateBps < 0 || rateBps > 100_000 -> error = "Enter a valid annual interest rate."
                     else -> onSave(MoneyNote(existing?.id ?: UUID.randomUUID().toString(), direction, person.trim(), paise, date, description.trim(), existing?.paidPaise ?: 0L, existing?.payments ?: emptyList(), rateBps, type))
                 }
             }, colors = ButtonDefaults.buttonColors(containerColor = MnBlue)) { Text(if (existing == null) "Save Money Note" else "Save Changes") }
