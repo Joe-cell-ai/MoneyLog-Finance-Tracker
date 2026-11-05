@@ -714,6 +714,11 @@ private fun FinanceApp() {
     val context = LocalContext.current
     val financeScope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
+        if (context.checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED) {
+            SmsHourlySyncWorker.schedule(context)
+        }
+    }
+    LaunchedEffect(Unit) {
         androidx.work.WorkManager.getInstance(context).cancelUniqueWork("moneylog_drive_backup_daily")
     }
     val drivePrefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
@@ -801,15 +806,19 @@ private fun FinanceApp() {
     fun scanBankSms() {
         runCatching { readRecentBankSms(context) }
             .onSuccess { parsed ->
-                val existingKeys = transactions.map { transactionKey(it) }.toSet()
+                val existingKeys = transactions.map { transactionKey(it) }.toMutableSet()
                 val unique = parsed.distinctBy { transactionKey(it) }
-                    .filterNot { transactionKey(it) in existingKeys }
-                importedPreview = unique
-                importMessage = if (parsed.isEmpty()) {
-                    "No clear bank transaction alerts found in recent SMS. No messages were saved."
+                    .filter { existingKeys.add(transactionKey(it)) }
+                if (unique.isNotEmpty()) {
+                    transactions = unique + transactions
+                    saveTransactions(context, transactions)
+                }
+                importedPreview = emptyList()
+                SmsHourlySyncWorker.schedule(context)
+                importMessage = if (unique.isEmpty()) {
+                    "SMS sync is enabled. No new eligible bank transactions were found."
                 } else {
-                    "Scanned recent SMS on this device. Found " + parsed.size + " possible transaction(s); " +
-                        (parsed.size - unique.size) + " duplicate(s) will be skipped. Review below before importing."
+                    "Added " + unique.size + " bank transaction(s) directly to MoneyLog. Hourly SMS sync is enabled."
                 }
             }.onFailure {
                 importedPreview = emptyList()
@@ -819,8 +828,7 @@ private fun FinanceApp() {
     val smsPermissionsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         if (grants[Manifest.permission.READ_SMS] == true) scanBankSms()
         if (grants[Manifest.permission.RECEIVE_SMS] != true) {
-            importMessage = (if (grants[Manifest.permission.READ_SMS] == true) importMessage + " " else "") +
-                "Automatic import is off because Android did not grant incoming SMS permission. Enable SMS access in App Info to import new bank alerts automatically."
+            importMessage = "Incoming SMS permission was not granted. Existing inbox messages can still be scanned, but new SMS alerts will not be captured immediately."
         }
     }
     var loans by remember {
@@ -6959,7 +6967,7 @@ private fun ImportTransactionsScreen(
         item {
             InfoCard(
                 "Scan bank SMS",
-                "After you grant SMS permissions, new clear bank debit and credit alerts are imported automatically and saved on this device as Needs review. Message contents are processed locally and are not uploaded. OTPs, failed payments and unclear messages are ignored. Scan older alerts below once to import your history.",
+                "After you grant SMS permissions, new clear bank debit and credit alerts are imported automatically and saved on this device directly into your transactions. Message contents are processed locally and are not uploaded. OTPs, failed payments and unclear messages are ignored. Hourly sync checks for missed alerts.",
                 Icons.Default.Sms
             )
         }
@@ -6996,7 +7004,7 @@ private fun ImportTransactionsScreen(
         }
         if (message.isNotBlank()) item { Text(message, color = Ink) }
         if (preview.isNotEmpty()) {
-            item { Text("Review before saving (" + preview.size + ")", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+            item { Text("New SMS transactions are added automatically.", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
             items(preview.take(100)) { transaction ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
