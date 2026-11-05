@@ -714,6 +714,13 @@ private fun FinanceApp() {
     val context = LocalContext.current
     val financeScope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
+        if (context.checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED) {
+            SmsHourlySyncWorker.schedule(context)
+        }
+        SalaryAutoWorker.schedule(context)
+        SalaryAutoWorker.runNow(context)
+    }
+    LaunchedEffect(Unit) {
         androidx.work.WorkManager.getInstance(context).cancelUniqueWork("moneylog_drive_backup_daily")
     }
     val drivePrefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
@@ -801,15 +808,19 @@ private fun FinanceApp() {
     fun scanBankSms() {
         runCatching { readRecentBankSms(context) }
             .onSuccess { parsed ->
-                val existingKeys = transactions.map { transactionKey(it) }.toSet()
+                val existingKeys = transactions.map { transactionKey(it) }.toMutableSet()
                 val unique = parsed.distinctBy { transactionKey(it) }
-                    .filterNot { transactionKey(it) in existingKeys }
-                importedPreview = unique
-                importMessage = if (parsed.isEmpty()) {
-                    "No clear bank transaction alerts found in recent SMS. No messages were saved."
+                    .filter { existingKeys.add(transactionKey(it)) }
+                if (unique.isNotEmpty()) {
+                    transactions = unique + transactions
+                    saveTransactions(context, transactions)
+                }
+                importedPreview = emptyList()
+                SmsHourlySyncWorker.schedule(context)
+                importMessage = if (unique.isEmpty()) {
+                    "SMS sync is enabled. No new eligible bank transactions were found."
                 } else {
-                    "Scanned recent SMS on this device. Found " + parsed.size + " possible transaction(s); " +
-                        (parsed.size - unique.size) + " duplicate(s) will be skipped. Review below before importing."
+                    "Added " + unique.size + " bank transaction(s) directly to MoneyLog. Hourly SMS sync is enabled."
                 }
             }.onFailure {
                 importedPreview = emptyList()
@@ -819,8 +830,7 @@ private fun FinanceApp() {
     val smsPermissionsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         if (grants[Manifest.permission.READ_SMS] == true) scanBankSms()
         if (grants[Manifest.permission.RECEIVE_SMS] != true) {
-            importMessage = (if (grants[Manifest.permission.READ_SMS] == true) importMessage + " " else "") +
-                "Automatic import is off because Android did not grant incoming SMS permission. Enable SMS access in App Info to import new bank alerts automatically."
+            importMessage = "Incoming SMS permission was not granted. Existing inbox messages can still be scanned, but new SMS alerts will not be captured immediately."
         }
     }
     var loans by remember {
@@ -1120,50 +1130,24 @@ private fun FinanceApp() {
                     border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, Color(0xD9FFFFFF)) else null,
                     shadowElevation = if (AppBlueGlass) 18.dp else 0.dp
                 ) {
-                    if (AppBlueGlass) {
-                        Row(Modifier.fillMaxWidth().height(76.dp).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            GlassBottomNavItem("Home", Icons.Default.Home, tab == "Home" || tab in listOf("Loans", "Money Notes", "Budgets", "Calendar", "Insights"), Modifier.weight(1f)) { navigateTo("Home") }
-                            GlassBottomNavItem("Transactions", Icons.Default.ReceiptLong, tab == "Activity", Modifier.weight(1f)) { navigateTo("Activity") }
-                            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                                Box(
-                                    Modifier.size(54.dp).clip(CircleShape)
-                                        .background(Brush.linearGradient(listOf(Color(0xFF08B9E9), Color(0xFF2879F4), Color(0xFF9458F1))))
-                                        .border(2.dp, Color.White.copy(alpha = .92f), CircleShape)
-                                        .clickable { showAddAsIncome = false; showAdd = true },
-                                    contentAlignment = Alignment.Center
-                                ) { Icon(Icons.Default.Add, "Add transaction", tint = Color.White, modifier = Modifier.size(28.dp)) }
-                            }
-                            GlassBottomNavItem("Reports", Icons.Default.BarChart, tab == "Reports", Modifier.weight(1f)) { navigateTo("Reports") }
-                            GlassBottomNavItem("Settings", Icons.Default.Settings, tab == "Settings" || tab == "Appearance", Modifier.weight(1f)) { navigateTo("Settings") }
+                    Row(Modifier.fillMaxWidth().height(76.dp).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        GlassBottomNavItem("Home", Icons.Default.Home, tab == "Home" || tab in listOf("Loans", "Money Notes", "Budgets", "Calendar", "Insights"), Modifier.weight(1f)) { navigateTo("Home") }
+                        GlassBottomNavItem("Transactions", Icons.Default.ReceiptLong, tab == "Activity", Modifier.weight(1f)) { navigateTo("Activity") }
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            Box(
+                                Modifier.size(54.dp).clip(CircleShape)
+                                    .background(if (AppBlueGlass) Brush.linearGradient(listOf(Color(0xFF08B9E9), Color(0xFF2879F4), Color(0xFF9458F1))) else SolidColor(Green))
+                                    .border(2.dp, Color.White.copy(alpha = .92f), CircleShape)
+                                    .clickable { showAddAsIncome = false; showAdd = true },
+                                contentAlignment = Alignment.Center
+                            ) { Icon(Icons.Default.Add, "Add transaction", tint = Color.White, modifier = Modifier.size(28.dp)) }
                         }
-                    } else {
-                        NavigationBar(containerColor = Color.White, tonalElevation = 3.dp, windowInsets = NavigationBarDefaults.windowInsets) {
-                            listOf("Home", "Activity", "Reports", "Loans", "Money Notes", "Settings").forEach { name ->
-                                val icon = when (name) {
-                                    "Home" -> Icons.Default.Home
-                                    "Activity" -> Icons.Default.ReceiptLong
-                                    "Reports" -> Icons.Default.BarChart
-                                    "Loans" -> Icons.Default.AccountBalance
-                                    "Money Notes" -> Icons.Default.Notes
-                                    else -> Icons.Default.Settings
-                                }
-                                NavigationBarItem(
-                                    selected = tab == name, onClick = { navigateTo(name) },
-                                    icon = { Icon(icon, name) }, label = { Text(name, fontSize = 10.sp) },
-                                    colors = NavigationBarItemDefaults.colors(selectedIconColor = Green, selectedTextColor = Green, unselectedIconColor = Muted, unselectedTextColor = Muted, indicatorColor = Mint)
-                                )
-                            }
-                        }
+                        GlassBottomNavItem("Reports", Icons.Default.BarChart, tab == "Reports", Modifier.weight(1f)) { navigateTo("Reports") }
+                        GlassBottomNavItem("Settings", Icons.Default.Settings, tab == "Settings" || tab == "Appearance", Modifier.weight(1f)) { navigateTo("Settings") }
                     }
                 }
             },
-            floatingActionButton = {
-                if (!AppBlueGlass && (tab == "Home" || tab == "Activity")) {
-                    FloatingActionButton(onClick = { showAddAsIncome = false; showAdd = true }, containerColor = Green, contentColor = Color.White) {
-                        Icon(Icons.Default.Add, "Add transaction")
-                    }
-                }
-            }
+            floatingActionButton = {}
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding).padding(top = 20.dp).offset { androidx.compose.ui.unit.IntOffset(0, -50) }) {
                 when (tab) {
@@ -1225,6 +1209,16 @@ private fun FinanceApp() {
                             saveTransactions(context, transactions)
                             importMessage = "Imported " + count + " transaction(s). Saved on this device."
                             importedPreview = emptyList()
+                        }
+                    )
+                    "Salary" -> SalarySettingsScreen(
+                        onSave = { enabled, amount ->
+                            context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
+                                .putBoolean("salary_auto_enabled", enabled)
+                                .putLong("salary_auto_amount", amount)
+                                .apply()
+                            SalaryAutoWorker.schedule(context)
+                            SalaryAutoWorker.runNow(context)
                         }
                     )
                     "Appearance" -> AppearanceScreen()
@@ -2151,14 +2145,16 @@ private fun MonthlyIncomeBreakdownCard(totalIncome: Long, categories: List<Pair<
 
 @Composable
 private fun GlassBottomNavItem(label: String, icon: ImageVector, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val selectedTint = if (AppBlueGlass) Color(0xFF1269D8) else Green
+    val unselectedTint = if (AppBlueGlass) Color(0xFF55739C) else Muted
     Column(
         modifier.fillMaxHeight().clip(RoundedCornerShape(15.dp)).clickable(onClick = onClick).padding(vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(icon, contentDescription = label, tint = if (selected) Color(0xFF1269D8) else Color(0xFF55739C), modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = label, tint = if (selected) selectedTint else unselectedTint, modifier = Modifier.size(20.dp))
         Spacer(Modifier.height(3.dp))
-        Text(label, color = if (selected) Color(0xFF1269D8) else Color(0xFF55739C), fontSize = 9.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
+        Text(label, color = if (selected) selectedTint else unselectedTint, fontSize = 9.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
     }
 }
 
@@ -3880,6 +3876,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
     val mainItems = listOf(
         Triple("Appearance", "Theme, colors and layout", Icons.Default.Palette),
         Triple("Budgets", "Set monthly spending limits", Icons.Default.TrackChanges),
+        Triple("Salary", "Set monthly salary and payday automation", Icons.Default.Payments),
         Triple("Backup & Export", "Save, restore and export records", Icons.Default.Security),
         Triple("Privacy & Security", "Data protection and permissions", Icons.Default.Shield),
         Triple("Notifications", "Manage app alerts and reminder preferences", Icons.Default.Notifications),
@@ -4874,9 +4871,11 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
     val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
     // The remaining schedule starts at today's outstanding principal and contains only
     // installments not already counted as paid. This prevents past installments being counted twice.
-    val scheduleMonths = if (loan.totalPayments in 1L..600L)
+    // A zero outstanding balance means there is no remaining estimated principal to amortize.
+    // Do not manufacture future zero-value EMIs from the original tenure/payment count.
+    val scheduleMonths = if (loan.balance <= 0L) 0 else if (loan.totalPayments in 1L..600L)
         (loan.totalPayments - loan.paymentsMade).coerceIn(0L, 600L).toInt()
-    else 60
+    else if (loan.emi > 0L) 60 else 0
     val schedule = (0 until scheduleMonths).map { index ->
         val interest = kotlin.math.round(scheduleBalance * monthlyRate).toLong()
         val scheduledPayment = minOf(loan.emi, kotlin.math.ceil(scheduleBalance + interest).toLong())
@@ -4896,7 +4895,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
     val upcomingAmber = Color(0xFFF59E0B)
     val upcomingTint = Color(0xFFFFF7ED)
     val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
-    val monthsRemaining = if (loan.totalPayments > 0L) (loan.totalPayments - loan.paymentsMade).coerceAtLeast(0L).toInt() else if (loan.emi > 0L) kotlin.math.ceil(loan.balance.toDouble() / loan.emi.toDouble()).toInt().coerceAtLeast(0) else 0
+    val monthsRemaining = if (loan.balance <= 0L) 0 else if (loan.totalPayments > 0L) (loan.totalPayments - loan.paymentsMade).coerceAtLeast(0L).toInt() else if (loan.emi > 0L) kotlin.math.ceil(loan.balance.toDouble() / loan.emi.toDouble()).toInt().coerceAtLeast(0) else 0
     var totalInterestEstimate = 0L
     var totalRepaymentEstimate = 0L
     var estimateValid = loan.balance > 0L && loan.emi > 0L && !paymentTooLow
@@ -4936,7 +4935,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 val alreadyPaise = savedMetadata.optString("moneyUnit") == "PAISE"
                 (0 until arr.length()).map { n ->
                     val amount = arr.getJSONObject(n).getLong("amount")
-                    arr.getJSONObject(n).getString("date") to if (alreadyPaise) amount else LoanMoney.rupeesToPaise(amount)
+                    arr.getJSONObject(n).getString("date").ifBlank { "Date not stated" } to if (alreadyPaise) amount else LoanMoney.rupeesToPaise(amount)
                 }
             }
         }.getOrDefault(emptyList()))
@@ -5014,7 +5013,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         if (persisted != null) {
             val (record, rows) = persisted
             if (rows.isNotEmpty()) {
-                importedSchedule = rows.map { (it.dueDate ?: "") to it.installmentAmount }
+                importedSchedule = rows.map { (it.dueDate ?: "Date not stated") to it.installmentAmount }
                 val persistedBankSchedule = JSONArray()
                 rows.forEach { row ->
                     persistedBankSchedule.put(JSONObject().put("date", row.dueDate ?: "").put("amount", row.installmentAmount).put("installment", row.installmentNumber))
@@ -5091,8 +5090,16 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 val document = LoanDocumentParser.parse(extractedText)
                 if (document.scheduleRows.isEmpty()) error("No complete monthly repayment rows could be read from this PDF. No data was saved.")
                 val mappedRows = LoanDocumentScheduleMapper.map(document.scheduleRows, document.repaymentStartDate)
-                if (mappedRows.size != document.scheduleRows.size) {
+                val hasAnyExplicitDueDate = document.scheduleRows.any { !it.dueDate.isNullOrBlank() }
+                val hasMissingExplicitDueDate = document.scheduleRows.any { it.dueDate.isNullOrBlank() }
+                // Preserve complete lender financial rows when the agreement does not state dates.
+                // Never fabricate calendar dates; mixed/invalid date columns remain a hard failure.
+                val scheduleHasNoDates = !hasAnyExplicitDueDate && document.repaymentStartDate.isNullOrBlank()
+                if (mappedRows.size != document.scheduleRows.size && !scheduleHasNoDates) {
                     error("The PDF schedule has missing, duplicated, invalid or unordered dates/rows. No data was saved.")
+                }
+                if (hasAnyExplicitDueDate && hasMissingExplicitDueDate) {
+                    error("The PDF contains a partially readable due-date column. No dates were guessed and nothing was saved.")
                 }
                 if (document.tenureMonths != null && document.scheduleRows.size != document.tenureMonths) {
                     error("The PDF states ${document.tenureMonths} installments, but only ${document.scheduleRows.size} complete rows were extracted. No partial schedule was saved.")
@@ -5137,8 +5144,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     loan.lender, uri.lastPathSegment ?: "Loan PDF", document, financialRowsForRoom, roomValidation
                 )
                 val arr = JSONArray()
-                mappedRows.forEach { row ->
-                    arr.put(JSONObject().put("date", row.date).put("amount", row.amount).put("installment", row.installmentNumber))
+                document.scheduleRows.forEach { row ->
+                    arr.put(JSONObject().put("date", row.dueDate ?: "").put("amount", row.installment).put("installment", row.installmentNumber))
                 }
                 val savedRows = JSONArray()
                 document.scheduleRows.forEach { row ->
@@ -5176,12 +5183,12 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     .putString("bank_schedule_${loan.lender}", arr.toString())
                     .putString("loan_document_metadata_${loan.lender}", metadata.toString())
                     .apply()
-                importedSchedule = mappedRows.map { it.date to it.amount }
+                importedSchedule = document.scheduleRows.map { (it.dueDate ?: "Date not stated") to it.installment }
                 loanDocumentMetadata = metadata
-                val totalInstallments = LoanMoney.sumPaise(mappedRows.map { it.amount })
+                val totalInstallments = LoanMoney.sumPaise(document.scheduleRows.map { it.installment })
                 val totalPrincipal = LoanMoney.sumPaise(document.scheduleRows.map { it.principal })
                 val totalInterest = LoanMoney.sumPaise(document.scheduleRows.map { it.interest })
-                pdfMessage = "Imported ${mappedRows.size} installments · EMI total ${LoanMoney.formatPaise(totalInstallments)} · Principal ${LoanMoney.formatPaise(totalPrincipal)} · Interest ${LoanMoney.formatPaise(totalInterest)}. Source authenticity is not verified; confirm with your lender." +
+                pdfMessage = "Imported ${document.scheduleRows.size} installments · EMI total ${LoanMoney.formatPaise(totalInstallments)} · Principal ${LoanMoney.formatPaise(totalPrincipal)} · Interest ${LoanMoney.formatPaise(totalInterest)}. Source authenticity is not verified; confirm with your lender." +
                     if (sourceWarnings.isNotEmpty()) " Review ${sourceWarnings.size} document warning(s) in Loan Overview." else ""
             }.onFailure { error ->
                 pdfMessage = error.message ?: "Could not validate this PDF. No schedule was saved."
@@ -5397,6 +5404,9 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 }
             }
             if (selectedSection != "Bank Verify") {
+                if (importedSchedule.isEmpty() && schedule.isEmpty()) item {
+                    InfoCard("No pending EMIs", if (loan.balance <= 0L) "This loan has no outstanding balance, so there are no future estimated instalments." else "A schedule cannot be generated from the current loan details. Check the outstanding balance, EMI, interest rate and tenure.", Icons.Default.CheckCircle)
+                }
                 if (importedSchedule.isNotEmpty()) items(importedSchedule.indices.toList()) { index ->
                     val row = importedSchedule[index]
                     val originalDateLabel = row.first
@@ -5895,11 +5905,11 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
         }
     }
     val currentOutstandingPaise = if (actualStatementBalance != null) LoanMoney.parsePaise(statementOutstanding) ?: 0L
-        else scheduleBasedOutstanding ?: (LoanMoney.parsePaise(calculatedOutstanding.toString()) ?: 0L)
+        else scheduleBasedOutstanding ?: (LoanMoney.calculatedRupeesToPaise(calculatedOutstanding) ?: 0L)
     val completePdfSchedule = importedScheduleRows.takeIf { rows -> rows.size == total && rows.map { it.installmentNumber } == (1..rows.size).toList() }
     val remainingPdfRows = completePdfSchedule?.drop(paid.coerceIn(0, completePdfSchedule.size))
     val remainingPaymentsPaise = remainingPdfRows?.let { rows -> LoanMoney.sumPaise(rows.map { it.installment }) }
-        ?: (LoanMoney.parsePaise(monthly.toString()) ?: 0L).let { Math.multiplyExact(it, remainingMonths.toLong()) }
+        ?: (LoanMoney.calculatedRupeesToPaise(monthly) ?: 0L).let { Math.multiplyExact(it, remainingMonths.toLong()) }
     val remainingInterestPaise = remainingPdfRows?.let { rows -> LoanMoney.sumPaise(rows.map { it.interest }) }
         ?: (remainingPaymentsPaise - currentOutstandingPaise).coerceAtLeast(0L)
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -6939,6 +6949,40 @@ private fun csvEscape(value: String): String =
     } else value
 
 @Composable
+private fun SalarySettingsScreen(onSave: (Boolean, Long) -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
+    var enabled by remember { mutableStateOf(prefs.getBoolean("salary_auto_enabled", false)) }
+    var amountText by remember { mutableStateOf(prefs.getLong("salary_auto_amount", 0L).takeIf { it > 0L }?.toString().orEmpty()) }
+    var message by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxSize().background(appPageBrush()).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("Salary automation", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
+        InfoCard("Monthly payday rule", "MoneyLog records salary on the 31st when it is Monday–Friday. If the 31st is Saturday or Sunday, it uses the preceding Friday. In months with fewer than 31 days, it uses the last Monday–Friday of that month.", Icons.Default.CalendarMonth)
+        Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = appGlassCardShape()) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Automatically add salary", color = Ink, fontWeight = FontWeight.SemiBold)
+                        Text("Adds one income transaction per month.", color = Muted, fontSize = 12.sp)
+                    }
+                    Switch(checked = enabled, onCheckedChange = { enabled = it })
+                }
+                OutlinedTextField(value = amountText, onValueChange = { amountText = it.filter(Char::isDigit) }, label = { Text("Monthly salary amount") }, leadingIcon = { Text("₹") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Button(onClick = {
+                    val amount = amountText.toLongOrNull()
+                    if (enabled && (amount == null || amount <= 0L)) message = "Enter a valid salary amount before enabling automation."
+                    else {
+                        onSave(enabled, amount ?: 0L)
+                        message = if (enabled) "Salary automation saved." else "Salary automation is turned off."
+                    }
+                }, modifier = Modifier.fillMaxWidth()) { Text("Save salary settings") }
+                if (message.isNotBlank()) Text(message, color = Ink, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+@Composable
 private fun ImportTransactionsScreen(
     message: String,
     preview: List<Transaction>,
@@ -6959,7 +7003,7 @@ private fun ImportTransactionsScreen(
         item {
             InfoCard(
                 "Scan bank SMS",
-                "After you grant SMS permissions, new clear bank debit and credit alerts are imported automatically and saved on this device as Needs review. Message contents are processed locally and are not uploaded. OTPs, failed payments and unclear messages are ignored. Scan older alerts below once to import your history.",
+                "After you grant SMS permissions, new clear bank debit and credit alerts are imported automatically and saved on this device directly into your transactions. Message contents are processed locally and are not uploaded. OTPs, failed payments and unclear messages are ignored. Hourly sync checks for missed alerts.",
                 Icons.Default.Sms
             )
         }
@@ -6996,7 +7040,7 @@ private fun ImportTransactionsScreen(
         }
         if (message.isNotBlank()) item { Text(message, color = Ink) }
         if (preview.isNotEmpty()) {
-            item { Text("Review before saving (" + preview.size + ")", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+            item { Text("New SMS transactions are added automatically.", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
             items(preview.take(100)) { transaction ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -7071,7 +7115,7 @@ private fun readRecentBankSms(context: Context): List<Transaction> {
                 income = parsed.income,
                 source = "SMS import",
                 notificationKey = "sms-import:" + id,
-                captureStatus = "Needs review",
+                captureStatus = "",
                 notes = notes
             )
         }
