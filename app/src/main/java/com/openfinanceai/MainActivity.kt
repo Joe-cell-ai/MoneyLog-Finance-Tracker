@@ -7054,7 +7054,7 @@ private fun readRecentBankSms(context: Context): List<Transaction> {
                 .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
             val parsed = BankSmsParser.parse(body, receivedDate) ?: continue
             val sender = if (addressIndex >= 0) cursor.getString(addressIndex).orEmpty().trim() else ""
-            val id = if (idIndex >= 0) cursor.getString(idIndex).orEmpty() else sender + "-" + smsDate
+            val id = sender.lowercase(Locale.ROOT) + ":" + smsDate + ":" + body.hashCode()
             val notes = buildString {
                 append("Detected from a bank SMS. Verify details before relying on this entry.")
                 if (parsed.exactAmount.contains('.')) {
