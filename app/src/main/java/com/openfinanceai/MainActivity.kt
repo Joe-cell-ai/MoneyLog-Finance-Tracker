@@ -4899,7 +4899,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
     // Do not manufacture future zero-value EMIs from the original tenure/payment count.
     val scheduleMonths = if (loan.balance <= 0L) 0 else if (loan.totalPayments in 1L..600L)
         (loan.totalPayments - loan.paymentsMade).coerceIn(0L, 600L).toInt()
-    else if (loan.emi > 0L) 600 else 0
+    else if (loan.emi > 0L) 60 else 0
     val schedule = (0 until scheduleMonths).map { index ->
         val interest = kotlin.math.round(scheduleBalance * monthlyRate).toLong()
         val scheduledPayment = minOf(loan.emi, kotlin.math.ceil(scheduleBalance + interest).toLong())
