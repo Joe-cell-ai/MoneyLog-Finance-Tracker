@@ -118,7 +118,7 @@ class SmsInboxActivity : Activity() {
             return
         }
         runCatching {
-            val manager = if (Build.VERSION.SDK_INT >= 31) getSystemService(SmsManager::class.java) else @Suppress("DEPRECATION") SmsManager.getDefault()
+            @Suppress("DEPRECATION")\n            val manager = if (Build.VERSION.SDK_INT >= 31) getSystemService(SmsManager::class.java) else SmsManager.getDefault()
             val parts = manager.divideMessage(message)
             manager.sendMultipartTextMessage(number, null, parts, null, null)
             val values = ContentValues().apply {
