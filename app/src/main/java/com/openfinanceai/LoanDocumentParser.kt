@@ -106,6 +106,7 @@ internal object LoanDocumentParser {
         val emi = amountOnLine(Regex("""Amount\s+of\s+EMI\s+Payable"""))
             ?: amountOnLine(Regex("""Monthly\s+EMI"""))
             ?: amountOnLine(Regex("""EMI\s+Amount"""))
+            ?: amountOnLine(Regex("""EMI\s+AMOUNT"""))
             ?: Regex("""(?is)Amount\s+of\s+each\s+EPI.{0,350}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+nos\.?\s+of\s+EPIs""")
                 .find(text)?.groupValues?.get(1)?.let(::number)
         val fixedRate = directDecimal("""Fixed\s+Rate\s+of\s+Interest\s*[:\-]?\s*([0-9]+(?:\.[0-9]{1,4})?)""")
@@ -126,7 +127,7 @@ internal object LoanDocumentParser {
                 .find(text)?.groupValues?.get(1)
             ?: Regex("""(?i)Monthly\s+\d{1,3}\s+[0-9][0-9,]*(?:\.[0-9]{1,2})?\s+(\d{4}-\d{2}-\d{2})""")
                 .find(text)?.groupValues?.get(1)
-            ?: Regex("""(?i)(?:Repayment|Installment)\s+Start\s+Date\s*[:\-]?\s*(\d{1,2}[-/][A-Za-z0-9]{2,4}[-/]\d{2,4})""")
+            ?: Regex("""(?i)(?:Repayment|Installment|Instalment|First\s+Installment)\s+(?:Start\s+)?Date\s*[:\-]?\s*(\d{1,2}[-/][A-Za-z0-9]{2,4}[-/]\d{2,4})""")
                 .find(text)?.groupValues?.get(1)?.let { raw ->
                     val patterns = listOf("d-MMM-yy", "dd-MMM-yy", "d-MMM-yyyy", "dd-MMM-yyyy", "d/MM/yy", "dd/MM/yy", "d/MM/yyyy", "dd/MM/yyyy")
                     patterns.firstNotNullOfOrNull { pattern ->
@@ -134,7 +135,7 @@ internal object LoanDocumentParser {
                             .parseCaseInsensitive().appendPattern(pattern).toFormatter(java.util.Locale.ENGLISH)).toString() }.getOrNull()
                     }
                 }
-        val repaymentEndDate = Regex("""(?i)(?:repayment|installment|instalment)\s+end\s+date\s*[:\-]?\s*(\d{1,2}[-/][A-Za-z0-9]{2,4}[-/]\d{2,4}|\d{4}-\d{2}-\d{2})""")
+        val repaymentEndDate = Regex("""(?i)(?:repayment|installment|instalment|last\s+installment)\s+(?:end\s+)?date\s*[:\-]?\s*(\d{1,2}[-/][A-Za-z0-9]{2,4}[-/]\d{2,4}|\d{4}-\d{2}-\d{2})""")
             .find(text)?.groupValues?.get(1)?.let { raw ->
                 val patterns = listOf("d-MMM-yy", "dd-MMM-yy", "d-MMM-yyyy", "dd-MMM-yyyy", "d/MM/yy", "dd/MM/yy", "d/MM/yyyy", "dd/MM/yyyy", "yyyy-MM-dd")
                 patterns.firstNotNullOfOrNull { pattern ->
@@ -149,6 +150,7 @@ internal object LoanDocumentParser {
         val totalInterest = directAmount("""Total\s+Interest\s+Amount\s+to\s+be\s+charged[^\n]*\n\s*\d{1,3}\s+([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Total\s+Interest\s+Amount\s+to\s+be\s+charged[^\n]*?([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
         val declaredTotal = directAmount("""Total\s+amount\s+to\s+be\s+paid\s+by\s+the\s+borrower.{0,250}?\(in\s+Rupees\)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
+            ?: directAmount("""Total\s+Amount\s+Payable\s*[:：]?\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
         val netDisbursed = directAmount("""Net\s+Disbursed\s+amount\s*\(INR\)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
         val prepaymentLabelIndex = lines.indexOfFirst { Regex("""Prepayment\s+Charges\s*\(INR\)""", RegexOption.IGNORE_CASE).containsMatchIn(it) }
         val prepaymentCharge = if (prepaymentLabelIndex >= 0) {
