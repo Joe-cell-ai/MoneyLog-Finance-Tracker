@@ -30,4 +30,11 @@ class LoanMoneyTest {
     @Test fun paiseTotalsDoNotLoseFractions() {
         assertEquals(1665103L, LoanMoney.sumPaise(listOf(561938L, 555057L, 548108L)))
     }
+
+    @Test fun roundsCalculatedRupeesToNearestPaiseInsteadOfRejectingFloatingPrecision() {
+        assertEquals(1_500_012L, LoanMoney.calculatedRupeesToPaise(15000.123456))
+        assertEquals(403_540L, LoanMoney.calculatedRupeesToPaise(4035.40))
+        assertEquals(0L, LoanMoney.calculatedRupeesToPaise(0.0))
+        assertEquals(null, LoanMoney.calculatedRupeesToPaise(Double.NaN))
+    }
 }
