@@ -20,7 +20,7 @@ class MoneyNotesInterestTest {
     )
 
     @Test
-    fun dailyAccrualUsesAnnualRate {
+    fun dailyAccrualUsesAnnualRate() {
         val balance = calculateMoneyNoteBalance(note(), LocalDate.parse("2026-11-01"))
         assertEquals(9_000_000L, balance.principalPaise)
         assertEquals(11_466L, balance.unpaidInterestPaise) // ₹114.66 for 31 days at 1.5% annually
