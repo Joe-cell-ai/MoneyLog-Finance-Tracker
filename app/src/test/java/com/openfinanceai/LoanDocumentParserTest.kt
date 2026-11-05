@@ -584,39 +584,4 @@ class LoanDocumentParserTest {
         assertEquals(258_100L, result.emi)
     }
 
-    @Test fun parsesHdbEarlySalaryScheduleOneSummaryWithoutInventingInstallmentSplits() {
-        val statement = """
-            HDB FINANCIAL SERVICES LIMITED in its capacity as a lender (hereinafter referred to as Lender 1)
-            LOAN AGREEMENT NUMBER APPL00208750
-            Name: Nelatoori Vijay Kumar Reddy
-            FIXED RATE OF INTEREST/ IRR (P.A.) 30.00% p.a.
-            ANNUAL PERCENTAGE RATE 46.29%
-            LOAN AMOUNT (IN RUPEES) INR 45,000.00
-            TENURE OF THE LOAN (in
-            9
-            months)
-            PROCESSING CHARGE AMOUNT INR 2,124.00
-            NUMBER OF INSTALLMENTS 9
-            FIRST INSTALLMENT DATE 04-Aug-2026
-            LAST INSTALLMENT DATE 04-Apr-2027
-            EMI AMOUNT INR 5,646.00
-            INTEREST AMOUNT INR 6,335.00
-            TOTAL AMOUNT PAYABLE INR 50,810.00
-        """.trimIndent()
-        val result = LoanDocumentParser.parse(statement)
-        assertEquals("HDB FINANCIAL SERVICES LIMITED", result.lender)
-        assertEquals("APPL00208750", result.loanNumber)
-        assertEquals("NELATOORI VIJAY KUMAR REDDY", result.borrowerName)
-        assertEquals(4_500_000L, result.principal)
-        assertEquals(30.0, result.annualInterestRate!!, 0.0)
-        assertEquals(46.29, result.apr!!, 0.0)
-        assertEquals(9, result.tenureMonths)
-        assertEquals(212_400L, result.processingFee)
-        assertEquals(564_600L, result.emi)
-        assertEquals(633_500L, result.totalInterest)
-        assertEquals(5_081_000L, result.declaredTotalRepayment)
-        assertEquals("2026-08-04", result.repaymentStartDate)
-        assertEquals("2027-04-04", result.repaymentEndDate)
-        assertTrue(result.scheduleRows.isEmpty())
-    }
 }

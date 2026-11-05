@@ -77,7 +77,6 @@ internal object LoanDocumentParser {
             Regex("""(?im)^\s*Lender\s*:\s*([^\r\n]{3,120}?)\s*$""").find(text)?.groupValues?.get(1)?.trim(),
             Regex("""(?im)^\s*Name of the Regulated Entity\s*:\s*([^\r\n]{3,120}?)\s*$""").find(text)?.groupValues?.get(1)?.trim(),
             Regex("""(?im)^\s*["“]?Lender\s+1["”]?\s+means\s+([^,\r\n]{3,120})""").find(text)?.groupValues?.get(1)?.trim(),
-            Regex("""(?i)HDB\s+FINANCIAL\s+SERVICES\s+LIMITED(?=.{0,180}?in\s+its\s+capacity\s+as\s+a\s+lender)""", RegexOption.DOT_MATCHES_ALL).find(text)?.value?.trim()
         ).filter { candidate ->
             candidate.length in 3..120 && candidate.any { it.isLetter() } &&
                 !candidate.matches(Regex("""(?i)(?:n/?a|na|unknown|not identified|not available|nil|none)"""))
@@ -96,7 +95,7 @@ internal object LoanDocumentParser {
             ?.let(LoanIdentitySanitizer::lender)
         val loanNumber = Regex("""(?i)(?:Loan\s*ID|Loan\s+Reference|Loan proposal\s*/\s*account\s*No\.?|Loan account\s*(?:number|no\.?)|Agreement\s*(?:No\.?|Number))\s*[:.]?\s*([A-Z0-9/-]{5,40})""")
             .find(text)?.groupValues?.get(1)
-        val borrowerName = Regex("""(?im)^\s*(?:Dear\s+|Customer\s+Name\s*[:：]?\s*|NAME\s*[:：]\s*|[0-9]{1,2}\s+Name\s+of\s+the\s+Borrower\s*\(\s*["']Borrower["']\s*\)\s+|Applicant\s+Name\s*[:：]?\s*)([A-Z][A-Z .'-]{2,80})\s*$""", RegexOption.IGNORE_CASE)
+        val borrowerName = Regex("""(?im)^\s*(?:Dear\s+|Customer\s+Name\s*[:：]?\s*|NAME\s*[:：]\s*||Applicant\s+Name\s*[:：]?\s*)([A-Z][A-Z .'-]{2,80})\s*$""", RegexOption.IGNORE_CASE)
             .find(text)?.groupValues?.get(1)?.trim().let(LoanIdentitySanitizer::borrower)
         val principal = directAmount("""Total\s+Loan\s+Amount\s*\(\s*Principal\s+Amount\s*\)\s*[:\-]?\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Sanctioned\s+Loan\s+amount\s*\(in\s+Rupees\)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
