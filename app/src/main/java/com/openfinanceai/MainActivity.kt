@@ -717,6 +717,8 @@ private fun FinanceApp() {
         if (context.checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED) {
             SmsHourlySyncWorker.schedule(context)
         }
+        SalaryAutoWorker.schedule(context)
+        SalaryAutoWorker.runNow(context)
     }
     LaunchedEffect(Unit) {
         androidx.work.WorkManager.getInstance(context).cancelUniqueWork("moneylog_drive_backup_daily")
