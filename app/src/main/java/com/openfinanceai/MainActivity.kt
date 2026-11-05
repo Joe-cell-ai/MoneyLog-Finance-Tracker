@@ -14,7 +14,10 @@ import android.graphics.Paint as AndroidPaint
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -535,7 +538,7 @@ private fun loanAccent(lender: String): Color = when {
 private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
 
 
-private data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L)
+internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L)
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
@@ -565,41 +568,10 @@ private fun EmiQuickActionRow(
 
 private object AppLockRuntime {
     var isLocked by mutableStateOf(false)
-
-    fun isConfigured(context: Context): Boolean {
-        val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
-        return prefs.getBoolean("app_lock_enabled", false) &&
-            !prefs.getString("app_lock_pin_hash", null).isNullOrBlank() &&
-            !prefs.getString("app_lock_pin_salt", null).isNullOrBlank()
-    }
-
-    fun lockIfEnabled(context: Context) {
-        if (isConfigured(context)) isLocked = true
-    }
-
-    fun savePin(context: Context, pin: String) {
-        val salt = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
-        val spec = javax.crypto.spec.PBEKeySpec(pin.toCharArray(), salt, 120_000, 256)
-        val hash = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-            .generateSecret(spec).encoded
-        spec.clearPassword()
-        context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
-            .putString("app_lock_pin_salt", android.util.Base64.encodeToString(salt, android.util.Base64.NO_WRAP))
-            .putString("app_lock_pin_hash", android.util.Base64.encodeToString(hash, android.util.Base64.NO_WRAP))
-            .putBoolean("app_lock_enabled", true)
-            .apply()
-    }
-
-    fun verifyPin(context: Context, pin: String): Boolean = runCatching {
-        val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
-        val salt = android.util.Base64.decode(prefs.getString("app_lock_pin_salt", null), android.util.Base64.NO_WRAP)
-        val expected = android.util.Base64.decode(prefs.getString("app_lock_pin_hash", null), android.util.Base64.NO_WRAP)
-        val spec = javax.crypto.spec.PBEKeySpec(pin.toCharArray(), salt, 120_000, 256)
-        val actual = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-            .generateSecret(spec).encoded
-        spec.clearPassword()
-        java.security.MessageDigest.isEqual(expected, actual)
-    }.getOrDefault(false)
+    fun isConfigured(context: Context): Boolean = context
+        .getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+        .getBoolean("app_lock_enabled", false)
+    fun lockIfEnabled(context: Context) { if (isConfigured(context)) isLocked = true }
 }
 
 private fun scheduleAutomaticBackup(context: Context, updateExisting: Boolean = false): String {
@@ -627,13 +599,67 @@ private fun scheduleAutomaticBackup(context: Context, updateExisting: Boolean = 
     return "Automatic backup scheduled ${frequency} to $destinationLabel."
 }
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+    fun authenticateDevice() {
+        if (!AppLockRuntime.isLocked) return
+        val biometricManager = BiometricManager.from(this)
+        val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if (Build.VERSION.SDK_INT >= 30) {
+            val authenticators = BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            if (biometricManager.canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
+                launchDeviceCredentialFallback()
+                return
+            }
+            val info = BiometricPrompt.PromptInfo.Builder().setTitle("Unlock MoneyLog")
+                .setSubtitle("Verify with biometrics or your device screen lock")
+                .setAllowedAuthenticators(authenticators).build()
+            showBiometricPrompt(info)
+        } else {
+            if (!keyguard.isDeviceSecure) return
+            val info = BiometricPrompt.PromptInfo.Builder().setTitle("Unlock MoneyLog")
+                .setSubtitle("Verify your identity").setNegativeButtonText("Use device PIN / pattern / password")
+                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK).build()
+            if (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS) showBiometricPrompt(info)
+            else launchDeviceCredentialFallback()
+        }
+    }
+
+    private fun showBiometricPrompt(info: BiometricPrompt.PromptInfo) {
+        val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { AppLockRuntime.isLocked = false }
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON || errorCode == BiometricPrompt.ERROR_NO_BIOMETRICS || errorCode == BiometricPrompt.ERROR_HW_NOT_PRESENT || errorCode == BiometricPrompt.ERROR_LOCKOUT || errorCode == BiometricPrompt.ERROR_LOCKOUT_PERMANENT) launchDeviceCredentialFallback()
+            }
+        })
+        prompt.authenticate(info)
+    }
+
+    private fun launchDeviceCredentialFallback() {
+        val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        keyguard.createConfirmDeviceCredentialIntent("Unlock MoneyLog", "Confirm your device PIN, pattern or password")?.let {
+            startActivityForResult(it, 4411)
+        }
+    }
+
+    @Deprecated("Deprecated in Android API; retained for device-credential fallback compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 4411 && resultCode == RESULT_OK) AppLockRuntime.isLocked = false
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9001)
         }
         listOf(1005, 1008, 1010).forEach { EmiReminderReceiver.cancelReminder(this, it) }
+        val lockPrefs = getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+        val deviceKeyguard = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if (lockPrefs.getBoolean("app_lock_enabled", false)) {
+            val migration = lockPrefs.edit().remove("app_lock_pin_hash").remove("app_lock_pin_salt")
+            if (!deviceKeyguard.isDeviceSecure) migration.putBoolean("app_lock_enabled", false)
+            migration.apply()
+        }
         AppLockRuntime.isLocked = AppLockRuntime.isConfigured(this)
         setContent { FinanceApp() }
     }
@@ -1048,10 +1074,10 @@ private fun FinanceApp() {
             outline = if (AppBlueGlass) GlassBorder else Color(0xFFDADCE8)
         ),
         shapes = Shapes(
-            extraSmall = RoundedCornerShape(10.dp),
-            small = RoundedCornerShape(18.dp),
-            medium = RoundedCornerShape(22.dp),
-            large = RoundedCornerShape(28.dp)
+            extraSmall = RoundedCornerShape(if (AppBlueGlass) 12.dp else 10.dp),
+            small = if (AppBlueGlass) appGlassControlShape() else RoundedCornerShape(18.dp),
+            medium = if (AppBlueGlass) appGlassCardShape() else RoundedCornerShape(22.dp),
+            large = if (AppBlueGlass) appGlassCardShape() else RoundedCornerShape(28.dp)
         )
     ) {
         val baseDensity = androidx.compose.ui.platform.LocalDensity.current
@@ -2526,7 +2552,7 @@ private fun ReportsScreen(
         }
         item {
             if (showReportCalendarPicker) {
-                GlassCalendarDialog(initialDate = selectedReportDate, accent = Green, onDismiss = { showReportCalendarPicker = false }, onSelect = { selectedReportDate = it; showReportCalendarPicker = false })
+                GlassCalendarDialog(initialDate = selectedReportDate, accent = Green, transactionDates = allTransactions.mapNotNull { transactionDateOrNull(it)?.toString() }.toSet(), selectImmediatelyOnTap = true, onDismiss = { showReportCalendarPicker = false }, onSelect = { selectedReportDate = it; showReportCalendarPicker = false })
             }
         }
         if (reportView == "By category") {
@@ -3826,8 +3852,6 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
 private fun SettingsScreen(onOpen: (String) -> Unit) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
-    var showClearDataConfirm by remember { mutableStateOf(false) }
-    var clearDataMessage by remember { mutableStateOf("") }
     val mainItems = listOf(
         Triple("Appearance", "Theme, colors and layout", Icons.Default.Palette),
         Triple("Budgets", "Set monthly spending limits", Icons.Default.TrackChanges),
@@ -3944,6 +3968,103 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
             Text("Your financial records stay on this device unless you choose to export or share a file.", color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
             Text("MoneyLog · Finance Tracker", color = Green, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
+
+    }
+}
+
+@Composable
+private fun AppLockOverlay(context: Context) {
+    LaunchedEffect(Unit) { (context as? MainActivity)?.authenticateDevice() }
+    val dark = AppDarkTheme
+    androidx.compose.ui.window.Dialog(onDismissRequest = {}, properties = androidx.compose.ui.window.DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false, usePlatformDefaultWidth = false)) {
+        Surface(modifier = Modifier.fillMaxSize(), color = if (dark) Color(0xFF101827) else Color(0xFFF7F6FF)) {
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Box(Modifier.size(76.dp).clip(RoundedCornerShape(25.dp)).background(Color(0xFF5948F5)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Fingerprint, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
+                }
+                Spacer(Modifier.height(22.dp))
+                Text("MoneyLog is locked", color = if (dark) Color.White else Color(0xFF171A35), fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(7.dp))
+                Text("Unlock with your fingerprint, face or your phone's PIN, pattern or password.", color = if (dark) Color(0xFFB7C0D2) else Color(0xFF68708A), fontSize = 13.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(24.dp))
+                Button(onClick = { (context as? MainActivity)?.authenticateDevice() }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) {
+                    Icon(Icons.Default.LockOpen, null); Spacer(Modifier.width(8.dp)); Text("Unlock MoneyLog", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
+    var showClearDataConfirm by remember { mutableStateOf(false) }
+    var clearDataMessage by remember { mutableStateOf("") }
+    var lockEnabled by remember { mutableStateOf(AppLockRuntime.isConfigured(context)) }
+    var lockMessage by remember { mutableStateOf("") }
+    LazyColumn(modifier = Modifier.fillMaxSize().background(appPageBrush()), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        item { Text("Privacy & Security", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold); Text("Understand how your data is handled", color = Muted, fontSize = 13.sp) }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(19.dp)) {
+                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(42.dp).clip(CircleShape).background(IncomeTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.Lock, null, tint = IncomeGreen) }
+                        Spacer(Modifier.width(11.dp))
+                        Column { Text("Local data storage", color = Ink, fontWeight = FontWeight.Bold); Text("Transactions and loans stay on this device", color = Muted, fontSize = 11.sp) }
+                    }
+                    HorizontalDivider(color = Color(0xFFEDEFF4))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(42.dp).clip(CircleShape).background(SkyTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.NotificationsActive, null, tint = Blue) }
+                        Spacer(Modifier.width(11.dp))
+                        Column(Modifier.weight(1f)) { Text("Notification access", color = Ink, fontWeight = FontWeight.SemiBold); Text("Manage whether MoneyLog may show notifications in Android settings", color = Muted, fontSize = 11.sp) }
+                        Icon(Icons.Default.ChevronRight, null, tint = Muted)
+                    }
+                    OutlinedButton(onClick = onOpenPaymentSettings, modifier = Modifier.fillMaxWidth()) { Text("Open Android notification settings") }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(19.dp)) {
+                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(42.dp).clip(CircleShape).background(LavenderTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.Fingerprint, null, tint = Purple) }
+                        Spacer(Modifier.width(11.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("App lock", color = Ink, fontWeight = FontWeight.Bold)
+                            Text(if (lockEnabled) "Device authentication is enabled" else "Protect MoneyLog when you leave the app", color = Muted, fontSize = 11.sp)
+                        }
+                        Switch(
+                            checked = lockEnabled,
+                            onCheckedChange = { enabled ->
+                                if (enabled) {
+                                    val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+                                    if (keyguard.isDeviceSecure) {
+                                        prefs.edit().putBoolean("app_lock_enabled", true).remove("app_lock_pin_hash").remove("app_lock_pin_salt").apply()
+                                        lockEnabled = true
+                                        lockMessage = "App lock enabled. Device authentication will be required when you return to MoneyLog."
+                                    } else {
+                                        lockMessage = "Set a screen lock on your phone first, then enable App Lock."
+                                        context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
+                                    }
+                                } else {
+                                    prefs.edit().putBoolean("app_lock_enabled", false).remove("app_lock_pin_hash").remove("app_lock_pin_salt").apply()
+                                    lockEnabled = false
+                                    AppLockRuntime.isLocked = false
+                                    lockMessage = "App lock disabled."
+                                }
+                            }
+                        )
+                    }
+                    Text(
+                        "Uses your phone's fingerprint or face authentication, with your device PIN, pattern or password as fallback. MoneyLog locks when it goes to the background.",
+                        color = Muted,
+                        fontSize = 11.sp
+                    )
+                    if (lockMessage.isNotBlank()) Text(lockMessage, color = Muted, fontSize = 11.sp)
+                }
+            }
+        }
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -3975,6 +4096,8 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
                 }
             }
         }
+        item { InfoCard("Backups contain sensitive information", "Local JSON/CSV exports stay on your device until you share them. If you connect a Google Drive folder in Backup & Export, MoneyLog can write dated backups there. Store exported files in a trusted private location.", Icons.Default.PrivacyTip) }
+        item { InfoCard("Clear app data", "Clearing Android app storage or uninstalling may remove locally saved records. Export a backup first if you need to keep them.", Icons.Default.DeleteOutline) }
     }
     if (showClearDataConfirm) {
         AlertDialog(
@@ -4006,186 +4129,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
             shape = RoundedCornerShape(24.dp)
         )
     }
-}
 
-@Composable
-private fun AppLockOverlay(context: Context) {
-    var pin by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf("") }
-    val dark = AppDarkTheme
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = {},
-        properties = androidx.compose.ui.window.DialogProperties(
-            dismissOnBackPress = false,
-            dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false
-        )
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = if (dark) Color(0xFF101827) else Color(0xFFF7F6FF)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Box(Modifier.size(76.dp).clip(RoundedCornerShape(25.dp)).background(Color(0xFF5948F5)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
-                }
-                Spacer(Modifier.height(22.dp))
-                Text("MoneyLog is locked", color = if (dark) Color.White else Color(0xFF171A35), fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(7.dp))
-                Text("Enter your PIN to view your financial records", color = if (dark) Color(0xFFB7C0D2) else Color(0xFF68708A), fontSize = 13.sp, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(24.dp))
-                OutlinedTextField(
-                    value = pin,
-                    onValueChange = { value -> if (value.length <= 6 && value.all(Char::isDigit)) { pin = value; error = "" } },
-                    label = { Text("4–6 digit PIN") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
-                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                    shape = RoundedCornerShape(16.dp)
-                )
-                if (error.isNotBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(error, color = Color(0xFFDC4563), fontSize = 12.sp)
-                }
-                Spacer(Modifier.height(18.dp))
-                Button(
-                    onClick = {
-                        if (AppLockRuntime.verifyPin(context, pin)) {
-                            AppLockRuntime.isLocked = false
-                            pin = ""
-                            error = ""
-                        } else {
-                            pin = ""
-                            error = "Incorrect PIN. Please try again."
-                        }
-                    },
-                    enabled = pin.length in 4..6,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))
-                ) { Text("Unlock MoneyLog", fontWeight = FontWeight.Bold) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
-    val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
-    var lockEnabled by remember { mutableStateOf(AppLockRuntime.isConfigured(context)) }
-    var showPinSetup by remember { mutableStateOf(false) }
-    var newPin by remember { mutableStateOf("") }
-    var confirmPin by remember { mutableStateOf("") }
-    var pinError by remember { mutableStateOf("") }
-    LazyColumn(modifier = Modifier.fillMaxSize().background(appPageBrush()), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
-        item { Text("Privacy & Security", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold); Text("Understand how your data is handled", color = Muted, fontSize = 13.sp) }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(19.dp)) {
-                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(42.dp).clip(CircleShape).background(IncomeTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.Lock, null, tint = IncomeGreen) }
-                        Spacer(Modifier.width(11.dp))
-                        Column { Text("Local data storage", color = Ink, fontWeight = FontWeight.Bold); Text("Transactions and loans stay on this device", color = Muted, fontSize = 11.sp) }
-                    }
-                    HorizontalDivider(color = Color(0xFFEDEFF4))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(42.dp).clip(CircleShape).background(SkyTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.NotificationsActive, null, tint = Blue) }
-                        Spacer(Modifier.width(11.dp))
-                        Column(Modifier.weight(1f)) { Text("Notification access", color = Ink, fontWeight = FontWeight.SemiBold); Text("Manage whether MoneyLog may show notifications in Android settings", color = Muted, fontSize = 11.sp) }
-                        Icon(Icons.Default.ChevronRight, null, tint = Muted)
-                    }
-                    OutlinedButton(onClick = onOpenPaymentSettings, modifier = Modifier.fillMaxWidth()) { Text("Open Android notification settings") }
-                }
-            }
-        }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(19.dp)) {
-                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(42.dp).clip(CircleShape).background(LavenderTint), contentAlignment = Alignment.Center) { Icon(Icons.Default.Fingerprint, null, tint = Purple) }
-                        Spacer(Modifier.width(11.dp))
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text("App lock", color = Ink, fontWeight = FontWeight.Bold)
-                            Text(if (lockEnabled) "PIN protection is enabled" else "Protect MoneyLog when you leave the app", color = Muted, fontSize = 11.sp)
-                        }
-                        Switch(
-                            checked = lockEnabled,
-                            onCheckedChange = { enabled ->
-                                if (enabled) {
-                                    newPin = ""
-                                    confirmPin = ""
-                                    pinError = ""
-                                    showPinSetup = true
-                                } else {
-                                    prefs.edit().remove("app_lock_enabled").remove("app_lock_pin_hash").remove("app_lock_pin_salt").apply()
-                                    lockEnabled = false
-                                    AppLockRuntime.isLocked = false
-                                }
-                            }
-                        )
-                    }
-                    Text(
-                        "PIN is stored as a salted PBKDF2 hash on this device. MoneyLog locks when it is sent to the background and asks for the PIN when reopened.",
-                        color = Muted,
-                        fontSize = 11.sp
-                    )
-                    if (lockEnabled) {
-                        OutlinedButton(onClick = { newPin = ""; confirmPin = ""; pinError = ""; showPinSetup = true }, modifier = Modifier.fillMaxWidth()) { Text("Change PIN") }
-                    }
-                }
-            }
-        }
-        item { InfoCard("Backups contain sensitive information", "Local JSON/CSV exports stay on your device until you share them. If you connect a Google Drive folder in Backup & Export, MoneyLog can write dated backups there. Store exported files in a trusted private location.", Icons.Default.PrivacyTip) }
-        item { InfoCard("Clear app data", "Clearing Android app storage or uninstalling may remove locally saved records. Export a backup first if you need to keep them.", Icons.Default.DeleteOutline) }
-    }
-    if (showPinSetup) {
-        AlertDialog(
-            onDismissRequest = { showPinSetup = false },
-            title = { Text(if (lockEnabled) "Change app PIN" else "Set app PIN", color = Ink, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = newPin,
-                        onValueChange = { value -> if (value.length <= 6 && value.all(Char::isDigit)) { newPin = value; pinError = "" } },
-                        label = { Text("New PIN (4–6 digits)") },
-                        singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
-                    )
-                    OutlinedTextField(
-                        value = confirmPin,
-                        onValueChange = { value -> if (value.length <= 6 && value.all(Char::isDigit)) { confirmPin = value; pinError = "" } },
-                        label = { Text("Confirm PIN") },
-                        singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
-                    )
-                    if (pinError.isNotBlank()) Text(pinError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    when {
-                        newPin.length !in 4..6 -> pinError = "Choose a PIN with 4 to 6 digits."
-                        newPin != confirmPin -> pinError = "The PINs do not match."
-                        else -> {
-                            AppLockRuntime.savePin(context, newPin)
-                            lockEnabled = true
-                            AppLockRuntime.isLocked = false
-                            showPinSetup = false
-                        }
-                    }
-                }) { Text("Save PIN", color = Purple) }
-            },
-            dismissButton = { TextButton(onClick = { showPinSetup = false }) { Text("Cancel") } }
-        )
-    }
 }
 
 
@@ -6987,26 +6931,6 @@ private fun ImportTransactionsScreen(
         }
         item {
             InfoCard(
-                "MoneyLog Messages",
-                "Use MoneyLog as your office phone's SMS app. Open your inbox, read conversations, and send text messages. Android will ask before changing your default messaging app.",
-                Icons.Default.Sms
-            )
-            Button(
-                onClick = { context.startActivity(Intent(context, SmsInboxActivity::class.java)) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Message, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Open MoneyLog Messages / Set as default")
-            }
-            Text(
-                "Note: this first release supports SMS text messages. MMS media messages are not yet decoded or displayed.",
-                color = Muted,
-                fontSize = 12.sp
-            )
-        }
-        item {
-            InfoCard(
                 "Scan bank SMS",
                 "With your permission, MoneyLog checks recent SMS messages on this device for clear debit and credit alerts. Message contents are processed locally and are not uploaded. OTPs and unclear messages are ignored.",
                 Icons.Default.Sms
@@ -7128,7 +7052,7 @@ private fun readRecentBankSms(context: Context): List<Transaction> {
     return results
 }
 
-private fun parseTransactionCsv(csv: String): List<Transaction> {
+internal fun parseTransactionCsv(csv: String): List<Transaction> {
     val rows = mutableListOf<List<String>>()
     var row = mutableListOf<String>()
     var cell = StringBuilder()
@@ -7154,9 +7078,9 @@ private fun parseTransactionCsv(csv: String): List<Transaction> {
     row.add(cell.toString().trim())
     if (row.any { it.isNotBlank() }) rows.add(row)
     require(rows.size >= 2) { "CSV must contain a header row and at least one transaction." }
-    val header = rows.first().map { it.trim().lowercase(Locale.ROOT).replace("_", " ") }
+    val header = rows.first().map { it.replace("\uFEFF", "").trim().lowercase(Locale.ROOT).replace("_", " ") }
     fun findHeader(vararg names: String) = names.firstNotNullOfOrNull { name -> header.indexOf(name).takeIf { it >= 0 } }
-    val dateIndex = findHeader("date", "transaction date", "txn date", "value date")
+    val dateIndex = findHeader("date", "transaction date", "txn date", "value date", "posting date", "posted date", "date of transaction")
     val titleIndex = findHeader("description", "narration", "details", "merchant", "particulars", "transaction details", "title")
     val amountIndex = findHeader("amount", "transaction amount", "txn amount")
     val debitIndex = findHeader("debit", "withdrawal", "withdrawals", "money out")
@@ -7166,6 +7090,7 @@ private fun parseTransactionCsv(csv: String): List<Transaction> {
     val paymentMethodIndex = findHeader("payment method", "payment mode", "mode")
     val notesIndex = findHeader("notes", "note", "remarks", "comments")
     val tagIndex = findHeader("tag", "tags")
+    require(dateIndex != null) { "Could not identify a Date column. Include Date or Transaction Date in the CSV header." }
     require(titleIndex != null && (amountIndex != null || debitIndex != null || creditIndex != null)) {
         "Could not identify columns. Include Description/Narration and Amount, or separate Debit and Credit columns."
     }
@@ -7176,7 +7101,8 @@ private fun parseTransactionCsv(csv: String): List<Transaction> {
     }
     return rows.drop(1).mapNotNull { values ->
         val title = values.getOrNull(titleIndex)?.trim().orEmpty()
-        if (title.isBlank()) return@mapNotNull null
+        val transactionDate = values.getOrNull(dateIndex)?.trim().orEmpty()
+        if (title.isBlank() || transactionDate.isBlank()) return@mapNotNull null
         val debit = amountAt(values, debitIndex)
         val credit = amountAt(values, creditIndex)
         val rawAmount = if (amountIndex != null) amountAt(values, amountIndex) else maxOf(debit, credit)
@@ -7187,7 +7113,7 @@ private fun parseTransactionCsv(csv: String): List<Transaction> {
         Transaction(
             title = title,
             category = values.getOrNull(categoryIndex ?: -1)?.takeIf { it.isNotBlank() } ?: if (isIncome) "Income" else "Imported",
-            date = values.getOrNull(dateIndex ?: -1)?.takeIf { it.isNotBlank() } ?: "Imported",
+            date = transactionDate,
             amount = rawAmount,
             income = isIncome,
             paymentMethod = values.getOrNull(paymentMethodIndex ?: -1)?.takeIf { it.isNotBlank() } ?: "Not set",
