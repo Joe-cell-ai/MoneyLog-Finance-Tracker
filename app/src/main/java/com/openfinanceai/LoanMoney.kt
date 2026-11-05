@@ -33,6 +33,13 @@ internal object LoanMoney {
 
     fun rupeesToPaise(rupees: Long): Long = Math.multiplyExact(rupees, PAISE_PER_RUPEE)
 
+    /** Converts a calculated rupee amount to paise using normal currency rounding. */
+    fun calculatedRupeesToPaise(rupees: Double): Long? = runCatching {
+        require(rupees.isFinite() && rupees >= 0.0)
+        BigDecimal.valueOf(rupees).setScale(2, RoundingMode.HALF_UP)
+            .movePointRight(2).longValueExact()
+    }.getOrNull()
+
     fun paiseToRupeesExact(paise: Long): Long {
         require(paise % PAISE_PER_RUPEE == 0L) { "Amount contains paise and cannot be represented as whole rupees." }
         return paise / PAISE_PER_RUPEE
