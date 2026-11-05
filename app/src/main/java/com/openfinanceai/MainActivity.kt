@@ -3788,8 +3788,6 @@ private fun TagManagementScreen(transactions: List<Transaction> = emptyList(), o
 private fun SettingsScreen(onOpen: (String) -> Unit) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
-    var showClearDataConfirm by remember { mutableStateOf(false) }
-    var clearDataMessage by remember { mutableStateOf("") }
     val mainItems = listOf(
         Triple("Appearance", "Theme, colors and layout", Icons.Default.Palette),
         Triple("Budgets", "Set monthly spending limits", Icons.Default.TrackChanges),
@@ -3906,67 +3904,7 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
             Text("Your financial records stay on this device unless you choose to export or share a file.", color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
             Text("MoneyLog · Finance Tracker", color = Green, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
-                shape = RoundedCornerShape(18.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ExpenseRed.copy(alpha = .35f))
-            ) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Default.DeleteForever, null, tint = ExpenseRed, modifier = Modifier.size(24.dp))
-                        Text("Clear app data", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
-                    Text(
-                        "Permanently removes locally saved transactions, loans, budgets, notes, tags, categories, and app preferences. Export a backup first. This cannot be undone.",
-                        color = Muted,
-                        fontSize = 12.sp
-                    )
-                    Button(
-                        onClick = { showClearDataConfirm = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed),
-                        shape = RoundedCornerShape(13.dp)
-                    ) {
-                        Icon(Icons.Default.DeleteForever, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Clear all app data")
-                    }
-                    if (clearDataMessage.isNotBlank()) Text(clearDataMessage, color = Muted, fontSize = 12.sp)
-                }
-            }
-        }
-    }
-    if (showClearDataConfirm) {
-        AlertDialog(
-            onDismissRequest = { showClearDataConfirm = false },
-            title = { Text("Delete all MoneyLog data?", color = Ink, fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    "This permanently deletes all locally saved transactions, loans, budgets, money notes, tags, categories, app lock settings, and preferences on this device. Export a backup first if you may need these records. This action cannot be undone.",
-                    color = Muted
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val cleared = prefs.edit().clear().commit()
-                    showClearDataConfirm = false
-                    if (cleared) {
-                        AppLockRuntime.isLocked = false
-                        clearDataMessage = "Local app data cleared."
-                        (context as? android.app.Activity)?.recreate()
-                    } else {
-                        clearDataMessage = "Could not clear app data. Please try again."
-                    }
-                }) { Text("Delete all data", color = ExpenseRed, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearDataConfirm = false }) { Text("Cancel", color = Ink) }
-            },
-            containerColor = appGlassSurface(),
-            shape = RoundedCornerShape(24.dp)
-        )
+
     }
 }
 
@@ -4040,6 +3978,8 @@ private fun AppLockOverlay(context: Context) {
 private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
+    var showClearDataConfirm by remember { mutableStateOf(false) }
+    var clearDataMessage by remember { mutableStateOf("") }
     var lockEnabled by remember { mutableStateOf(AppLockRuntime.isConfigured(context)) }
     var showPinSetup by remember { mutableStateOf(false) }
     var newPin by remember { mutableStateOf("") }
@@ -4103,9 +4043,71 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
                 }
             }
         }
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
+                shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ExpenseRed.copy(alpha = .35f))
+            ) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(Icons.Default.DeleteForever, null, tint = ExpenseRed, modifier = Modifier.size(24.dp))
+                        Text("Clear app data", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                    Text(
+                        "Permanently removes locally saved transactions, loans, budgets, notes, tags, categories, and app preferences. Export a backup first. This cannot be undone.",
+                        color = Muted,
+                        fontSize = 12.sp
+                    )
+                    Button(
+                        onClick = { showClearDataConfirm = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed),
+                        shape = RoundedCornerShape(13.dp)
+                    ) {
+                        Icon(Icons.Default.DeleteForever, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Clear all app data")
+                    }
+                    if (clearDataMessage.isNotBlank()) Text(clearDataMessage, color = Muted, fontSize = 12.sp)
+                }
+            }
+        }
         item { InfoCard("Backups contain sensitive information", "Local JSON/CSV exports stay on your device until you share them. If you connect a Google Drive folder in Backup & Export, MoneyLog can write dated backups there. Store exported files in a trusted private location.", Icons.Default.PrivacyTip) }
         item { InfoCard("Clear app data", "Clearing Android app storage or uninstalling may remove locally saved records. Export a backup first if you need to keep them.", Icons.Default.DeleteOutline) }
     }
+    if (showClearDataConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearDataConfirm = false },
+            title = { Text("Delete all MoneyLog data?", color = Ink, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "This permanently deletes all locally saved transactions, loans, budgets, money notes, tags, categories, app lock settings, and preferences on this device. Export a backup first if you may need these records. This action cannot be undone.",
+                    color = Muted
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val cleared = prefs.edit().clear().commit()
+                    showClearDataConfirm = false
+                    if (cleared) {
+                        AppLockRuntime.isLocked = false
+                        clearDataMessage = "Local app data cleared."
+                        (context as? android.app.Activity)?.recreate()
+                    } else {
+                        clearDataMessage = "Could not clear app data. Please try again."
+                    }
+                }) { Text("Delete all data", color = ExpenseRed, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDataConfirm = false }) { Text("Cancel", color = Ink) }
+            },
+            containerColor = appGlassSurface(),
+            shape = RoundedCornerShape(24.dp)
+        )
+    }
+
     if (showPinSetup) {
         AlertDialog(
             onDismissRequest = { showPinSetup = false },
