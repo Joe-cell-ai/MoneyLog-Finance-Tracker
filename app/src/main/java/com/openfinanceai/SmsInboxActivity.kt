@@ -1,14 +1,10 @@
 package com.openfinanceai
 
 import android.app.Activity
-import android.app.role.RoleManager
-import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Telephony
-import android.telephony.SmsManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -18,6 +14,7 @@ import android.view.ViewGroup
 import android.graphics.Color
 import android.view.Gravity
 import android.widget.Toast
+import android.content.pm.PackageManager
 import java.text.DateFormat
 import java.util.Date
 
@@ -29,7 +26,8 @@ class SmsInboxActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         recipientFromIntent = intent.data?.schemeSpecificPart.orEmpty()
-        showInbox()
+        if (checkSelfPermission(android.Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED) showInbox()
+        else requestPermissions(arrayOf(android.Manifest.permission.READ_SMS), 702)
     }
 
     override fun onResume() {
@@ -50,19 +48,6 @@ class SmsInboxActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         root.addView(title)
-        val status = TextView(this).apply {
-            text = if (isDefaultSmsApp()) "Default SMS app" else "Set MoneyLog as your default SMS app to manage messages"
-            textSize = 13f
-            setTextColor(Color.DKGRAY)
-            setPadding(0, 8, 0, 12)
-        }
-        root.addView(status)
-        if (!isDefaultSmsApp()) {
-            root.addView(Button(this).apply {
-                text = "Set MoneyLog as default SMS app"
-                setOnClickListener { requestDefaultSmsRole() }
-            })
-        }
         val compose = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val recipient = EditText(this).apply {
             hint = "Phone number"
@@ -92,65 +77,29 @@ class SmsInboxActivity : Activity() {
         loadMessages()
     }
 
-    private fun isDefaultSmsApp(): Boolean =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) packageName == Telephony.Sms.getDefaultSmsPackage(this) else false
-
-    private fun requestDefaultSmsRole() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val roleManager = getSystemService(RoleManager::class.java)
-            if (roleManager.isRoleAvailable(RoleManager.ROLE_SMS)) {
-                startActivityForResult(roleManager.createRequestRoleIntent(RoleManager.ROLE_SMS), 701)
-            } else Toast.makeText(this, "SMS role is unavailable on this device", Toast.LENGTH_LONG).show()
-        } else {
-            @Suppress("DEPRECATION")
-            startActivityForResult(Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
-                .putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, packageName), 701)
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 702) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) showInbox()
+            else { Toast.makeText(this, "Allow SMS permission to view your messages", Toast.LENGTH_LONG).show(); finish() }
         }
     }
 
     private fun sendMessage(number: String, message: String) {
-        if (!isDefaultSmsApp()) {
-            Toast.makeText(this, "Set MoneyLog as the default SMS app first", Toast.LENGTH_LONG).show()
-            return
-        }
         if (number.isBlank() || message.isBlank()) {
             Toast.makeText(this, "Enter a phone number and message", Toast.LENGTH_SHORT).show()
             return
         }
-        runCatching {
-            @Suppress("DEPRECATION")
-            val manager = if (Build.VERSION.SDK_INT >= 31) {
-                getSystemService(SmsManager::class.java)
-            } else {
-                SmsManager.getDefault()
-            }
-            val parts = manager.divideMessage(message)
-            manager.sendMultipartTextMessage(number, null, parts, null, null)
-            val values = ContentValues().apply {
-                put(Telephony.Sms.ADDRESS, number)
-                put(Telephony.Sms.BODY, message)
-                put(Telephony.Sms.DATE, System.currentTimeMillis())
-                put(Telephony.Sms.READ, 1)
-                put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
-            }
-            contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
-            Toast.makeText(this, "Message sent", Toast.LENGTH_SHORT).show()
-            loadMessages()
-        }.onFailure {
-            Toast.makeText(this, it.message ?: "Could not send message", Toast.LENGTH_LONG).show()
+        val sendIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(number))).putExtra("sms_body", message)
+        runCatching { startActivity(sendIntent) }.onFailure {
+            Toast.makeText(this, "No messaging app is available", Toast.LENGTH_LONG).show()
         }
     }
-
     private fun loadMessages() {
         if (!::messagesContainer.isInitialized) return
         messagesContainer.removeAllViews()
-        if (!isDefaultSmsApp()) {
-            messagesContainer.addView(TextView(this).apply {
-                text = "Choose “Set MoneyLog as default SMS app” to open your inbox."
-                textSize = 14f
-                setPadding(8, 18, 8, 18)
-                setTextColor(Color.DKGRAY)
-            })
+        if (checkSelfPermission(android.Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
+            messagesContainer.addView(TextView(this).apply { text = "Allow SMS permission to view your messages."; setPadding(8, 18, 8, 18) })
             return
         }
         runCatching {
