@@ -5,6 +5,8 @@ package com.openfinanceai
 import android.os.Bundle
 import android.content.Context
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.provider.Settings
 import android.Manifest
 import android.content.pm.PackageManager
@@ -760,6 +762,20 @@ private fun FinanceApp() {
             Transaction("Coffee shop", "Food & drink", "20 Oct", 240, false)
         ).also { saveTransactions(context, it) })
     }
+    DisposableEffect(context) {
+        val smsImportReceiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context?, intent: Intent?) {
+                transactions = loadTransactions(context) ?: transactions
+            }
+        }
+        ContextCompat.registerReceiver(
+            context,
+            smsImportReceiver,
+            IntentFilter(SmsAutoImportReceiver.ACTION_IMPORTED),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        onDispose { runCatching { context.unregisterReceiver(smsImportReceiver) } }
+    }
     var moneyNotes by remember { mutableStateOf(loadMoneyNotes(context)) }
     LaunchedEffect(moneyNotes) { saveMoneyNotes(context, moneyNotes) }
     var selectedLoan by remember { mutableStateOf<Loan?>(null) }
@@ -800,11 +816,11 @@ private fun FinanceApp() {
                 importMessage = it.message ?: "Could not read SMS messages."
             }
     }
-    val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) scanBankSms()
-        else {
-            importedPreview = emptyList()
-            importMessage = "Android blocked SMS access. You can change app permissions in Android settings, or import a bank statement using CSV."
+    val smsPermissionsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        if (grants[Manifest.permission.READ_SMS] == true) scanBankSms()
+        if (grants[Manifest.permission.RECEIVE_SMS] != true) {
+            importMessage = (if (grants[Manifest.permission.READ_SMS] == true) importMessage + " " else "") +
+                "Automatic import is off because Android did not grant incoming SMS permission. Enable SMS access in App Info to import new bank alerts automatically."
         }
     }
     var loans by remember {
@@ -1190,8 +1206,12 @@ private fun FinanceApp() {
                         preview = importedPreview,
                         onChooseFile = { csvPicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) },
                         onScanSms = {
-                            if (context.checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED) scanBankSms()
-                            else smsPermissionLauncher.launch(Manifest.permission.READ_SMS)
+                            val hasRead = context.checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+                            val hasReceive = context.checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+                            if (hasRead) scanBankSms()
+                            if (!hasRead || !hasReceive) {
+                                smsPermissionsLauncher.launch(arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS))
+                            }
                         },
                         onOpenAppSettings = {
                             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
