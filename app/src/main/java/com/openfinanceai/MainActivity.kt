@@ -4935,7 +4935,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 val alreadyPaise = savedMetadata.optString("moneyUnit") == "PAISE"
                 (0 until arr.length()).map { n ->
                     val amount = arr.getJSONObject(n).getLong("amount")
-                    arr.getJSONObject(n).getString("date") to if (alreadyPaise) amount else LoanMoney.rupeesToPaise(amount)
+                    arr.getJSONObject(n).getString("date").ifBlank { "Date not stated" } to if (alreadyPaise) amount else LoanMoney.rupeesToPaise(amount)
                 }
             }
         }.getOrDefault(emptyList()))
@@ -5013,7 +5013,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
         if (persisted != null) {
             val (record, rows) = persisted
             if (rows.isNotEmpty()) {
-                importedSchedule = rows.map { (it.dueDate ?: "") to it.installmentAmount }
+                importedSchedule = rows.map { (it.dueDate ?: "Date not stated") to it.installmentAmount }
                 val persistedBankSchedule = JSONArray()
                 rows.forEach { row ->
                     persistedBankSchedule.put(JSONObject().put("date", row.dueDate ?: "").put("amount", row.installmentAmount).put("installment", row.installmentNumber))
