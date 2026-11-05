@@ -2476,26 +2476,6 @@ private fun ReportsScreen(
                     }
                 }
             } }
-            item { Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
-                shape = RoundedCornerShape(20.dp),
-                border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null,
-                elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) 0.dp else 1.dp)
-            ) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Income vs expenses", fontWeight = FontWeight.Bold, color = Ink, fontSize = 18.sp)
-                    Text("Income · " + Money.format(income), color = IncomeGreen, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    Box(Modifier.fillMaxWidth().height(5.dp), contentAlignment = Alignment.CenterStart) {
-                        Box(Modifier.fillMaxWidth(if (income + expenses > 0L) income.toFloat() / (income + expenses) else 0f).fillMaxHeight().background(IncomeGreen, RoundedCornerShape(50.dp)))
-                    }
-                    Text("Expenses · " + Money.format(expenses), color = ExpenseRed, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    Box(Modifier.fillMaxWidth().height(5.dp), contentAlignment = Alignment.CenterStart) {
-                        Box(Modifier.fillMaxWidth(if (income + expenses > 0L) expenses.toFloat() / (income + expenses) else 0f).fillMaxHeight().background(ExpenseRed, RoundedCornerShape(50.dp)))
-                    }
-                    Text("Net cash flow · " + Money.format(income - expenses), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink)
-                }
-            } }
         }
         if (reportView == "Trends") {
             item { ReportsTrendCard(allTransactions, selectedMonth, showMonthLabels = true) }
