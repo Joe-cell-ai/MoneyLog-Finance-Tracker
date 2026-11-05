@@ -2476,7 +2476,6 @@ private fun ReportsScreen(
                     }
                 }
             } }
-            } }
         }
         if (reportView == "Trends") {
             item { ReportsTrendCard(allTransactions, selectedMonth, showMonthLabels = true) }
