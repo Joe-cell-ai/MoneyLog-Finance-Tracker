@@ -14,7 +14,10 @@ import android.graphics.Paint as AndroidPaint
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -563,41 +566,10 @@ private fun EmiQuickActionRow(
 
 private object AppLockRuntime {
     var isLocked by mutableStateOf(false)
-
-    fun isConfigured(context: Context): Boolean {
-        val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
-        return prefs.getBoolean("app_lock_enabled", false) &&
-            !prefs.getString("app_lock_pin_hash", null).isNullOrBlank() &&
-            !prefs.getString("app_lock_pin_salt", null).isNullOrBlank()
-    }
-
-    fun lockIfEnabled(context: Context) {
-        if (isConfigured(context)) isLocked = true
-    }
-
-    fun savePin(context: Context, pin: String) {
-        val salt = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
-        val spec = javax.crypto.spec.PBEKeySpec(pin.toCharArray(), salt, 120_000, 256)
-        val hash = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-            .generateSecret(spec).encoded
-        spec.clearPassword()
-        context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit()
-            .putString("app_lock_pin_salt", android.util.Base64.encodeToString(salt, android.util.Base64.NO_WRAP))
-            .putString("app_lock_pin_hash", android.util.Base64.encodeToString(hash, android.util.Base64.NO_WRAP))
-            .putBoolean("app_lock_enabled", true)
-            .apply()
-    }
-
-    fun verifyPin(context: Context, pin: String): Boolean = runCatching {
-        val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
-        val salt = android.util.Base64.decode(prefs.getString("app_lock_pin_salt", null), android.util.Base64.NO_WRAP)
-        val expected = android.util.Base64.decode(prefs.getString("app_lock_pin_hash", null), android.util.Base64.NO_WRAP)
-        val spec = javax.crypto.spec.PBEKeySpec(pin.toCharArray(), salt, 120_000, 256)
-        val actual = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-            .generateSecret(spec).encoded
-        spec.clearPassword()
-        java.security.MessageDigest.isEqual(expected, actual)
-    }.getOrDefault(false)
+    fun isConfigured(context: Context): Boolean = context
+        .getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+        .getBoolean("app_lock_enabled", false)
+    fun lockIfEnabled(context: Context) { if (isConfigured(context)) isLocked = true }
 }
 
 private fun scheduleAutomaticBackup(context: Context, updateExisting: Boolean = false): String {
@@ -625,7 +597,54 @@ private fun scheduleAutomaticBackup(context: Context, updateExisting: Boolean = 
     return "Automatic backup scheduled ${frequency} to $destinationLabel."
 }
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+    fun authenticateDevice() {
+        if (!AppLockRuntime.isLocked) return
+        val biometricManager = BiometricManager.from(this)
+        val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if (Build.VERSION.SDK_INT >= 30) {
+            val authenticators = BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            if (biometricManager.canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
+                launchDeviceCredentialFallback()
+                return
+            }
+            val info = BiometricPrompt.PromptInfo.Builder().setTitle("Unlock MoneyLog")
+                .setSubtitle("Verify with biometrics or your device screen lock")
+                .setAllowedAuthenticators(authenticators).build()
+            showBiometricPrompt(info)
+        } else {
+            if (!keyguard.isDeviceSecure) return
+            val info = BiometricPrompt.PromptInfo.Builder().setTitle("Unlock MoneyLog")
+                .setSubtitle("Verify your identity").setNegativeButtonText("Use device PIN / pattern / password")
+                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK).build()
+            if (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS) showBiometricPrompt(info)
+            else launchDeviceCredentialFallback()
+        }
+    }
+
+    private fun showBiometricPrompt(info: BiometricPrompt.PromptInfo) {
+        val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { AppLockRuntime.isLocked = false }
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON || errorCode == BiometricPrompt.ERROR_NO_BIOMETRICS || errorCode == BiometricPrompt.ERROR_HW_NOT_PRESENT) launchDeviceCredentialFallback()
+            }
+        })
+        prompt.authenticate(info)
+    }
+
+    private fun launchDeviceCredentialFallback() {
+        val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        keyguard.createConfirmDeviceCredentialIntent("Unlock MoneyLog", "Confirm your device PIN, pattern or password")?.let {
+            startActivityForResult(it, 4411)
+        }
+    }
+
+    @Deprecated("Deprecated in Android API; retained for device-credential fallback compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 4411 && resultCode == RESULT_OK) AppLockRuntime.isLocked = false
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -2544,7 +2563,7 @@ private fun ReportsScreen(
         }
         item {
             if (showReportCalendarPicker) {
-                GlassCalendarDialog(initialDate = selectedReportDate, accent = Green, onDismiss = { showReportCalendarPicker = false }, onSelect = { selectedReportDate = it; showReportCalendarPicker = false })
+                GlassCalendarDialog(initialDate = selectedReportDate, accent = Green, transactionDates = allTransactions.mapNotNull { transactionDateOrNull(it)?.toString() }.toSet(), onDismiss = { showReportCalendarPicker = false }, onSelect = { selectedReportDate = it; showReportCalendarPicker = false })
             }
         }
         if (reportView == "By category") {
@@ -3912,65 +3931,22 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
 
 @Composable
 private fun AppLockOverlay(context: Context) {
-    var pin by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) { (context as? MainActivity)?.authenticateDevice() }
     val dark = AppDarkTheme
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = {},
-        properties = androidx.compose.ui.window.DialogProperties(
-            dismissOnBackPress = false,
-            dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false
-        )
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = if (dark) Color(0xFF101827) else Color(0xFFF7F6FF)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = {}, properties = androidx.compose.ui.window.DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false, usePlatformDefaultWidth = false)) {
+        Surface(modifier = Modifier.fillMaxSize(), color = if (dark) Color(0xFF101827) else Color(0xFFF7F6FF)) {
+            Column(modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 Box(Modifier.size(76.dp).clip(RoundedCornerShape(25.dp)).background(Color(0xFF5948F5)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
+                    Icon(Icons.Default.Fingerprint, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
                 }
                 Spacer(Modifier.height(22.dp))
                 Text("MoneyLog is locked", color = if (dark) Color.White else Color(0xFF171A35), fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(7.dp))
-                Text("Enter your PIN to view your financial records", color = if (dark) Color(0xFFB7C0D2) else Color(0xFF68708A), fontSize = 13.sp, textAlign = TextAlign.Center)
+                Text("Unlock with your fingerprint, face or your phone's PIN, pattern or password.", color = if (dark) Color(0xFFB7C0D2) else Color(0xFF68708A), fontSize = 13.sp, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(24.dp))
-                OutlinedTextField(
-                    value = pin,
-                    onValueChange = { value -> if (value.length <= 6 && value.all(Char::isDigit)) { pin = value; error = "" } },
-                    label = { Text("4–6 digit PIN") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
-                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                    shape = RoundedCornerShape(16.dp)
-                )
-                if (error.isNotBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(error, color = Color(0xFFDC4563), fontSize = 12.sp)
+                Button(onClick = { (context as? MainActivity)?.authenticateDevice() }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))) {
+                    Icon(Icons.Default.LockOpen, null); Spacer(Modifier.width(8.dp)); Text("Unlock MoneyLog", fontWeight = FontWeight.Bold)
                 }
-                Spacer(Modifier.height(18.dp))
-                Button(
-                    onClick = {
-                        if (AppLockRuntime.verifyPin(context, pin)) {
-                            AppLockRuntime.isLocked = false
-                            pin = ""
-                            error = ""
-                        } else {
-                            pin = ""
-                            error = "Incorrect PIN. Please try again."
-                        }
-                    },
-                    enabled = pin.length in 4..6,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5948F5))
-                ) { Text("Unlock MoneyLog", fontWeight = FontWeight.Bold) }
             }
         }
     }
@@ -3983,10 +3959,7 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
     var showClearDataConfirm by remember { mutableStateOf(false) }
     var clearDataMessage by remember { mutableStateOf("") }
     var lockEnabled by remember { mutableStateOf(AppLockRuntime.isConfigured(context)) }
-    var showPinSetup by remember { mutableStateOf(false) }
-    var newPin by remember { mutableStateOf("") }
-    var confirmPin by remember { mutableStateOf("") }
-    var pinError by remember { mutableStateOf("") }
+    var lockMessage by remember { mutableStateOf("") }
     LazyColumn(modifier = Modifier.fillMaxSize().background(appPageBrush()), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
         item { Text("Privacy & Security", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold); Text("Understand how your data is handled", color = Muted, fontSize = 13.sp) }
         item {
@@ -4022,26 +3995,30 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
                             checked = lockEnabled,
                             onCheckedChange = { enabled ->
                                 if (enabled) {
-                                    newPin = ""
-                                    confirmPin = ""
-                                    pinError = ""
-                                    showPinSetup = true
+                                    val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+                                    if (keyguard.isDeviceSecure) {
+                                        prefs.edit().putBoolean("app_lock_enabled", true).apply()
+                                        lockEnabled = true
+                                        lockMessage = "App lock enabled. Device authentication will be required when you return to MoneyLog."
+                                    } else {
+                                        lockMessage = "Set a screen lock on your phone first, then enable App Lock."
+                                        context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
+                                    }
                                 } else {
-                                    prefs.edit().remove("app_lock_enabled").remove("app_lock_pin_hash").remove("app_lock_pin_salt").apply()
+                                    prefs.edit().putBoolean("app_lock_enabled", false).remove("app_lock_pin_hash").remove("app_lock_pin_salt").apply()
                                     lockEnabled = false
                                     AppLockRuntime.isLocked = false
+                                    lockMessage = "App lock disabled."
                                 }
                             }
                         )
                     }
                     Text(
-                        "PIN is stored as a salted PBKDF2 hash on this device. MoneyLog locks when it is sent to the background and asks for the PIN when reopened.",
+                        "Uses your phone's fingerprint or face authentication, with your device PIN, pattern or password as fallback. MoneyLog locks when it goes to the background.",
                         color = Muted,
                         fontSize = 11.sp
                     )
-                    if (lockEnabled) {
-                        OutlinedButton(onClick = { newPin = ""; confirmPin = ""; pinError = ""; showPinSetup = true }, modifier = Modifier.fillMaxWidth()) { Text("Change PIN") }
-                    }
+                    if (lockMessage.isNotBlank()) Text(lockMessage, color = Muted, fontSize = 11.sp)
                 }
             }
         }
@@ -4110,48 +4087,6 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
         )
     }
 
-    if (showPinSetup) {
-        AlertDialog(
-            onDismissRequest = { showPinSetup = false },
-            title = { Text(if (lockEnabled) "Change app PIN" else "Set app PIN", color = Ink, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = newPin,
-                        onValueChange = { value -> if (value.length <= 6 && value.all(Char::isDigit)) { newPin = value; pinError = "" } },
-                        label = { Text("New PIN (4–6 digits)") },
-                        singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
-                    )
-                    OutlinedTextField(
-                        value = confirmPin,
-                        onValueChange = { value -> if (value.length <= 6 && value.all(Char::isDigit)) { confirmPin = value; pinError = "" } },
-                        label = { Text("Confirm PIN") },
-                        singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
-                    )
-                    if (pinError.isNotBlank()) Text(pinError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    when {
-                        newPin.length !in 4..6 -> pinError = "Choose a PIN with 4 to 6 digits."
-                        newPin != confirmPin -> pinError = "The PINs do not match."
-                        else -> {
-                            AppLockRuntime.savePin(context, newPin)
-                            lockEnabled = true
-                            AppLockRuntime.isLocked = false
-                            showPinSetup = false
-                        }
-                    }
-                }) { Text("Save PIN", color = Purple) }
-            },
-            dismissButton = { TextButton(onClick = { showPinSetup = false }) { Text("Cancel") } }
-        )
-    }
 }
 
 
@@ -6953,26 +6888,6 @@ private fun ImportTransactionsScreen(
         }
         item {
             InfoCard(
-                "MoneyLog Messages",
-                "Use MoneyLog as your office phone's SMS app. Open your inbox, read conversations, and send text messages. Android will ask before changing your default messaging app.",
-                Icons.Default.Sms
-            )
-            Button(
-                onClick = { context.startActivity(Intent(context, SmsInboxActivity::class.java)) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Message, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Open MoneyLog Messages / Set as default")
-            }
-            Text(
-                "Note: this first release supports SMS text messages. MMS media messages are not yet decoded or displayed.",
-                color = Muted,
-                fontSize = 12.sp
-            )
-        }
-        item {
-            InfoCard(
                 "Scan bank SMS",
                 "With your permission, MoneyLog checks recent SMS messages on this device for clear debit and credit alerts. Message contents are processed locally and are not uploaded. OTPs and unclear messages are ignored.",
                 Icons.Default.Sms
@@ -7120,7 +7035,7 @@ private fun parseTransactionCsv(csv: String): List<Transaction> {
     row.add(cell.toString().trim())
     if (row.any { it.isNotBlank() }) rows.add(row)
     require(rows.size >= 2) { "CSV must contain a header row and at least one transaction." }
-    val header = rows.first().map { it.trim().lowercase(Locale.ROOT).replace("_", " ") }
+    val header = rows.first().map { it.replace("\uFEFF", "").trim().lowercase(Locale.ROOT).replace("_", " ") }
     fun findHeader(vararg names: String) = names.firstNotNullOfOrNull { name -> header.indexOf(name).takeIf { it >= 0 } }
     val dateIndex = findHeader("date", "transaction date", "txn date", "value date")
     val titleIndex = findHeader("description", "narration", "details", "merchant", "particulars", "transaction details", "title")
@@ -7169,7 +7084,8 @@ internal fun GlassCalendarDialog(
     initialDate: String,
     accent: Color = Color(0xFF167DE5),
     onDismiss: () -> Unit,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
+    transactionDates: Set<String> = emptySet()
 ) {
     val today = remember { java.time.LocalDate.now() }
     var selectedDate by remember(initialDate) {
@@ -7217,11 +7133,13 @@ internal fun GlassCalendarDialog(
                             val date = if (validDay) visibleMonth.atDay(day) else null
                             val isSelected = date == selectedDate
                             val isToday = date == today
+                            val hasTransactions = date?.toString() in transactionDates
                             Box(
                                 Modifier.weight(1f).aspectRatio(1f).padding(2.dp)
                                     .clip(CircleShape)
                                     .background(when {
                                         isSelected -> accent
+                                        hasTransactions -> accent.copy(alpha = .20f)
                                         isToday -> accent.copy(alpha = .12f)
                                         else -> Color.Transparent
                                     })
@@ -7236,7 +7154,7 @@ internal fun GlassCalendarDialog(
                                         else -> Ink
                                     },
                                     fontSize = 13.sp,
-                                    fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Medium
+                                    fontWeight = if (isSelected || isToday || hasTransactions) FontWeight.Bold else FontWeight.Medium
                                 )
                             }
                         }
