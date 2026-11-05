@@ -75,4 +75,5 @@ internal fun saveMoneyNotes(context: Context, notes: List<MoneyNote>) {
     }
     context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
         .edit().putString("money_notes", array.toString()).putInt("money_notes_interest_version", 2).apply()
+    GoldLoanInterestReminderReceiver.sync(context, notes)
 }
