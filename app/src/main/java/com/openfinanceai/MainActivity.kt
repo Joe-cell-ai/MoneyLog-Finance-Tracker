@@ -7134,7 +7134,9 @@ internal fun GlassCalendarDialog(
     initialDate: String,
     accent: Color = Color(0xFF167DE5),
     onDismiss: () -> Unit,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
+    transactionDates: Set<String> = emptySet(),
+    selectImmediatelyOnTap: Boolean = false
 ) {
     val today = remember { java.time.LocalDate.now() }
     var selectedDate by remember(initialDate) {
@@ -7182,15 +7184,17 @@ internal fun GlassCalendarDialog(
                             val date = if (validDay) visibleMonth.atDay(day) else null
                             val isSelected = date == selectedDate
                             val isToday = date == today
+                            val hasTransactions = date?.toString() in transactionDates
                             Box(
                                 Modifier.weight(1f).aspectRatio(1f).padding(2.dp)
                                     .clip(CircleShape)
                                     .background(when {
                                         isSelected -> accent
+                                        hasTransactions -> accent.copy(alpha = .20f)
                                         isToday -> accent.copy(alpha = .12f)
                                         else -> Color.Transparent
                                     })
-                                    .then(if (validDay) Modifier.clickable { selectedDate = date!! } else Modifier),
+                                    .then(if (validDay) Modifier.clickable { selectedDate = date!!; if (selectImmediatelyOnTap) onSelect(date.toString()) } else Modifier),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (validDay) Text(
@@ -7201,7 +7205,7 @@ internal fun GlassCalendarDialog(
                                         else -> Ink
                                     },
                                     fontSize = 13.sp,
-                                    fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Medium
+                                    fontWeight = if (isSelected || isToday || hasTransactions) FontWeight.Bold else FontWeight.Medium
                                 )
                             }
                         }
