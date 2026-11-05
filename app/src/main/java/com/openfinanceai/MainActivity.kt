@@ -2544,8 +2544,10 @@ private fun ReportsScreen(
                 }
             }
         }
-        if (showReportCalendarPicker) {
-            GlassCalendarDialog(initialDate = selectedReportDate, accent = Green, onDismiss = { showReportCalendarPicker = false }, onSelect = { selectedReportDate = it; showReportCalendarPicker = false })
+        item {
+            if (showReportCalendarPicker) {
+                GlassCalendarDialog(initialDate = selectedReportDate, accent = Green, onDismiss = { showReportCalendarPicker = false }, onSelect = { selectedReportDate = it; showReportCalendarPicker = false })
+            }
         }
         if (reportView == "By category") {
             item {
@@ -2966,7 +2968,7 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
             }
             androidx.compose.foundation.Canvas(
                 Modifier.fillMaxWidth().height(190.dp).pointerInput(months) {
-                    androidx.compose.foundation.gestures.detectTapGestures { tap ->
+                    detectTapGestures { tap ->
                         val left = 8f
                         val right = size.width - 8f
                         val fraction = ((tap.x - left) / (right - left)).coerceIn(0f, .999999f)
