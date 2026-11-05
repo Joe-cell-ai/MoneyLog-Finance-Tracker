@@ -604,6 +604,11 @@ class MainActivity : FragmentActivity() {
         if (!AppLockRuntime.isLocked) return
         val biometricManager = BiometricManager.from(this)
         val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if (!keyguard.isDeviceSecure) {
+            getSharedPreferences("open_finance_data", Context.MODE_PRIVATE).edit().putBoolean("app_lock_enabled", false).apply()
+            AppLockRuntime.isLocked = false
+            return
+        }
         if (Build.VERSION.SDK_INT >= 30) {
             val authenticators = BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
             if (biometricManager.canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
