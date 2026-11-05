@@ -75,7 +75,8 @@ internal object LoanDocumentParser {
 
         val lenderLabelValues = listOfNotNull(
             Regex("""(?im)^\s*Lender\s*:\s*([^\r\n]{3,120}?)\s*$""").find(text)?.groupValues?.get(1)?.trim(),
-            Regex("""(?im)^\s*Name of the Regulated Entity\s*:\s*([^\r\n]{3,120}?)\s*$""").find(text)?.groupValues?.get(1)?.trim()
+            Regex("""(?im)^\s*Name of the Regulated Entity\s*:\s*([^\r\n]{3,120}?)\s*$""").find(text)?.groupValues?.get(1)?.trim(),
+            Regex("""(?im)^\s*Lender\s+1\s+means\s+([^,\r\n]{3,120})""").find(text)?.groupValues?.get(1)?.trim()
         ).filter { candidate ->
             candidate.length in 3..120 && candidate.any { it.isLetter() } &&
                 !candidate.matches(Regex("""(?i)(?:n/?a|na|unknown|not identified|not available|nil|none)"""))
@@ -94,12 +95,13 @@ internal object LoanDocumentParser {
             ?.let(LoanIdentitySanitizer::lender)
         val loanNumber = Regex("""(?i)(?:Loan\s*ID|Loan proposal\s*/\s*account\s*No\.?|Loan account\s*(?:number|no\.?)|Agreement\s*(?:No\.?|Number))\s*[:.]?\s*([A-Z0-9/-]{5,40})""")
             .find(text)?.groupValues?.get(1)
-        val borrowerName = Regex("""(?im)^\s*(?:Dear\s+|Customer\s+Name\s*[:：]?\s*|[0-9]{1,2}\s+Name\s+of\s+the\s+Borrower\s*\(\s*["']Borrower["']\s*\)\s+|Applicant\s+Name\s*[:：]?\s*)([A-Z][A-Z .'-]{2,80})\s*$""")
+        val borrowerName = Regex("""(?im)^\s*(?:Dear\s+|Customer\s+Name\s*[:：]?\s*|NAME\s*:\s*|[0-9]{1,2}\s+Name\s+of\s+the\s+Borrower\s*\(\s*["']Borrower["']\s*\)\s+|Applicant\s+Name\s*[:：]?\s*)([A-Z][A-Z .'-]{2,80})\s*$""")
             .find(text)?.groupValues?.get(1)?.trim().let(LoanIdentitySanitizer::borrower)
         val principal = directAmount("""Total\s+Loan\s+Amount\s*\(\s*Principal\s+Amount\s*\)\s*[:\-]?\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Sanctioned\s+Loan\s+amount\s*\(in\s+Rupees\)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Loan\s+Amount\s*\(\s*INR\s*\)\s*:\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Loan\s+Amount\s*:\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
+            ?: directAmount("""Term\s+loan\s+of\s+an\s+amount\s+(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Amount\s+Financed\s*:\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
         val emi = amountOnLine(Regex("""Amount\s+of\s+EMI\s+Payable"""))
             ?: amountOnLine(Regex("""Monthly\s+EMI"""))
@@ -107,12 +109,14 @@ internal object LoanDocumentParser {
             ?: Regex("""(?is)Amount\s+of\s+each\s+EPI.{0,350}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+nos\.?\s+of\s+EPIs""")
                 .find(text)?.groupValues?.get(1)?.let(::number)
         val fixedRate = directDecimal("""Fixed\s+Rate\s+of\s+Interest\s*[:\-]?\s*([0-9]+(?:\.[0-9]{1,4})?)""")
-            ?: directDecimal("""Interest\s+Rate\s*:\s*([0-9]+(?:\.[0-9]{1,4})?)\s*%""")
+            ?: directDecimal("""Interest\s+Rate\s*[:：]?\s*([0-9]+(?:\.[0-9]{1,4})?)\s*%""")
+            ?: directDecimal("""Interest\s+Rate\s+([0-9]+(?:\.[0-9]{1,4})?)\s*%\s+per\s+annum""")
             ?: directDecimal("""Interest\s+Rate\s+per\s+annum\s*\(%\)\s*([0-9]+(?:\.[0-9]{1,4})?)""")
             ?: directDecimal("""ROI\s*\(%\)\s*:?\s*([0-9]+(?:\.[0-9]{1,4})?)""")
         val apr = directDecimal("""Annual\s+Percentage\s+Rate\s*\(APR\)\s*\(%\)\s*([0-9]+(?:\.[0-9]{1,4})?)""")
             ?: directDecimal("""Annual\s+Percentage\s+Rate\s*[:(].{0,40}?([0-9]+(?:\.[0-9]{1,4})?)""")
         val tenure = directInteger("""Tenure\s*\(in\s+months\)\s*([0-9]{1,3})""")
+            ?: directInteger("""Tenor\s*\(in\s+months\)\s*([0-9]{1,3})""")
             ?: directInteger("""Loan\s+term\s*\(months\)\s*([0-9]{1,3})""")
             ?: directInteger("""Tenure\s*:\s*([0-9]{1,3})\s*Months?""")
             ?: directInteger("""Total\s+Tenure\s*:?\s*([0-9]{1,3})""")
@@ -168,7 +172,7 @@ internal object LoanDocumentParser {
             }
         }
 
-        val scheduleHeader = Regex("""(?im)^\s*(?:[0-9]{1,2}\s+)?(?:Official\s+)?(?:Illustrative\s+)?(?:Repayment\s+Schedule|Amortization\s+(?:Timeline(?:\s+Statement)?|Schedule))\s*$""").find(text)
+        val scheduleHeader = Regex("""(?im)^\s*(?:[0-9]{1,2}\s+)?(?:Official\s+)?(?:Illustrative\s+)?(?:Repayment\s+Schedule|Amortization\s+(?:Timeline(?:\s+Statement)?|Schedule))(?:\s+(?:in\s+)?(?:Indian\s+)?Rupees)?\s*$""").find(text)
         val scheduleText = scheduleHeader?.let { text.substring(it.range.last + 1) }.orEmpty()
             .replace("₹", "").replace(Regex("""(?i)\bRs\.?\s*"""), "")
         val scheduleHeaderLines = scheduleText.lines().take(30).joinToString(" ")
