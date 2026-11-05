@@ -76,7 +76,8 @@ internal object LoanDocumentParser {
         val lenderLabelValues = listOfNotNull(
             Regex("""(?im)^\s*Lender\s*:\s*([^\r\n]{3,120}?)\s*$""").find(text)?.groupValues?.get(1)?.trim(),
             Regex("""(?im)^\s*Name of the Regulated Entity\s*:\s*([^\r\n]{3,120}?)\s*$""").find(text)?.groupValues?.get(1)?.trim(),
-            Regex("""(?im)^\s*["“]?Lender\s+1["”]?\s+means\s+([^,\r\n]{3,120})""").find(text)?.groupValues?.get(1)?.trim()
+            Regex("""(?im)^\s*["“]?Lender\s+1["”]?\s+means\s+([^,\r\n]{3,120})""").find(text)?.groupValues?.get(1)?.trim(),
+            Regex("""(?i)HDB\s+FINANCIAL\s+SERVICES\s+LIMITED(?=.{0,180}?in\s+its\s+capacity\s+as\s+a\s+lender)""", RegexOption.DOT_MATCHES_ALL).find(text)?.value?.trim()
         ).filter { candidate ->
             candidate.length in 3..120 && candidate.any { it.isLetter() } &&
                 !candidate.matches(Regex("""(?i)(?:n/?a|na|unknown|not identified|not available|nil|none)"""))
@@ -102,6 +103,7 @@ internal object LoanDocumentParser {
             ?: directAmount("""Loan\s+Amount\s*\(\s*INR\s*\)\s*:\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Loan\s+Amount\s*:\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Term\s+loan\s+of\s+an\s+amount\s+(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
+            ?: directAmount("""Loan\s+Amount\s*\(\s*in\s+Rupees\s*\)\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
             ?: directAmount("""Amount\s+Financed\s*:\s*(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
         val emi = amountOnLine(Regex("""Amount\s+of\s+EMI\s+Payable"""))
             ?: amountOnLine(Regex("""Monthly\s+EMI"""))
@@ -110,12 +112,14 @@ internal object LoanDocumentParser {
             ?: Regex("""(?is)Amount\s+of\s+each\s+EPI.{0,350}?([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+nos\.?\s+of\s+EPIs""")
                 .find(text)?.groupValues?.get(1)?.let(::number)
         val fixedRate = directDecimal("""Fixed\s+Rate\s+of\s+Interest\s*[:\-]?\s*([0-9]+(?:\.[0-9]{1,4})?)""")
+            ?: directDecimal("""Fixed\s+Rate\s+of\s+Interest\s*/\s*IRR\s*\(\s*P\.A\.\s*\)\s*([0-9]+(?:\.[0-9]{1,4})?)""")
             ?: directDecimal("""Interest\s+Rate\s*[:：]?\s*([0-9]+(?:\.[0-9]{1,4})?)\s*%""")
             ?: directDecimal("""Interest\s+Rate\s+([0-9]+(?:\.[0-9]{1,4})?)\s*%\s+per\s+annum""")
             ?: directDecimal("""Interest\s+Rate\s+per\s+annum\s*\(%\)\s*([0-9]+(?:\.[0-9]{1,4})?)""")
             ?: directDecimal("""ROI\s*\(%\)\s*:?\s*([0-9]+(?:\.[0-9]{1,4})?)""")
         val apr = directDecimal("""Annual\s+Percentage\s+Rate\s*\(APR\)\s*\(%\)\s*([0-9]+(?:\.[0-9]{1,4})?)""")
             ?: directDecimal("""Annual\s+Percentage\s+Rate\s*[:(].{0,40}?([0-9]+(?:\.[0-9]{1,4})?)""")
+            ?: directDecimal("""Annual\s+Percentage\s+Rate\s+([0-9]+(?:\.[0-9]{1,4})?)\s*%""")
         val tenure = directInteger("""Tenure\\s*\\(\\s*in\\s+months\\s*\\)\s*([0-9]{1,3})""")
             ?: directInteger("""Tenor\\s*\\(\\s*in\\s+months\\s*\\)\s*([0-9]{1,3})""")
             ?: directInteger("""Loan\s+term\s*\(months\)\s*([0-9]{1,3})""")
