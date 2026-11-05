@@ -606,7 +606,7 @@ class LoanDocumentParserTest {
         val result = LoanDocumentParser.parse(statement)
         assertEquals("HDB FINANCIAL SERVICES LIMITED", result.lender)
         assertEquals("APPL00208750", result.loanNumber)
-        assertEquals("Nelatoori Vijay Kumar Reddy", result.borrowerName)
+        assertEquals("NELATOORI VIJAY KUMAR REDDY", result.borrowerName)
         assertEquals(4_500_000L, result.principal)
         assertEquals(30.0, result.annualInterestRate!!, 0.0)
         assertEquals(46.29, result.apr!!, 0.0)
