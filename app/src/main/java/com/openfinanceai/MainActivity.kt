@@ -2324,6 +2324,8 @@ private fun ReportsScreen(
     var showAllCategories by remember { mutableStateOf(false) }
     var showMonthMenu by remember { mutableStateOf(false) }
     var showMoreReports by remember { mutableStateOf(false) }
+    var showReportCalendarPicker by remember { mutableStateOf(false) }
+    var selectedReportDate by remember { mutableStateOf(selectedMonth.atDay(1).toString()) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var categoryDetailTab by remember { mutableIntStateOf(0) }
     val categories = transactions.filterNot { it.income }.groupBy { it.category }
@@ -2385,7 +2387,12 @@ private fun ReportsScreen(
                         DropdownMenuItem(
                             text = { Text("Calendar") },
                             leadingIcon = { Icon(Icons.Default.CalendarToday, null) },
-                            onClick = { reportView = "Calendar"; showMoreReports = false }
+                            onClick = { reportView = "Calendar"; showMoreReports = false; showReportCalendarPicker = true }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Categories") },
+                            leadingIcon = { Icon(Icons.Default.Category, null) },
+                            onClick = { reportView = "By category"; showMoreReports = false }
                         )
                         DropdownMenuItem(
                             text = { Text("Tags") },
@@ -2493,30 +2500,50 @@ private fun ReportsScreen(
             item { InfoCard("Monthly cash flow", "Compare recorded income and expenses across recent months. Change the month above to move the reporting window.", Icons.Default.Insights) }
         }
         if (reportView == "Calendar") {
-            item { Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(22.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null, elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) 0.dp else 2.dp)) {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Daily totals", color = Ink, fontWeight = FontWeight.Bold)
-                    var any = false
-                    (1..selectedMonth.lengthOfMonth()).forEach { day ->
-                        val date = selectedMonth.atDay(day)
-                        val daily = transactions.filter { transactionDateOrNull(it) == date }
-                        if (daily.isNotEmpty()) {
-                            any = true
-                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(appGlassSurface()).then(if (AppBlueGlass) Modifier.border(1.dp, appGlassBorder(), RoundedCornerShape(14.dp)) else Modifier).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(date.format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM")), color = Ink, fontWeight = FontWeight.Medium)
-                                    Text("${daily.size} transaction(s)", color = Muted, fontSize = 11.sp)
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text("+ ${Money.format(daily.filter { it.income }.sumOf { it.amount })}", color = IncomeGreen, fontSize = 11.sp)
-                                    Text("− ${Money.format(daily.filterNot { it.income }.sumOf { it.amount })}", color = ExpenseRed, fontSize = 11.sp)
+            val selectedDate = runCatching { java.time.LocalDate.parse(selectedReportDate) }.getOrDefault(selectedMonth.atDay(1))
+            val selectedDateTransactions = allTransactions.filter { transactionDateOrNull(it) == selectedDate }
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(22.dp), border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder()) else null, elevation = CardDefaults.cardElevation(defaultElevation = if (AppBlueGlass) 0.dp else 2.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Transactions by date", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(appCardSurface(SkyTint)).clickable { showReportCalendarPicker = true }.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CalendarMonth, null, tint = Green)
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Selected date", color = Muted, fontSize = 11.sp)
+                                Text(selectedDate.format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMMM yyyy")), color = Ink, fontWeight = FontWeight.SemiBold)
+                            }
+                            Icon(Icons.Default.ExpandMore, "Choose date", tint = Green)
+                        }
+                        val dayIncome = selectedDateTransactions.filter { it.income }.sumOf { it.amount }
+                        val dayExpenses = selectedDateTransactions.filterNot { it.income }.sumOf { it.amount }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard("Income", Money.format(dayIncome), Modifier.weight(1f), IncomeTint, IncomeGreen)
+                            MetricCard("Expenses", Money.format(dayExpenses), Modifier.weight(1f), ExpenseTint, ExpenseRed)
+                        }
+                        Text("${selectedDateTransactions.size} transaction(s)", color = Ink, fontWeight = FontWeight.Bold)
+                        if (selectedDateTransactions.isEmpty()) {
+                            Text("No transactions recorded for this date. Choose another date from the calendar.", color = Muted, fontSize = 12.sp)
+                        } else {
+                            selectedDateTransactions.forEach { transaction ->
+                                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(appCardSurface(Color.White.copy(alpha = .72f))).clickable { onTransactionClick(transaction) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Box(Modifier.size(38.dp).clip(CircleShape).background((if (transaction.income) IncomeGreen else ExpenseRed).copy(alpha = .12f)), contentAlignment = Alignment.Center) {
+                                        Icon(if (transaction.income) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward, null, tint = if (transaction.income) IncomeGreen else ExpenseRed)
+                                    }
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text(transaction.title, color = Ink, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                                        Text(transaction.category + " · " + if (transaction.income) "Income" else "Expense", color = Muted, fontSize = 11.sp)
+                                    }
+                                    Text((if (transaction.income) "+" else "−") + Money.format(transaction.amount), color = if (transaction.income) IncomeGreen else ExpenseRed, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 }
                             }
                         }
                     }
-                    if (!any) Text("No dated transactions in this month yet.", color = Muted, fontSize = 12.sp)
                 }
-            } }
+            }
+        }
+        if (showReportCalendarPicker) {
+            GlassCalendarDialog(initialDate = selectedReportDate, accent = Green, onDismiss = { showReportCalendarPicker = false }, onSelect = { selectedReportDate = it; showReportCalendarPicker = false })
         }
         if (reportView == "By category") {
             item {
