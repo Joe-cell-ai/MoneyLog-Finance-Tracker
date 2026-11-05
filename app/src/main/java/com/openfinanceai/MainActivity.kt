@@ -1130,40 +1130,20 @@ private fun FinanceApp() {
                     border = if (AppBlueGlass) androidx.compose.foundation.BorderStroke(1.dp, Color(0xD9FFFFFF)) else null,
                     shadowElevation = if (AppBlueGlass) 18.dp else 0.dp
                 ) {
-                    if (AppBlueGlass) {
-                        Row(Modifier.fillMaxWidth().height(76.dp).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            GlassBottomNavItem("Home", Icons.Default.Home, tab == "Home" || tab in listOf("Loans", "Money Notes", "Budgets", "Calendar", "Insights"), Modifier.weight(1f)) { navigateTo("Home") }
-                            GlassBottomNavItem("Transactions", Icons.Default.ReceiptLong, tab == "Activity", Modifier.weight(1f)) { navigateTo("Activity") }
-                            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                                Box(
-                                    Modifier.size(54.dp).clip(CircleShape)
-                                        .background(Brush.linearGradient(listOf(Color(0xFF08B9E9), Color(0xFF2879F4), Color(0xFF9458F1))))
-                                        .border(2.dp, Color.White.copy(alpha = .92f), CircleShape)
-                                        .clickable { showAddAsIncome = false; showAdd = true },
-                                    contentAlignment = Alignment.Center
-                                ) { Icon(Icons.Default.Add, "Add transaction", tint = Color.White, modifier = Modifier.size(28.dp)) }
-                            }
-                            GlassBottomNavItem("Reports", Icons.Default.BarChart, tab == "Reports", Modifier.weight(1f)) { navigateTo("Reports") }
-                            GlassBottomNavItem("Settings", Icons.Default.Settings, tab == "Settings" || tab == "Appearance", Modifier.weight(1f)) { navigateTo("Settings") }
+                    Row(Modifier.fillMaxWidth().height(76.dp).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        GlassBottomNavItem("Home", Icons.Default.Home, tab == "Home" || tab in listOf("Loans", "Money Notes", "Budgets", "Calendar", "Insights"), Modifier.weight(1f)) { navigateTo("Home") }
+                        GlassBottomNavItem("Transactions", Icons.Default.ReceiptLong, tab == "Activity", Modifier.weight(1f)) { navigateTo("Activity") }
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            Box(
+                                Modifier.size(54.dp).clip(CircleShape)
+                                    .background(if (AppBlueGlass) Brush.linearGradient(listOf(Color(0xFF08B9E9), Color(0xFF2879F4), Color(0xFF9458F1))) else SolidColor(Green))
+                                    .border(2.dp, Color.White.copy(alpha = .92f), CircleShape)
+                                    .clickable { showAddAsIncome = false; showAdd = true },
+                                contentAlignment = Alignment.Center
+                            ) { Icon(Icons.Default.Add, "Add transaction", tint = Color.White, modifier = Modifier.size(28.dp)) }
                         }
-                    } else {
-                        NavigationBar(containerColor = Color.White, tonalElevation = 3.dp, windowInsets = NavigationBarDefaults.windowInsets) {
-                            listOf("Home", "Activity", "Reports", "Loans", "Money Notes", "Settings").forEach { name ->
-                                val icon = when (name) {
-                                    "Home" -> Icons.Default.Home
-                                    "Activity" -> Icons.Default.ReceiptLong
-                                    "Reports" -> Icons.Default.BarChart
-                                    "Loans" -> Icons.Default.AccountBalance
-                                    "Money Notes" -> Icons.Default.Notes
-                                    else -> Icons.Default.Settings
-                                }
-                                NavigationBarItem(
-                                    selected = tab == name, onClick = { navigateTo(name) },
-                                    icon = { Icon(icon, name) }, label = { Text(name, fontSize = 10.sp) },
-                                    colors = NavigationBarItemDefaults.colors(selectedIconColor = Green, selectedTextColor = Green, unselectedIconColor = Muted, unselectedTextColor = Muted, indicatorColor = Mint)
-                                )
-                            }
-                        }
+                        GlassBottomNavItem("Reports", Icons.Default.BarChart, tab == "Reports", Modifier.weight(1f)) { navigateTo("Reports") }
+                        GlassBottomNavItem("Settings", Icons.Default.Settings, tab == "Settings" || tab == "Appearance", Modifier.weight(1f)) { navigateTo("Settings") }
                     }
                 }
             },
@@ -2171,14 +2151,16 @@ private fun MonthlyIncomeBreakdownCard(totalIncome: Long, categories: List<Pair<
 
 @Composable
 private fun GlassBottomNavItem(label: String, icon: ImageVector, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val selectedTint = if (AppBlueGlass) Color(0xFF1269D8) else Green
+    val unselectedTint = if (AppBlueGlass) Color(0xFF55739C) else Muted
     Column(
         modifier.fillMaxHeight().clip(RoundedCornerShape(15.dp)).clickable(onClick = onClick).padding(vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(icon, contentDescription = label, tint = if (selected) Color(0xFF1269D8) else Color(0xFF55739C), modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = label, tint = if (selected) selectedTint else unselectedTint, modifier = Modifier.size(20.dp))
         Spacer(Modifier.height(3.dp))
-        Text(label, color = if (selected) Color(0xFF1269D8) else Color(0xFF55739C), fontSize = 9.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
+        Text(label, color = if (selected) selectedTint else unselectedTint, fontSize = 9.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
     }
 }
 
