@@ -555,4 +555,68 @@ class LoanDocumentParserTest {
         assertEquals(4_000_000L, result.scheduleRows.sumOf { it.principal })
         assertEquals(618_555L, result.scheduleRows.sumOf { it.interest })
     }
+
+    @Test fun parsesGenericPaymentScheduleExportWithRateAndEmiHolidayColumns() {
+        val statement = """
+            Customer : Nelatoori Vijay Kumar Reddy
+            Loan Reference : XPLEFCLS000F032
+            Amount Financed : 50,000.00
+            Tenure(In Months) : 24
+            Interest Rate : 21.49% Eff.
+            Payment Schedule
+            Schedule Details
+            Instl Due Date Opening Principal Instl Amount Principal Interest Closing Principal Rate(%) Instl Type EMI Holiday Due
+            1 05-Mar-26 50,000.00 2,581.00 2,022.00 559.00 47,978.00 21.49 EMI 0.00 N
+            2 05-Apr-26 47,978.00 2,581.00 1,705.00 876.00 46,273.00 21.49 EMI 0.00 N
+            3 05-May-26 46,273.00 2,581.00 1,764.00 817.00 44,509.00 21.49 EMI 0.00 N
+        """.trimIndent()
+        val result = LoanDocumentParser.parse(statement)
+        assertEquals("XPLEFCLS000F032", result.loanNumber)
+        assertEquals(5_000_000L, result.principal)
+        assertEquals(24, result.tenureMonths)
+        assertEquals(21.49, result.annualInterestRate!!, 0.0)
+        assertEquals(3, result.scheduleRows.size)
+        assertEquals("2026-03-05", result.scheduleRows.first().dueDate)
+        assertEquals(258_100L, result.scheduleRows.first().installment)
+        assertEquals(202_200L, result.scheduleRows.first().principal)
+        assertEquals(55_900L, result.scheduleRows.first().interest)
+        assertEquals(4_797_800L, result.scheduleRows.first().closingPrincipal)
+        assertEquals(258_100L, result.emi)
+    }
+
+    @Test fun parsesHdbEarlySalaryScheduleOneSummaryWithoutInventingInstallmentSplits() {
+        val statement = """
+            HDB FINANCIAL SERVICES LIMITED in its capacity as a lender (hereinafter referred to as Lender 1)
+            LOAN AGREEMENT NUMBER APPL00208750
+            Name: Nelatoori Vijay Kumar Reddy
+            FIXED RATE OF INTEREST/ IRR (P.A.) 30.00% p.a.
+            ANNUAL PERCENTAGE RATE 46.29%
+            LOAN AMOUNT (IN RUPEES) INR 45,000.00
+            TENURE OF THE LOAN (in
+            9
+            months)
+            PROCESSING CHARGE AMOUNT INR 2,124.00
+            NUMBER OF INSTALLMENTS 9
+            FIRST INSTALLMENT DATE 04-Aug-2026
+            LAST INSTALLMENT DATE 04-Apr-2027
+            EMI AMOUNT INR 5,646.00
+            INTEREST AMOUNT INR 6,335.00
+            TOTAL AMOUNT PAYABLE INR 50,810.00
+        """.trimIndent()
+        val result = LoanDocumentParser.parse(statement)
+        assertEquals("HDB FINANCIAL SERVICES LIMITED", result.lender)
+        assertEquals("APPL00208750", result.loanNumber)
+        assertEquals("NELATOORI VIJAY KUMAR REDDY", result.borrowerName)
+        assertEquals(4_500_000L, result.principal)
+        assertEquals(30.0, result.annualInterestRate!!, 0.0)
+        assertEquals(46.29, result.apr!!, 0.0)
+        assertEquals(9, result.tenureMonths)
+        assertEquals(212_400L, result.processingFee)
+        assertEquals(564_600L, result.emi)
+        assertEquals(633_500L, result.totalInterest)
+        assertEquals(5_081_000L, result.declaredTotalRepayment)
+        assertEquals("2026-08-04", result.repaymentStartDate)
+        assertEquals("2027-04-04", result.repaymentEndDate)
+        assertTrue(result.scheduleRows.isEmpty())
+    }
 }
