@@ -3899,7 +3899,8 @@ private fun SettingsScreen(onOpen: (String) -> Unit) {
     val prefs = remember { context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE) }
     val mainItems = listOf(
         Triple("Appearance", "Theme, colors and layout", Icons.Default.Palette),
-        Triple("Budgets", "Set monthly spending limits", Icons.Default.TrackChanges),\n        Triple("Salary", "Set monthly salary and payday automation", Icons.Default.Payments),
+        Triple("Budgets", "Set monthly spending limits", Icons.Default.TrackChanges),
+        Triple("Salary", "Set monthly salary and payday automation", Icons.Default.Payments),
         Triple("Backup & Export", "Save, restore and export records", Icons.Default.Security),
         Triple("Privacy & Security", "Data protection and permissions", Icons.Default.Shield),
         Triple("Notifications", "Manage app alerts and reminder preferences", Icons.Default.Notifications),
