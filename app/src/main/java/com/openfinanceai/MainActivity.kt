@@ -4895,9 +4895,11 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
     val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
     // The remaining schedule starts at today's outstanding principal and contains only
     // installments not already counted as paid. This prevents past installments being counted twice.
-    val scheduleMonths = if (loan.totalPayments in 1L..600L)
+    // A zero outstanding balance means there is no remaining estimated principal to amortize.
+    // Do not manufacture future zero-value EMIs from the original tenure/payment count.
+    val scheduleMonths = if (loan.balance <= 0L) 0 else if (loan.totalPayments in 1L..600L)
         (loan.totalPayments - loan.paymentsMade).coerceIn(0L, 600L).toInt()
-    else 60
+    else if (loan.emi > 0L) 600 else 0
     val schedule = (0 until scheduleMonths).map { index ->
         val interest = kotlin.math.round(scheduleBalance * monthlyRate).toLong()
         val scheduledPayment = minOf(loan.emi, kotlin.math.ceil(scheduleBalance + interest).toLong())
@@ -4917,7 +4919,7 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
     val upcomingAmber = Color(0xFFF59E0B)
     val upcomingTint = Color(0xFFFFF7ED)
     val progress = if (loan.originalPrincipal > 0L) ((loan.originalPrincipal - loan.balance).toFloat() / loan.originalPrincipal.toFloat()).coerceIn(0f, 1f) else 0f
-    val monthsRemaining = if (loan.totalPayments > 0L) (loan.totalPayments - loan.paymentsMade).coerceAtLeast(0L).toInt() else if (loan.emi > 0L) kotlin.math.ceil(loan.balance.toDouble() / loan.emi.toDouble()).toInt().coerceAtLeast(0) else 0
+    val monthsRemaining = if (loan.balance <= 0L) 0 else if (loan.totalPayments > 0L) (loan.totalPayments - loan.paymentsMade).coerceAtLeast(0L).toInt() else if (loan.emi > 0L) kotlin.math.ceil(loan.balance.toDouble() / loan.emi.toDouble()).toInt().coerceAtLeast(0) else 0
     var totalInterestEstimate = 0L
     var totalRepaymentEstimate = 0L
     var estimateValid = loan.balance > 0L && loan.emi > 0L && !paymentTooLow
@@ -5418,6 +5420,9 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 }
             }
             if (selectedSection != "Bank Verify") {
+                if (importedSchedule.isEmpty() && schedule.isEmpty()) item {
+                    InfoCard("No pending EMIs", if (loan.balance <= 0L) "This loan has no outstanding balance, so there are no future estimated instalments." else "A schedule cannot be generated from the current loan details. Check the outstanding balance, EMI, interest rate and tenure.", Icons.Default.CheckCircle)
+                }
                 if (importedSchedule.isNotEmpty()) items(importedSchedule.indices.toList()) { index ->
                     val row = importedSchedule[index]
                     val originalDateLabel = row.first
