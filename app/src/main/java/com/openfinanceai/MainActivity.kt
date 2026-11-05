@@ -2542,8 +2542,10 @@ private fun ReportsScreen(
                 }
             }
         }
-        if (showReportCalendarPicker) {
-            GlassCalendarDialog(initialDate = selectedReportDate, accent = Green, onDismiss = { showReportCalendarPicker = false }, onSelect = { selectedReportDate = it; showReportCalendarPicker = false })
+        item {
+            if (showReportCalendarPicker) {
+                GlassCalendarDialog(initialDate = selectedReportDate, accent = Green, onDismiss = { showReportCalendarPicker = false }, onSelect = { selectedReportDate = it; showReportCalendarPicker = false })
+            }
         }
         if (reportView == "By category") {
             item {
