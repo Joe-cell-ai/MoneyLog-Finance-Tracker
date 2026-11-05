@@ -626,7 +626,7 @@ class MainActivity : FragmentActivity() {
         val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { AppLockRuntime.isLocked = false }
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON || errorCode == BiometricPrompt.ERROR_NO_BIOMETRICS || errorCode == BiometricPrompt.ERROR_HW_NOT_PRESENT) launchDeviceCredentialFallback()
+                if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON || errorCode == BiometricPrompt.ERROR_NO_BIOMETRICS || errorCode == BiometricPrompt.ERROR_HW_NOT_PRESENT || errorCode == BiometricPrompt.ERROR_LOCKOUT || errorCode == BiometricPrompt.ERROR_LOCKOUT_PERMANENT) launchDeviceCredentialFallback()
             }
         })
         prompt.authenticate(info)
@@ -653,8 +653,10 @@ class MainActivity : FragmentActivity() {
         listOf(1005, 1008, 1010).forEach { EmiReminderReceiver.cancelReminder(this, it) }
         val lockPrefs = getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
         val deviceKeyguard = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
-        if (lockPrefs.getBoolean("app_lock_enabled", false) && !deviceKeyguard.isDeviceSecure) {
-            lockPrefs.edit().putBoolean("app_lock_enabled", false).remove("app_lock_pin_hash").remove("app_lock_pin_salt").apply()
+        if (lockPrefs.getBoolean("app_lock_enabled", false)) {
+            val migration = lockPrefs.edit().remove("app_lock_pin_hash").remove("app_lock_pin_salt")
+            if (!deviceKeyguard.isDeviceSecure) migration.putBoolean("app_lock_enabled", false)
+            migration.apply()
         }
         AppLockRuntime.isLocked = AppLockRuntime.isConfigured(this)
         setContent { FinanceApp() }
@@ -4002,7 +4004,7 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
                                 if (enabled) {
                                     val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
                                     if (keyguard.isDeviceSecure) {
-                                        prefs.edit().putBoolean("app_lock_enabled", true).apply()
+                                        prefs.edit().putBoolean("app_lock_enabled", true).remove("app_lock_pin_hash").remove("app_lock_pin_salt").apply()
                                         lockEnabled = true
                                         lockMessage = "App lock enabled. Device authentication will be required when you return to MoneyLog."
                                     } else {
