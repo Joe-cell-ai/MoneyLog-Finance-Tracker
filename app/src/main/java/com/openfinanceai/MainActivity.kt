@@ -6993,6 +6993,7 @@ private fun SalarySettingsScreen(onSave: (Boolean, Long) -> Unit) {
     }
 }
 
+@Composable
 private fun ImportTransactionsScreen(
     message: String,
     preview: List<Transaction>,
