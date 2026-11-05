@@ -2901,13 +2901,10 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
         allTransactions.filter { transaction -> parseScheduleDate(transaction.date)?.let { YearMonth.from(it) == month } == true && !transaction.income }.sumOf { it.amount }
     }
     var selectedIndex by remember(months) { mutableIntStateOf(months.lastIndex) }
-    var chartStyle by remember { mutableStateOf("Bar") }
     val selectedTrendMonth = months[selectedIndex]
     val selectedIncome = monthlyIncome[selectedIndex]
     val selectedExpenses = monthlyExpenses[selectedIndex]
     val maxValue = (monthlyIncome + monthlyExpenses).maxOrNull()?.coerceAtLeast(1L) ?: 1L
-    val incomeColor = Color(0xFF08A985)
-    val expenseColor = Color(0xFF2878F0)
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = appGlassSurface()),
@@ -2918,27 +2915,11 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("Spending Trends", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text("Monthly Overview", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Text("Income and expenses · last 6 months", color = Muted, fontSize = 10.sp)
                 }
                 Surface(color = Color(0xFFE7F7F1), shape = RoundedCornerShape(50)) {
                     Text("LIVE DATA", Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = IncomeGreen, fontWeight = FontWeight.Bold, fontSize = 9.sp)
-                }
-            }
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(appCardSurface(SkyTint)).padding(3.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                listOf("Line", "Bar", "Area", "Donut").forEach { style ->
-                    val selected = chartStyle == style
-                    Box(
-                        Modifier.weight(1f).clip(RoundedCornerShape(9.dp))
-                            .background(if (selected) Green else Color.Transparent)
-                            .clickable { chartStyle = style }.padding(vertical = 9.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(style, color = if (selected) Color.White else Muted, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
-                    }
                 }
             }
             Card(
@@ -2950,14 +2931,14 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
                     Text(selectedTrendMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)), color = Ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Box(Modifier.size(8.dp).clip(CircleShape).background(incomeColor))
+                            Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF08A985)))
                             Text("Income", color = Muted, fontSize = 11.sp)
                         }
                         Text(Money.format(selectedIncome), color = IncomeGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Box(Modifier.size(8.dp).clip(CircleShape).background(expenseColor))
+                            Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF2878F0)))
                             Text("Expenses", color = Muted, fontSize = 11.sp)
                         }
                         Text(Money.format(selectedExpenses), color = ExpenseRed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -2966,7 +2947,7 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
                 }
             }
             androidx.compose.foundation.Canvas(
-                Modifier.fillMaxWidth().height(if (chartStyle == "Donut") 220.dp else 190.dp).pointerInput(months) {
+                Modifier.fillMaxWidth().height(190.dp).pointerInput(months) {
                     detectTapGestures { tap ->
                         val left = 8f
                         val right = size.width - 8f
@@ -2977,90 +2958,75 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
             ) {
                 val left = 8f
                 val right = size.width - 8f
-                val top = 18.dp.toPx()
+                val top = 26.dp.toPx()
                 val bottom = size.height - 18.dp.toPx()
                 val chartHeight = bottom - top
+                repeat(4) { row ->
+                    val y = top + chartHeight * row / 3f
+                    drawLine(Color(0xFF9AB8D6).copy(alpha = .28f), androidx.compose.ui.geometry.Offset(left, y), androidx.compose.ui.geometry.Offset(right, y), strokeWidth = 1.dp.toPx())
+                }
                 val groupWidth = (right - left) / months.size
                 val selectedX = left + groupWidth * (selectedIndex + .5f)
-                if (chartStyle != "Donut") {
-                    repeat(4) { row ->
-                        val y = top + chartHeight * row / 3f
-                        drawLine(Color(0xFF9AB8D6).copy(alpha = .28f), androidx.compose.ui.geometry.Offset(left, y), androidx.compose.ui.geometry.Offset(right, y), strokeWidth = 1.dp.toPx())
-                    }
-                    drawLine(Green.copy(alpha = .8f), androidx.compose.ui.geometry.Offset(selectedX, top - 5.dp.toPx()), androidx.compose.ui.geometry.Offset(selectedX, bottom), strokeWidth = 1.5.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx())))
-                    val pointsIncome = mutableListOf<androidx.compose.ui.geometry.Offset>()
-                    val pointsExpense = mutableListOf<androidx.compose.ui.geometry.Offset>()
-                    months.indices.forEach { index ->
-                        val centerX = left + groupWidth * (index + .5f)
-                        val incomeY = bottom - (monthlyIncome[index].toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * chartHeight
-                        val expenseY = bottom - (monthlyExpenses[index].toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * chartHeight
-                        pointsIncome.add(androidx.compose.ui.geometry.Offset(centerX, incomeY))
-                        pointsExpense.add(androidx.compose.ui.geometry.Offset(centerX, expenseY))
-                    }
-                    if (chartStyle == "Bar") {
-                        val barWidth = groupWidth * .27f
-                        val barGap = groupWidth * .07f
-                        months.indices.forEach { index ->
-                            listOf(monthlyIncome[index], monthlyExpenses[index]).forEachIndexed { series, value ->
-                                val height = (value.toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * chartHeight
-                                val x = pointsIncome[index].x + if (series == 0) -(barWidth + barGap / 2f) else barGap / 2f
-                                if (height > 0f) drawRoundRect(if (series == 0) incomeColor else expenseColor, androidx.compose.ui.geometry.Offset(x, bottom - height), androidx.compose.ui.geometry.Size(barWidth, height), cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx()))
-                            }
-                        }
-                    } else {
-                        val series = listOf(pointsIncome to incomeColor, pointsExpense to expenseColor)
-                        series.forEach { (points, color) ->
-                            if (chartStyle == "Area" && points.size > 1) {
-                                val area = androidx.compose.ui.graphics.Path().apply {
-                                    moveTo(points.first().x, bottom)
-                                    points.forEach { lineTo(it.x, it.y) }
-                                    lineTo(points.last().x, bottom)
-                                    close()
-                                }
-                                drawPath(area, color.copy(alpha = .16f))
-                            }
-                            val line = androidx.compose.ui.graphics.Path().apply {
-                                points.forEachIndexed { index, point -> if (index == 0) moveTo(point.x, point.y) else lineTo(point.x, point.y) }
-                            }
-                            drawPath(line, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round))
-                            points.forEach { drawCircle(color, radius = 3.5.dp.toPx(), center = it) }
-                        }
-                    }
-                    drawCircle(Green, radius = 4.dp.toPx(), center = androidx.compose.ui.geometry.Offset(selectedX, top - 5.dp.toPx()))
-                } else {
-                    val totalIncome = monthlyIncome.sum().toFloat()
-                    val totalExpenses = monthlyExpenses.sum().toFloat()
-                    val total = (totalIncome + totalExpenses).coerceAtLeast(1f)
-                    val diameter = minOf(size.width * .62f, size.height * .88f)
-                    val arcSize = androidx.compose.ui.geometry.Size(diameter, diameter)
-                    val arcTopLeft = androidx.compose.ui.geometry.Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
-                    var angle = -90f
-                    listOf(totalIncome to incomeColor, totalExpenses to expenseColor).forEach { (value, color) ->
-                        val sweep = value / total * 360f
-                        drawArc(color, angle, sweep, false, topLeft = arcTopLeft, size = arcSize, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 27.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Butt))
-                        angle += sweep
-                    }
-                    drawContext.canvas.nativeCanvas.drawText("6 MONTHS", size.width / 2f, size.height / 2f - 2.dp.toPx(), AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply { color = Ink.toArgb(); textAlign = AndroidPaint.Align.CENTER; textSize = 10.sp.toPx(); typeface = android.graphics.Typeface.DEFAULT_BOLD })
-                    drawContext.canvas.nativeCanvas.drawText(Money.format(totalExpenses.toLong()), size.width / 2f, size.height / 2f + 15.dp.toPx(), AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply { color = expenseColor.toArgb(); textAlign = AndroidPaint.Align.CENTER; textSize = 11.sp.toPx(); typeface = android.graphics.Typeface.DEFAULT_BOLD })
+                drawLine(
+                    Green.copy(alpha = .8f),
+                    androidx.compose.ui.geometry.Offset(selectedX, top - 5.dp.toPx()),
+                    androidx.compose.ui.geometry.Offset(selectedX, bottom),
+                    strokeWidth = 1.5.dp.toPx(),
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))
+                )
+                val barWidth = groupWidth * 0.27f
+                val barGap = groupWidth * 0.07f
+                val labelPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+                    color = Ink.toArgb()
+                    textAlign = AndroidPaint.Align.CENTER
+                    textSize = 8.sp.toPx()
+                    typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
                 }
+                val labelColors = listOf(Color(0xFF078F73), Color(0xFF175ED8))
+                months.indices.forEach { index ->
+                    val centerX = left + groupWidth * (index + 0.5f)
+                    val values = listOf(monthlyIncome[index], monthlyExpenses[index])
+                    val colors = listOf(Color(0xFF08A985), Color(0xFF2878F0))
+                    values.forEachIndexed { seriesIndex, value ->
+                        val height = (value.toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * chartHeight
+                        val x = centerX + if (seriesIndex == 0) -(barWidth + barGap / 2f) else barGap / 2f
+                        val barTop = bottom - height
+                        if (value > 0L && height > 0f) {
+                            drawRoundRect(
+                                color = colors[seriesIndex],
+                                topLeft = androidx.compose.ui.geometry.Offset(x, barTop),
+                                size = androidx.compose.ui.geometry.Size(barWidth, height),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx())
+                            )
+                        }
+                        labelPaint.color = labelColors[seriesIndex].toArgb()
+                        val labelOffset = if (seriesIndex == 0) 4.dp.toPx() else 14.dp.toPx()
+                        val labelY = if (value == 0L) bottom - labelOffset else (barTop - labelOffset).coerceAtLeast(10.dp.toPx())
+                        drawContext.canvas.nativeCanvas.drawText(Money.format(value), x + barWidth / 2f, labelY, labelPaint)
+                    }
+                }
+                drawCircle(Green, radius = 4.dp.toPx(), center = androidx.compose.ui.geometry.Offset(selectedX, top - 5.dp.toPx()))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 months.forEachIndexed { index, month ->
-                    Text(month.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH),
+                    Text(
+                        month.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH),
                         modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(if (index == selectedIndex) Mint else Color.Transparent)
                             .clickable { selectedIndex = index }.padding(horizontal = 5.dp, vertical = 3.dp),
-                        color = if (index == selectedIndex) Green else Muted, fontSize = 9.sp,
-                        fontWeight = if (index == selectedIndex) FontWeight.Bold else FontWeight.Normal)
+                        color = if (index == selectedIndex) Green else Muted,
+                        fontSize = 9.sp,
+                        fontWeight = if (index == selectedIndex) FontWeight.Bold else FontWeight.Normal
+                    )
                 }
             }
-            Text(if (chartStyle == "Donut") "Donut shows the six-month income and expense split; tap a month to inspect its values." else "Tap anywhere on the chart to view that month's exact amounts.", color = Muted, fontSize = 10.sp)
+            Text("Tap anywhere on the chart to view that month's exact amounts.", color = Muted, fontSize = 10.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(incomeColor))
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF089B85)))
                     Text("Income", color = Muted, fontSize = 10.sp)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(expenseColor))
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF247FEB)))
                     Text("Expenses", color = Muted, fontSize = 10.sp)
                 }
             }
