@@ -6435,6 +6435,8 @@ private fun AddTransactionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.fillMaxWidth(0.96f).widthIn(max = 640.dp),
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
         shape = if (AppBlueGlass) appGlassCardShape() else RoundedCornerShape(30.dp),
         containerColor = if (AppBlueGlass) appGlassSurface() else Color(0xFFFCFBFF),
         titleContentColor = Ink,
