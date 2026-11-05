@@ -23,6 +23,7 @@ import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
 import org.json.JSONArray
 import org.json.JSONObject
 import androidx.compose.foundation.Image
@@ -33,6 +34,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -2916,6 +2918,10 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
     val monthlyExpenses = months.map { month ->
         allTransactions.filter { transaction -> parseScheduleDate(transaction.date)?.let { YearMonth.from(it) == month } == true && !transaction.income }.sumOf { it.amount }
     }
+    var selectedIndex by remember(months) { mutableIntStateOf(months.lastIndex) }
+    val selectedTrendMonth = months[selectedIndex]
+    val selectedIncome = monthlyIncome[selectedIndex]
+    val selectedExpenses = monthlyExpenses[selectedIndex]
     val maxValue = (monthlyIncome + monthlyExpenses).maxOrNull()?.coerceAtLeast(1L) ?: 1L
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -2934,10 +2940,42 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
                     Text("LIVE DATA", Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = IncomeGreen, fontWeight = FontWeight.Bold, fontSize = 9.sp)
                 }
             }
-            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(190.dp)) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = appCardSurface(SkyTint)),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, appGlassBorder().copy(alpha = .55f))
+            ) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text(selectedTrendMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)), color = Ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF08A985)))
+                            Text("Income", color = Muted, fontSize = 11.sp)
+                        }
+                        Text(Money.format(selectedIncome), color = IncomeGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF2878F0)))
+                            Text("Expenses", color = Muted, fontSize = 11.sp)
+                        }
+                        Text(Money.format(selectedExpenses), color = ExpenseRed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                    Text("Net cash flow · " + Money.format(selectedIncome - selectedExpenses), color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                }
+            }
+            androidx.compose.foundation.Canvas(
+                Modifier.fillMaxWidth().height(190.dp).pointerInput(months) {
+                    androidx.compose.foundation.gestures.detectTapGestures { tap ->
+                        val left = 8f
+                        val right = size.width - 8f
+                        val fraction = ((tap.x - left) / (right - left)).coerceIn(0f, .999999f)
+                        selectedIndex = (fraction * months.size).toInt().coerceIn(months.indices)
+                    }
+                }
+            ) {
                 val left = 8f
                 val right = size.width - 8f
-                // Reserve space above the tallest bars so exact amount labels remain visible.
                 val top = 26.dp.toPx()
                 val bottom = size.height - 18.dp.toPx()
                 val chartHeight = bottom - top
@@ -2946,6 +2984,14 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
                     drawLine(Color(0xFF9AB8D6).copy(alpha = .28f), androidx.compose.ui.geometry.Offset(left, y), androidx.compose.ui.geometry.Offset(right, y), strokeWidth = 1.dp.toPx())
                 }
                 val groupWidth = (right - left) / months.size
+                val selectedX = left + groupWidth * (selectedIndex + .5f)
+                drawLine(
+                    Green.copy(alpha = .8f),
+                    androidx.compose.ui.geometry.Offset(selectedX, top - 5.dp.toPx()),
+                    androidx.compose.ui.geometry.Offset(selectedX, bottom),
+                    strokeWidth = 1.5.dp.toPx(),
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))
+                )
                 val barWidth = groupWidth * 0.27f
                 val barGap = groupWidth * 0.07f
                 val labelPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
@@ -2971,17 +3017,27 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
                                 cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx())
                             )
                         }
-                        // Stagger the two labels vertically within each month so exact values do not collide.
                         labelPaint.color = labelColors[seriesIndex].toArgb()
                         val labelOffset = if (seriesIndex == 0) 4.dp.toPx() else 14.dp.toPx()
                         val labelY = if (value == 0L) bottom - labelOffset else (barTop - labelOffset).coerceAtLeast(10.dp.toPx())
                         drawContext.canvas.nativeCanvas.drawText(Money.format(value), x + barWidth / 2f, labelY, labelPaint)
                     }
                 }
+                drawCircle(Green, radius = 4.dp.toPx(), center = androidx.compose.ui.geometry.Offset(selectedX, top - 5.dp.toPx()))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                months.forEach { month -> Text(month.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH), color = Muted, fontSize = 9.sp) }
+                months.forEachIndexed { index, month ->
+                    Text(
+                        month.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH),
+                        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(if (index == selectedIndex) Mint else Color.Transparent)
+                            .clickable { selectedIndex = index }.padding(horizontal = 5.dp, vertical = 3.dp),
+                        color = if (index == selectedIndex) Green else Muted,
+                        fontSize = 9.sp,
+                        fontWeight = if (index == selectedIndex) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
             }
+            Text("Tap anywhere on the chart to view that month's exact amounts.", color = Muted, fontSize = 10.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF089B85)))
