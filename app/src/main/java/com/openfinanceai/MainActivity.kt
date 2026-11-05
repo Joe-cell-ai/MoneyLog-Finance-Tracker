@@ -771,7 +771,7 @@ private fun FinanceApp() {
         if (granted) scanBankSms()
         else {
             importedPreview = emptyList()
-            importMessage = "Android blocked SMS access. If this app was installed from an APK, open App Info, tap the three-dot menu and choose Allow restricted settings (if shown), then open Permissions > SMS and allow access. Return to MoneyLog and try again. You can always use CSV import instead."
+            importMessage = "Android blocked SMS access. You can still import future bank alerts by enabling Notification Access below, or use CSV import for older transactions."
         }
     }
     var loans by remember {
@@ -1165,6 +1165,20 @@ private fun FinanceApp() {
                                 data = android.net.Uri.parse("package:" + context.packageName)
                             }
                             context.startActivity(intent)
+                        },
+                        onScanNotifications = {
+                            val captured = readCapturedBankNotifications(context)
+                            val existingKeys = transactions.map { transactionKey(it) }.toSet()
+                            importedPreview = captured.distinctBy { transactionKey(it) }
+                                .filterNot { transactionKey(it) in existingKeys }
+                            importMessage = if (captured.isEmpty()) {
+                                "No supported bank transaction notifications have been captured yet. Enable Notification Access, then wait for a new bank alert."
+                            } else {
+                                "Found ${captured.size} bank notification(s). ${captured.size - importedPreview.size} duplicate(s) skipped. Review before importing."
+                            }
+                        },
+                        onOpenNotificationSettings = {
+                            context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                         },
                         onImport = {
                             val count = importedPreview.size
@@ -6909,6 +6923,8 @@ private fun ImportTransactionsScreen(
     onChooseFile: () -> Unit,
     onScanSms: () -> Unit,
     onOpenAppSettings: () -> Unit,
+    onScanNotifications: () -> Unit,
+    onOpenNotificationSettings: () -> Unit,
     onImport: () -> Unit
 ) {
     LazyColumn(
@@ -6941,6 +6957,23 @@ private fun ImportTransactionsScreen(
                 Icon(Icons.Default.Settings, null)
                 Spacer(Modifier.width(8.dp))
                 Text("Open app settings")
+            }
+        }
+        item {
+            InfoCard(
+                "Import future bank alerts",
+                "If Android blocks SMS permission for this GitHub-installed APK, enable Notification Access. MoneyLog will watch notifications posted by your bank apps, detect likely debit and credit alerts locally, and keep them for your review. It cannot retrieve older SMS messages.",
+                Icons.Default.NotificationsActive
+            )
+            OutlinedButton(onClick = onOpenNotificationSettings, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Notifications, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Enable Notification Access")
+            }
+            Button(onClick = onScanNotifications, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.MarkEmailRead, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Review captured bank alerts")
             }
         }
         item {
@@ -6990,6 +7023,42 @@ private fun ImportTransactionsScreen(
             Button(onClick = onImport, enabled = preview.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Import reviewed transactions") }
         }
     }
+}
+
+private fun readCapturedBankNotifications(context: Context): List<Transaction> {
+    val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+    val stored = runCatching { JSONArray(prefs.getString("captured_bank_notifications", "[]") ?: "[]") }.getOrDefault(JSONArray())
+    val results = mutableListOf<Transaction>()
+    for (index in 0 until stored.length()) {
+        val item = stored.optJSONObject(index) ?: continue
+        val body = item.optString("body")
+        val postedAt = item.optLong("postedAt", 0L)
+        if (body.isBlank() || postedAt <= 0L) continue
+        val receivedDate = java.time.Instant.ofEpochMilli(postedAt)
+            .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        val parsed = BankSmsParser.parse(body, receivedDate) ?: continue
+        val key = item.optString("key").ifBlank { item.optString("packageName") + "-" + postedAt }
+        val notes = buildString {
+            append("Detected from a bank app notification. Verify details before relying on this entry.")
+            if (parsed.exactAmount.contains('.')) {
+                append(" Exact alert amount: ₹").append(parsed.exactAmount)
+                append(". Stored amount is rounded to the nearest rupee; verify before import.")
+            }
+        }
+        results += Transaction(
+            title = parsed.merchant?.let { (if (parsed.income) "From " else "To ") + it }
+                ?: "Bank notification",
+            category = if (parsed.income) "Other income" else "Bank transfer",
+            date = parsed.date,
+            amount = parsed.amount,
+            income = parsed.income,
+            source = "Notification import",
+            notificationKey = "notification-import:" + key,
+            captureStatus = "Needs review",
+            notes = notes
+        )
+    }
+    return results
 }
 
 private fun readRecentBankSms(context: Context): List<Transaction> {
