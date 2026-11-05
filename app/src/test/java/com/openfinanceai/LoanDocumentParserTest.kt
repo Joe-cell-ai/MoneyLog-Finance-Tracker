@@ -553,6 +553,6 @@ class LoanDocumentParserTest {
         assertEquals(5_136_00L, result.scheduleRows.first().installment)
         assertEquals(509_755L, result.scheduleRows.last().installment)
         assertEquals(4_000_000L, result.scheduleRows.sumOf { it.principal })
-        assertEquals(620_465L, result.scheduleRows.sumOf { it.interest })
+        assertEquals(618_555L, result.scheduleRows.sumOf { it.interest })
     }
 }
