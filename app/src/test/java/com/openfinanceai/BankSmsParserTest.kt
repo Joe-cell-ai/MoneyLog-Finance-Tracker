@@ -82,6 +82,18 @@ class BankSmsParserTest {
     }
 
     @Test
+    fun categorizesSmsMerchantsInsteadOfDefaultingEveryExpenseToBankTransfer() {
+        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Amazon", "Paid to Amazon", false))
+        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Flipkart", "UPI purchase", false))
+        assertEquals("Taxi", SmsTransactionImporter.categoryForSms("Ola", "Ride payment", false))
+        assertEquals("Taxi", SmsTransactionImporter.categoryForSms("Uber", "Trip payment", false))
+        assertEquals("Food & Dining", SmsTransactionImporter.categoryForSms("Swiggy", "Order payment", false))
+        assertEquals("Bank transfer", SmsTransactionImporter.categoryForSms(null, "IMPS transferred to account", false))
+        assertEquals("Other", SmsTransactionImporter.categoryForSms("Unknown Merchant", "Payment successful", false))
+        assertEquals("Salary", SmsTransactionImporter.categoryForSms("ACME Payroll", "Salary credited", true))
+    }
+
+    @Test
     fun preservesExactPaiseValueForReviewWhileLegacyModelUsesRoundedRupees() {
         val parsed = BankSmsParser.parse(
             "ICICI Bank Acct XX450 debited for Rs 268.33 on 04-Nov-26; New Merchant credited. UPI:123456.",
