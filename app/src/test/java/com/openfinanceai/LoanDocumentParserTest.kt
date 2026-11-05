@@ -519,4 +519,40 @@ class LoanDocumentParserTest {
         assertEquals("YES BANK Limited", LoanDocumentParser.parse(statement).lender)
     }
 
+
+    @Test fun parsesBranchNorthernArcLoanDetailsAndNineRowRepaymentTable() {
+        val statement = """
+            NAME: NELATOORI VIJAY KUMAR REDDY
+            LOAN DETAILS
+            Term loan of an amount INR 40000.0/- (Rupees Forty Thousand only).
+            Lender 1: INR 4000.0/- | Lender 2: INR 36000.0/-
+            Interest Rate 35.43% per annum calculated on reducing balance basis.
+            Tenor (in months) 9 months
+            Processing Charges INR 2360.0/- plus applicable taxes.
+            REPAYMENT SCHEDULE In Indian Rupees
+            Installment No. Outstanding Principal (in Rupees) Principal (in Rupees) Interest (in Rupees) Installment (in Rupees)
+            1 40000.0 3955.07 1180.93 5136.0
+            2 36044.93 4036.36 1099.64 5136.0
+            3 32008.57 4159.5 976.5 5136.0
+            4 27849.07 4368.62 767.38 5136.0
+            5 23480.45 4419.67 716.33 5136.0
+            6 19060.78 4573.26 562.74 5136.0
+            7 14487.52 4694.02 441.98 5136.0
+            8 9793.5 4846.86 289.14 5136.0
+            9 4946.64 4946.64 150.91 5097.55
+            "Lender 1" means Branch International Financial Services Private Limited, a company incorporated under the Companies Act.
+        """.trimIndent()
+        val result = LoanDocumentParser.parse(statement)
+        assertEquals("NELATOORI VIJAY KUMAR REDDY", result.borrowerName)
+        assertEquals("Branch International Financial Services Private Limited", result.lender)
+        assertEquals(4_000_000L, result.principal)
+        assertEquals(35.43, result.annualInterestRate!!, 0.0)
+        assertEquals(9, result.tenureMonths)
+        assertEquals(236_000L, result.processingFee)
+        assertEquals(9, result.scheduleRows.size)
+        assertEquals(5_136_00L, result.scheduleRows.first().installment)
+        assertEquals(509_755L, result.scheduleRows.last().installment)
+        assertEquals(4_000_000L, result.scheduleRows.sumOf { it.principal })
+        assertEquals(620_465L, result.scheduleRows.sumOf { it.interest })
+    }
 }
