@@ -1147,13 +1147,7 @@ private fun FinanceApp() {
                     }
                 }
             },
-            floatingActionButton = {
-                if (!AppBlueGlass && (tab == "Home" || tab == "Activity")) {
-                    FloatingActionButton(onClick = { showAddAsIncome = false; showAdd = true }, containerColor = Green, contentColor = Color.White) {
-                        Icon(Icons.Default.Add, "Add transaction")
-                    }
-                }
-            }
+            floatingActionButton = {}
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding).padding(top = 20.dp).offset { androidx.compose.ui.unit.IntOffset(0, -50) }) {
                 when (tab) {
