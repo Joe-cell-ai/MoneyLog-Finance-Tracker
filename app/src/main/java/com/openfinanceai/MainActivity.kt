@@ -5090,8 +5090,16 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                 val document = LoanDocumentParser.parse(extractedText)
                 if (document.scheduleRows.isEmpty()) error("No complete monthly repayment rows could be read from this PDF. No data was saved.")
                 val mappedRows = LoanDocumentScheduleMapper.map(document.scheduleRows, document.repaymentStartDate)
-                if (mappedRows.size != document.scheduleRows.size) {
+                val hasAnyExplicitDueDate = document.scheduleRows.any { !it.dueDate.isNullOrBlank() }
+                val hasMissingExplicitDueDate = document.scheduleRows.any { it.dueDate.isNullOrBlank() }
+                // Preserve complete lender financial rows when the agreement does not state dates.
+                // Never fabricate calendar dates; mixed/invalid date columns remain a hard failure.
+                val scheduleHasNoDates = !hasAnyExplicitDueDate && document.repaymentStartDate.isNullOrBlank()
+                if (mappedRows.size != document.scheduleRows.size && !scheduleHasNoDates) {
                     error("The PDF schedule has missing, duplicated, invalid or unordered dates/rows. No data was saved.")
+                }
+                if (hasAnyExplicitDueDate && hasMissingExplicitDueDate) {
+                    error("The PDF contains a partially readable due-date column. No dates were guessed and nothing was saved.")
                 }
                 if (document.tenureMonths != null && document.scheduleRows.size != document.tenureMonths) {
                     error("The PDF states ${document.tenureMonths} installments, but only ${document.scheduleRows.size} complete rows were extracted. No partial schedule was saved.")
@@ -5136,8 +5144,8 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     loan.lender, uri.lastPathSegment ?: "Loan PDF", document, financialRowsForRoom, roomValidation
                 )
                 val arr = JSONArray()
-                mappedRows.forEach { row ->
-                    arr.put(JSONObject().put("date", row.date).put("amount", row.amount).put("installment", row.installmentNumber))
+                document.scheduleRows.forEach { row ->
+                    arr.put(JSONObject().put("date", row.dueDate ?: "").put("amount", row.installment).put("installment", row.installmentNumber))
                 }
                 val savedRows = JSONArray()
                 document.scheduleRows.forEach { row ->
@@ -5175,12 +5183,12 @@ private fun LoanDetailsScreen(loan: Loan, onEmiLongPress: (String, Long, String)
                     .putString("bank_schedule_${loan.lender}", arr.toString())
                     .putString("loan_document_metadata_${loan.lender}", metadata.toString())
                     .apply()
-                importedSchedule = mappedRows.map { it.date to it.amount }
+                importedSchedule = document.scheduleRows.map { (it.dueDate ?: "Date not stated") to it.installment }
                 loanDocumentMetadata = metadata
-                val totalInstallments = LoanMoney.sumPaise(mappedRows.map { it.amount })
+                val totalInstallments = LoanMoney.sumPaise(document.scheduleRows.map { it.installment })
                 val totalPrincipal = LoanMoney.sumPaise(document.scheduleRows.map { it.principal })
                 val totalInterest = LoanMoney.sumPaise(document.scheduleRows.map { it.interest })
-                pdfMessage = "Imported ${mappedRows.size} installments · EMI total ${LoanMoney.formatPaise(totalInstallments)} · Principal ${LoanMoney.formatPaise(totalPrincipal)} · Interest ${LoanMoney.formatPaise(totalInterest)}. Source authenticity is not verified; confirm with your lender." +
+                pdfMessage = "Imported ${document.scheduleRows.size} installments · EMI total ${LoanMoney.formatPaise(totalInstallments)} · Principal ${LoanMoney.formatPaise(totalPrincipal)} · Interest ${LoanMoney.formatPaise(totalInterest)}. Source authenticity is not verified; confirm with your lender." +
                     if (sourceWarnings.isNotEmpty()) " Review ${sourceWarnings.size} document warning(s) in Loan Overview." else ""
             }.onFailure { error ->
                 pdfMessage = error.message ?: "Could not validate this PDF. No schedule was saved."
