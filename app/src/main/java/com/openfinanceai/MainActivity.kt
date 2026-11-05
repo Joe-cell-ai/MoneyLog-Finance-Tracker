@@ -6959,8 +6959,6 @@ private fun csvEscape(value: String): String =
     } else value
 
 @Composable
-
-@Composable
 private fun SalarySettingsScreen(onSave: (Boolean, Long) -> Unit) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
@@ -7126,7 +7124,7 @@ private fun readRecentBankSms(context: Context): List<Transaction> {
                 income = parsed.income,
                 source = "SMS import",
                 notificationKey = "sms-import:" + id,
-                captureStatus = "Needs review",
+                captureStatus = "",
                 notes = notes
             )
         }
