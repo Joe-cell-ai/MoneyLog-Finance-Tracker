@@ -76,7 +76,7 @@ internal object LoanDocumentParser {
         val lenderLabelValues = listOfNotNull(
             Regex("""(?im)^\s*Lender\s*:\s*([^\r\n]{3,120}?)\s*$""").find(text)?.groupValues?.get(1)?.trim(),
             Regex("""(?im)^\s*Name of the Regulated Entity\s*:\s*([^\r\n]{3,120}?)\s*$""").find(text)?.groupValues?.get(1)?.trim(),
-            Regex("""(?im)^\s*Lender\s+1\s+means\s+([^,\r\n]{3,120})""").find(text)?.groupValues?.get(1)?.trim()
+            Regex("""(?im)^\s*["“]?Lender\s+1["”]?\s+means\s+([^,\r\n]{3,120})""").find(text)?.groupValues?.get(1)?.trim()
         ).filter { candidate ->
             candidate.length in 3..120 && candidate.any { it.isLetter() } &&
                 !candidate.matches(Regex("""(?i)(?:n/?a|na|unknown|not identified|not available|nil|none)"""))
