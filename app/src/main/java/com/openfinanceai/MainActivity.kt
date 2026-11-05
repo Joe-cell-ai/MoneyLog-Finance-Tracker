@@ -6937,6 +6937,26 @@ private fun ImportTransactionsScreen(
         }
         item {
             InfoCard(
+                "MoneyLog Messages",
+                "Use MoneyLog as your office phone's SMS app. Open your inbox, read conversations, and send text messages. Android will ask before changing your default messaging app.",
+                Icons.Default.Sms
+            )
+            Button(
+                onClick = { context.startActivity(Intent(context, SmsInboxActivity::class.java)) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Message, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Open MoneyLog Messages / Set as default")
+            }
+            Text(
+                "Note: this first release supports SMS text messages. MMS media messages are not yet decoded or displayed.",
+                color = Muted,
+                fontSize = 12.sp
+            )
+        }
+        item {
+            InfoCard(
                 "Scan bank SMS",
                 "With your permission, MoneyLog checks recent SMS messages on this device for clear debit and credit alerts. Message contents are processed locally and are not uploaded. OTPs and unclear messages are ignored.",
                 Icons.Default.Sms
