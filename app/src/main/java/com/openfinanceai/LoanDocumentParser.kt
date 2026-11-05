@@ -172,7 +172,7 @@ internal object LoanDocumentParser {
             }
         }
 
-        val scheduleHeader = Regex("""(?im)^\s*(?:[0-9]{1,2}\s+)?(?:Official\s+)?(?:Illustrative\s+)?(?:Repayment\s+Schedule|Amortization\s+(?:Timeline(?:\s+Statement)?|Schedule))(?:\s+(?:in\s+)?(?:Indian\s+)?Rupees)?\s*$""").find(text)
+        val scheduleHeader = Regex("""(?im)^\s*(?:[0-9]{1,2}\s+)?(?:Official\s+)?(?:Illustrative\s+)?(?:Repayment\s+Schedule|Payment\s+Schedule|Amortization\s+(?:Timeline(?:\s+Statement)?|Schedule))(?:\s+(?:in\s+)?(?:Indian\s+)?Rupees)?\s*$""").find(text)
         val scheduleText = scheduleHeader?.let { text.substring(it.range.last + 1) }.orEmpty()
             .replace("₹", "").replace(Regex("""(?i)\bRs\.?\s*"""), "")
         val scheduleHeaderLines = scheduleText.lines().take(30).joinToString(" ")
@@ -208,7 +208,14 @@ internal object LoanDocumentParser {
             if (dateMatch != null && dueDate == null) return@mapNotNull null
             val numericSource = if (dateMatch != null) rawValues.removeRange(dateMatch.range) else rawValues
             val tokens = Regex("""[0-9][0-9,]*(?:\.[0-9]{1,4})?""").findAll(numericSource).map { it.value }.toList()
-            if (hasScheduleRateColumn && tokens.size == 5) {
+            if (hasScheduleRateColumn && tokens.size == 7) {
+                // Payment Schedule exports append Rate(%), EMI Holiday amount and flag
+                // after the five financial columns. The rate is metadata, not money.
+                val rate = tokens[5].replace(",", "").toDoubleOrNull() ?: return@mapNotNull null
+                val amounts = listOf(0, 1, 2, 3, 4).map { exactScheduleAmount(tokens[it]) ?: return@mapNotNull null }
+                if (rate !in 0.0..100.0) return@mapNotNull null
+                LoanDocumentScheduleRow(no, amounts[0], amounts[2], amounts[3], amounts[1], rate, dueDate, amounts[4])
+            } else if (hasScheduleRateColumn && tokens.size == 5) {
                 val rate = tokens[1].replace(",", "").toDoubleOrNull() ?: return@mapNotNull null
                 val amounts = listOf(0, 2, 3, 4).map { exactScheduleAmount(tokens[it]) ?: return@mapNotNull null }
                 if (rate !in 0.0..100.0) return@mapNotNull null
