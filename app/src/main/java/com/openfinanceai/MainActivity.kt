@@ -5897,11 +5897,11 @@ private fun AddLoanScreen(onSave: (String, Long, Long, Long, Double, Long, Long,
         }
     }
     val currentOutstandingPaise = if (actualStatementBalance != null) LoanMoney.parsePaise(statementOutstanding) ?: 0L
-        else scheduleBasedOutstanding ?: (LoanMoney.parsePaise(calculatedOutstanding.toString()) ?: 0L)
+        else scheduleBasedOutstanding ?: (LoanMoney.calculatedRupeesToPaise(calculatedOutstanding) ?: 0L)
     val completePdfSchedule = importedScheduleRows.takeIf { rows -> rows.size == total && rows.map { it.installmentNumber } == (1..rows.size).toList() }
     val remainingPdfRows = completePdfSchedule?.drop(paid.coerceIn(0, completePdfSchedule.size))
     val remainingPaymentsPaise = remainingPdfRows?.let { rows -> LoanMoney.sumPaise(rows.map { it.installment }) }
-        ?: (LoanMoney.parsePaise(monthly.toString()) ?: 0L).let { Math.multiplyExact(it, remainingMonths.toLong()) }
+        ?: (LoanMoney.calculatedRupeesToPaise(monthly) ?: 0L).let { Math.multiplyExact(it, remainingMonths.toLong()) }
     val remainingInterestPaise = remainingPdfRows?.let { rows -> LoanMoney.sumPaise(rows.map { it.interest }) }
         ?: (remainingPaymentsPaise - currentOutstandingPaise).coerceAtLeast(0L)
     LazyColumn(contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
