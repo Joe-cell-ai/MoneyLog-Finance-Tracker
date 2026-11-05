@@ -1065,10 +1065,10 @@ private fun FinanceApp() {
             outline = if (AppBlueGlass) GlassBorder else Color(0xFFDADCE8)
         ),
         shapes = Shapes(
-            extraSmall = RoundedCornerShape(10.dp),
-            small = RoundedCornerShape(18.dp),
-            medium = RoundedCornerShape(22.dp),
-            large = RoundedCornerShape(28.dp)
+            extraSmall = RoundedCornerShape(if (AppBlueGlass) 12.dp else 10.dp),
+            small = if (AppBlueGlass) appGlassControlShape() else RoundedCornerShape(18.dp),
+            medium = if (AppBlueGlass) appGlassCardShape() else RoundedCornerShape(22.dp),
+            large = if (AppBlueGlass) appGlassCardShape() else RoundedCornerShape(28.dp)
         )
     ) {
         val baseDensity = androidx.compose.ui.platform.LocalDensity.current
@@ -3989,7 +3989,7 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
                         Spacer(Modifier.width(11.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text("App lock", color = Ink, fontWeight = FontWeight.Bold)
-                            Text(if (lockEnabled) "PIN protection is enabled" else "Protect MoneyLog when you leave the app", color = Muted, fontSize = 11.sp)
+                            Text(if (lockEnabled) "Device authentication is enabled" else "Protect MoneyLog when you leave the app", color = Muted, fontSize = 11.sp)
                         }
                         Switch(
                             checked = lockEnabled,
@@ -7037,7 +7037,7 @@ private fun parseTransactionCsv(csv: String): List<Transaction> {
     require(rows.size >= 2) { "CSV must contain a header row and at least one transaction." }
     val header = rows.first().map { it.replace("\uFEFF", "").trim().lowercase(Locale.ROOT).replace("_", " ") }
     fun findHeader(vararg names: String) = names.firstNotNullOfOrNull { name -> header.indexOf(name).takeIf { it >= 0 } }
-    val dateIndex = findHeader("date", "transaction date", "txn date", "value date")
+    val dateIndex = findHeader("date", "transaction date", "txn date", "value date", "posting date", "posted date", "date of transaction")
     val titleIndex = findHeader("description", "narration", "details", "merchant", "particulars", "transaction details", "title")
     val amountIndex = findHeader("amount", "transaction amount", "txn amount")
     val debitIndex = findHeader("debit", "withdrawal", "withdrawals", "money out")
@@ -7047,6 +7047,7 @@ private fun parseTransactionCsv(csv: String): List<Transaction> {
     val paymentMethodIndex = findHeader("payment method", "payment mode", "mode")
     val notesIndex = findHeader("notes", "note", "remarks", "comments")
     val tagIndex = findHeader("tag", "tags")
+    require(dateIndex != null) { "Could not identify a Date column. Include Date or Transaction Date in the CSV header." }
     require(titleIndex != null && (amountIndex != null || debitIndex != null || creditIndex != null)) {
         "Could not identify columns. Include Description/Narration and Amount, or separate Debit and Credit columns."
     }
@@ -7057,7 +7058,8 @@ private fun parseTransactionCsv(csv: String): List<Transaction> {
     }
     return rows.drop(1).mapNotNull { values ->
         val title = values.getOrNull(titleIndex)?.trim().orEmpty()
-        if (title.isBlank()) return@mapNotNull null
+        val transactionDate = values.getOrNull(dateIndex)?.trim().orEmpty()
+        if (title.isBlank() || transactionDate.isBlank()) return@mapNotNull null
         val debit = amountAt(values, debitIndex)
         val credit = amountAt(values, creditIndex)
         val rawAmount = if (amountIndex != null) amountAt(values, amountIndex) else maxOf(debit, credit)
@@ -7068,7 +7070,7 @@ private fun parseTransactionCsv(csv: String): List<Transaction> {
         Transaction(
             title = title,
             category = values.getOrNull(categoryIndex ?: -1)?.takeIf { it.isNotBlank() } ?: if (isIncome) "Income" else "Imported",
-            date = values.getOrNull(dateIndex ?: -1)?.takeIf { it.isNotBlank() } ?: "Imported",
+            date = transactionDate,
             amount = rawAmount,
             income = isIncome,
             paymentMethod = values.getOrNull(paymentMethodIndex ?: -1)?.takeIf { it.isNotBlank() } ?: "Not set",
