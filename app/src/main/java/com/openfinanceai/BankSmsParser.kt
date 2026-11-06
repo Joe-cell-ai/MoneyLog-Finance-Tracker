@@ -74,7 +74,7 @@ internal object BankSmsParser {
             exactAmount = exact.stripTrailingZeros().toPlainString(),
             income = isIncome,
             date = transactionDate.toString(),
-            merchant = extractMerchant(body, amountMatch.range.last + 1)
+            merchant = extractMerchant(body, amountMatch.range.first, amountMatch.range.last + 1)
         )
     }
 
@@ -99,7 +99,19 @@ internal object BankSmsParser {
         }
     }
 
-    private fun extractMerchant(body: String, amountEnd: Int): String? {
+    private fun extractMerchant(body: String, amountStart: Int, amountEnd: Int): String? {
+        // Some banks/apps put the payee before the amount (for example,
+        // "Paid to AMAZON for Rs. 499"). Check explicit payee labels and
+        // directional phrases on the complete message before using the old
+        // after-amount extraction.
+        val preAmountText = body.substring(0, amountStart.coerceIn(0, body.length))
+        val labeled = Regex(
+            """(?i)\b(?:merchant|payee|beneficiary)\s*[:=-]\s*([^.;,\n]+)"""
+        ).find(body)?.groupValues?.getOrNull(1)
+        val beforeAmountDirectional = Regex(
+            """(?i)\b(?:paid\s+to|payment\s+to|purchase\s+at|sent\s+to|transferred\s+to|to|at|towards)\s+(.+?)(?=\s+(?:for\s+)?(?:₹|rs\.?|inr)\s*[0-9]|[.;,\n]|$)"""
+        ).find(preAmountText)?.groupValues?.getOrNull(1)
+
         val afterAmount = body.substring(amountEnd.coerceIn(0, body.length))
             .replace(Regex("""(?i)\bUPI\s*[:#].*$"""), "")
             .replace(Regex("""(?i)\b(call|customer care|sms block)\b.*$"""), "")
@@ -118,8 +130,9 @@ internal object BankSmsParser {
             .replace(Regex("""(?i)\b(?:payment|transaction)\s+(?:is\s+)?(?:successful|completed)\b.*$"""), "")
             .trim(' ', '.', ',', ';', ':', '-')
 
-        val candidate = (fromDate ?: directional ?: fallback)
+        val candidate = (labeled ?: beforeAmountDirectional ?: fromDate ?: directional ?: fallback)
             ?.replace(Regex("""(?i)\s+on\s+\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4}.*$"""), "")
+            ?.replace(Regex("""(?i)\s+(?:via|using)\s+(?:upi|imps|neft|rtgs).*$"""), "")
             ?.trim(' ', '.', ',', ';', ':', '-')
             ?.replace(Regex("""\s+"""), " ")
             ?.take(60)
@@ -128,6 +141,8 @@ internal object BankSmsParser {
         if (candidate.isBlank()) return null
         if (Regex("""(?i)^(autopay|auto-pay|mandate|upi|payment|transaction|icici bank|bank account|savings account|current account|acct|account|available balance)$""")
                 .matches(candidate)) return null
+        // Reject obvious reference/account fragments rather than treating them as a merchant.
+        if (Regex("""(?i)^(?:\d{5,}|[a-z0-9]{8,}@(?:ibl|ybl|ok\w+|paytm))$""").matches(candidate)) return null
         return candidate
     }
 }
