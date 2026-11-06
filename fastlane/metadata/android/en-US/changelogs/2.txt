@@ -1,0 +1,1 @@
+Initial public release preparation. Finance tracking, budgets, loan records, reminders, and transaction import/export.
