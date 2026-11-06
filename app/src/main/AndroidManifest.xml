@@ -3,6 +3,7 @@
         <package android:name="com.google.android.apps.docs" />
     </queries>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
@@ -30,6 +31,12 @@
             </intent-filter>
         </activity>
         <receiver android:name=".EmiReminderReceiver" android:exported="false" />
+        <receiver android:name=".MoneyLogBootReceiver" android:enabled="true" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <receiver android:name=".GoldLoanInterestReminderReceiver" android:exported="false" />
         <receiver android:name=".SmsAutoImportReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">
             <intent-filter>
