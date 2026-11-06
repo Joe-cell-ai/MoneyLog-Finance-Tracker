@@ -89,6 +89,8 @@ class BankSmsParserTest {
         assertEquals("Taxi", SmsTransactionImporter.categoryForSms("Uber", "Trip payment", false))
         assertEquals("Food & Dining", SmsTransactionImporter.categoryForSms("Swiggy", "Order payment", false))
         assertEquals("Bank transfer", SmsTransactionImporter.categoryForSms(null, "IMPS transferred to account", false))
+        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Amazon", "Transferred to Amazon by UPI", false))
+        assertEquals("Other", SmsTransactionImporter.categoryForSms("Unknown Merchant", "Transferred to merchant by UPI", false))
         assertEquals("Other", SmsTransactionImporter.categoryForSms("Unknown Merchant", "Payment successful", false))
         assertEquals("Salary", SmsTransactionImporter.categoryForSms("ACME Payroll", "Salary credited", true))
     }
