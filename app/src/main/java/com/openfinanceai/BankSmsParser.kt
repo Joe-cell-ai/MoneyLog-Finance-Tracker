@@ -74,7 +74,7 @@ internal object BankSmsParser {
             exactAmount = exact.stripTrailingZeros().toPlainString(),
             income = isIncome,
             date = transactionDate.toString(),
-            merchant = extractMerchant(body, amountMatch.range.last + 1)
+            merchant = extractMerchant(body, amountMatch.range.first, amountMatch.range.last + 1)
         )
     }
 
@@ -99,7 +99,7 @@ internal object BankSmsParser {
         }
     }
 
-    private fun extractMerchant(body: String, amountEnd: Int): String? {
+    private fun extractMerchant(body: String, amountStart: Int, amountEnd: Int): String? {
         // Some banks/apps put the payee before the amount (for example,
         // "Paid to AMAZON for Rs. 499"). Check explicit payee labels and
         // directional phrases on the complete message before using the old
