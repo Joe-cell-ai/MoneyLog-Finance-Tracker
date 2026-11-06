@@ -148,4 +148,16 @@ class BankSmsParserTest {
         assertEquals("Other", SmsTransactionImporter.categoryForSms("Unknown Shop", "UPI payment successful", false))
     }
 
+
+    @Test
+    fun keepsRecognizingDebitAlertsThatOnlySayPaymentSuccessful() {
+        val parsed = BankSmsParser.parse(
+            "UPI payment successful for Rs 250.00. Ref 123456789.",
+            received
+        )
+
+        assertEquals(250L, parsed?.amount)
+        assertFalse(parsed!!.income)
+    }
+
 }
