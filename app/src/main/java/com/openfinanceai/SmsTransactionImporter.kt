@@ -18,15 +18,19 @@ internal object SmsTransactionImporter {
         val text = "${merchant.orEmpty()} $body".lowercase(Locale.ROOT)
         if (income) return if (Regex("(?i)\\b(salary|payroll|wages)\\b").containsMatchIn(text)) "Salary" else "Other income"
         return when {
-            Regex("(?i)\\b(amazon|flipkart|myntra|ajio|meesho|nykaa|shopping|retail|purchase)\\b").containsMatchIn(text) -> "Shopping"
-            Regex("(?i)\\b(ola|uber|rapido|taxi|cab ride)\\b").containsMatchIn(text) -> "Taxi"
-            Regex("(?i)\\b(swiggy|zomato|restaurant|cafe|food delivery|dominos|mcdonald)\\b").containsMatchIn(text) -> "Food & Dining"
+            // Match named merchants before generic payment wording. A UPI payment
+            // is not automatically a bank transfer; the merchant determines its category.
+            Regex("(?i)\\b(amazon|flipkart|myntra|ajio|meesho|nykaa|tatacliq|jiomart|shopping|retail|purchase)\\b").containsMatchIn(text) -> "Shopping"
+            Regex("(?i)\\b(ola|uber|rapido|taxi|cab ride|metro|namma metro|irctc|redbus|makemytrip)\\b").containsMatchIn(text) -> "Taxi"
+            Regex("(?i)\\b(swiggy|zomato|restaurant|cafe|food delivery|dominos|mcdonald|kfc|pizzahut)\\b").containsMatchIn(text) -> "Food & Dining"
             Regex("(?i)\\b(bigbasket|blinkit|zepto|instamart|grocery|groceries)\\b").containsMatchIn(text) -> "Groceries"
-            Regex("(?i)\\b(petrol|fuel|diesel|indian oil|bharat petroleum|hpcl)\\b").containsMatchIn(text) -> "Fuel"
-            Regex("(?i)\\b(electricity|water bill|gas bill|broadband|mobile recharge|utility)\\b").containsMatchIn(text) -> "Bills & Utilities"
-            Regex("(?i)\\b(pharmacy|medical|hospital|clinic|medicine)\\b").containsMatchIn(text) -> "Health"
-            Regex("(?i)\\b(movie|cinema|netflix|spotify|hotstar)\\b").containsMatchIn(text) -> "Entertainment"
-            Regex("(?i)\\b(neft|imps|rtgs|bank transfer|own account|transferred to|upi transfer)\\b").containsMatchIn(body) -> "Bank transfer"
+            Regex("(?i)\\b(petrol|fuel|diesel|indian oil|bharat petroleum|hpcl|shell fuel)\\b").containsMatchIn(text) -> "Fuel"
+            Regex("(?i)\\b(electricity|water bill|gas bill|broadband|mobile recharge|utility|jio fiber|airtel)\\b").containsMatchIn(text) -> "Bills & Utilities"
+            Regex("(?i)\\b(pharmacy|medical|hospital|clinic|medicine|apollo pharmacy)\\b").containsMatchIn(text) -> "Health"
+            Regex("(?i)\\b(movie|cinema|netflix|spotify|hotstar|prime video)\\b").containsMatchIn(text) -> "Entertainment"
+            Regex("(?i)\\b(school|college|university|tuition|course fee|education)\\b").containsMatchIn(text) -> "Education"
+            Regex("(?i)\\b(insurance|premium payment|lic premium)\\b").containsMatchIn(text) -> "Insurance"
+            Regex("(?i)\\b(neft|imps|rtgs|bank transfer|own account transfer|self transfer|transfer between accounts)\\b").containsMatchIn(text) -> "Bank transfer"
             else -> "Other"
         }
     }
