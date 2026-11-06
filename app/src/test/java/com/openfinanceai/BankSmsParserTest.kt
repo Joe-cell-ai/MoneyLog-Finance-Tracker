@@ -106,4 +106,46 @@ class BankSmsParserTest {
         assertEquals("268.33", parsed?.exactAmount)
         assertEquals("New Merchant", parsed?.merchant)
     }
+
+    @Test
+    fun extractsMerchantWhenPayeeAppearsBeforeAmount() {
+        val parsed = BankSmsParser.parse(
+            "UPI payment successful. Paid to AMAZON INDIA for Rs. 499.00 from A/c XX450. UPI Ref 123456789.",
+            received
+        )
+
+        assertEquals(499L, parsed?.amount)
+        assertEquals("AMAZON INDIA", parsed?.merchant)
+        assertFalse(parsed!!.income)
+        assertEquals("Shopping", SmsTransactionImporter.categoryForSms(parsed.merchant, "UPI payment successful", parsed.income))
+    }
+
+    @Test
+    fun extractsExplicitPayeeLabelAndCategorizesFoodMerchant() {
+        val parsed = BankSmsParser.parse(
+            "A/c XX450 debited Rs 320.00. Merchant: SWIGGY. UPI Ref 987654321.",
+            received
+        )
+
+        assertEquals("SWIGGY", parsed?.merchant)
+        assertEquals("Food & Dining", SmsTransactionImporter.categoryForSms(parsed?.merchant, "UPI debit", false))
+    }
+
+    @Test
+    fun recognizesCommonIndianOnlineAndGroceryMerchants() {
+        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Myntra", "UPI payment", false))
+        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Croma", "Paid", false))
+        assertEquals("Groceries", SmsTransactionImporter.categoryForSms("Blinkit", "UPI payment", false))
+        assertEquals("Groceries", SmsTransactionImporter.categoryForSms("BigBasket", "Paid", false))
+        assertEquals("Food & Dining", SmsTransactionImporter.categoryForSms("Dominos", "UPI payment", false))
+        assertEquals("Health", SmsTransactionImporter.categoryForSms("Apollo Pharmacy", "UPI payment", false))
+    }
+
+    @Test
+    fun explicitBankRailsRemainTransfersButGenericUpiDoesNot() {
+        assertEquals("Bank transfer", SmsTransactionImporter.categoryForSms(null, "IMPS transfer successful", false))
+        assertEquals("Bank transfer", SmsTransactionImporter.categoryForSms(null, "NEFT credited to own account", false))
+        assertEquals("Other", SmsTransactionImporter.categoryForSms("Unknown Shop", "UPI payment successful", false))
+    }
+
 }
