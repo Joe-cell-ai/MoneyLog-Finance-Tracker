@@ -21,7 +21,7 @@ internal data class ParsedBankSmsTransaction(
 
 internal object BankSmsParser {
     private val currencyAmount = Regex("""(?i)(?:₹|rs\.?|inr)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)""")
-    private val debit = Regex("""(?i)\b(debited|debit|withdrawn|withdrawal|spent|paid|purchase|sent|transferred to|upi txn debit)\b""")
+    private val debit = Regex("""(?i)\b(debited|debit|withdrawn|withdrawal|spent|paid|purchase|sent|transferred to|payment successful|upi txn debit)\b""")
     private val credit = Regex("""(?i)\b(credited|credit|received|deposited|refund received|cashback received|transferred from)\b""")
     private val ignored = Regex("""(?i)\b(otp|one[- ]time password|verification code|failed|declined|unsuccessful|not debited|not credited|will be debited|mandate created|mandate registered|autopay scheduled|standing instruction created)\b""")
     private val bankDate = Regex("""(?i)\bon\s+(\d{1,2}[- ](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]\d{2,4})\b""")
