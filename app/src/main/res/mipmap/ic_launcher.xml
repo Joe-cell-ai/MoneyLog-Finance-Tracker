@@ -3,47 +3,49 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Glass highlight and soft blue inner tile, kept inside the adaptive-icon safe zone. -->
-    <path android:fillColor="#FF2C8CF0"
-        android:pathData="M25,13 L83,13 C90,13 95,18 95,25 L95,83 C95,90 90,95 83,95 L25,95 C18,95 13,90 13,83 L13,25 C13,18 18,13 25,13 Z"/>
-    <path android:fillColor="#FF1745B8"
-        android:pathData="M54,13 L83,13 C90,13 95,18 95,25 L95,83 C95,90 90,95 83,95 L54,95 Z"/>
-    <path android:fillColor="#FF65CFFF"
-        android:pathData="M25,15 L83,15 C89,15 93,19 93,25 L93,31 C76,25 48,24 15,37 L15,25 C15,19 19,15 25,15 Z"/>
-    <!-- Subtle glass reflection. -->
-    <path android:fillColor="#55FFFFFF"
-        android:pathData="M24,20 C38,13 62,14 80,21 C66,20 47,22 27,31 C23,33 20,29 24,20 Z"/>
-    <!-- Growth bars rising behind the wallet. -->
-    <path android:fillColor="#FF39E6B4"
-        android:pathData="M25,48 L34,48 L34,62 L25,62 Z M39,39 L48,39 L48,62 L39,62 Z M53,30 L62,30 L62,62 L53,62 Z M67,23 L76,23 L76,62 L67,62 Z"/>
-    <path android:fillColor="#FFB7FFE9"
-        android:pathData="M27,48 L31,48 L31,60 L27,60 Z M41,39 L45,39 L45,60 L41,60 Z M55,30 L59,30 L59,60 L55,60 Z M69,23 L73,23 L73,60 L69,23 Z"/>
-    <!-- Wallet body with a soft lower edge. -->
-    <path android:fillColor="#FF0B2C83"
-        android:pathData="M19,53 L48,47 L79,52 C84,53 87,57 87,62 L87,78 C87,84 82,88 76,88 L30,88 C23,88 18,83 18,76 L18,60 C18,57 18,54 19,53 Z"/>
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M20,50 L49,44 L79,49 C84,50 87,54 87,59 L87,75 C87,81 82,85 76,85 L30,85 C23,85 18,80 18,73 L18,57 C18,54 19,51 20,50 Z"/>
-    <path android:fillColor="#FFE5F4FF"
-        android:pathData="M22,53 L49,48 L81,53 L81,59 L22,68 Z"/>
-    <path android:fillColor="#FF9BCBFF"
-        android:pathData="M22,71 L84,63 L84,76 C84,81 80,84 75,84 L30,84 C25,84 21,80 21,75 Z"/>
-    <!-- Glossy blue clasp. -->
-    <path android:fillColor="#FF1684E8"
-        android:pathData="M66,59 L89,59 L89,77 L66,77 C60,77 56,73 56,68 C56,63 60,59 66,59 Z"/>
-    <path android:fillColor="#FF78D9FF"
-        android:pathData="M66,61 L87,61 L87,65 L66,65 C63,65 61,67 61,68 C61,64 63,61 66,61 Z"/>
-    <!-- Gold rupee coin in front of the wallet. -->
-    <path android:fillColor="#FFB66A00"
-        android:pathData="M43,58 A19,19 0,1 0,43 96 A19,19 0,1 0,43 58 Z"/>
-    <path android:fillColor="#FFFFC83D"
-        android:pathData="M43,56 A18,18 0,1 0,43 92 A18,18 0,1 0,43 56 Z"/>
-    <path android:fillColor="#FFFFE59A"
-        android:pathData="M43,59 A15,15 0,1 0,43 89 A15,15 0,1 0,43 59 Z"/>
-    <path android:fillColor="#FFE99B18"
-        android:pathData="M43,62 A12,12 0,1 0,43 86 A12,12 0,1 0,43 62 Z"/>
-    <!-- Stylized rupee mark. -->
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M36,67 L51,67 L51,70 L47,70 C46,73 44,75 40,76 L49,83 L45,83 L35,75 L35,73 C40,73 43,72 44,70 L36,70 Z M36,64 L51,64 L51,66 L36,66 Z"/>
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M39,76 L42,76 L42,84 L39,84 Z"/>
+    <group android:scaleX="0.80" android:scaleY="0.80" android:pivotX="54" android:pivotY="54">
+        <!-- Glass highlight and soft blue inner tile, kept inside the adaptive-icon safe zone. -->
+            <path android:fillColor="#FF2C8CF0"
+                android:pathData="M25,13 L83,13 C90,13 95,18 95,25 L95,83 C95,90 90,95 83,95 L25,95 C18,95 13,90 13,83 L13,25 C13,18 18,13 25,13 Z"/>
+            <path android:fillColor="#FF1745B8"
+                android:pathData="M54,13 L83,13 C90,13 95,18 95,25 L95,83 C95,90 90,95 83,95 L54,95 Z"/>
+            <path android:fillColor="#FF65CFFF"
+                android:pathData="M25,15 L83,15 C89,15 93,19 93,25 L93,31 C76,25 48,24 15,37 L15,25 C15,19 19,15 25,15 Z"/>
+            <!-- Subtle glass reflection. -->
+            <path android:fillColor="#55FFFFFF"
+                android:pathData="M24,20 C38,13 62,14 80,21 C66,20 47,22 27,31 C23,33 20,29 24,20 Z"/>
+            <!-- Growth bars rising behind the wallet. -->
+            <path android:fillColor="#FF39E6B4"
+                android:pathData="M25,48 L34,48 L34,62 L25,62 Z M39,39 L48,39 L48,62 L39,62 Z M53,30 L62,30 L62,62 L53,62 Z M67,23 L76,23 L76,62 L67,62 Z"/>
+            <path android:fillColor="#FFB7FFE9"
+                android:pathData="M27,48 L31,48 L31,60 L27,60 Z M41,39 L45,39 L45,60 L41,60 Z M55,30 L59,30 L59,60 L55,60 Z M69,23 L73,23 L73,60 L69,23 Z"/>
+            <!-- Wallet body with a soft lower edge. -->
+            <path android:fillColor="#FF0B2C83"
+                android:pathData="M19,53 L48,47 L79,52 C84,53 87,57 87,62 L87,78 C87,84 82,88 76,88 L30,88 C23,88 18,83 18,76 L18,60 C18,57 18,54 19,53 Z"/>
+            <path android:fillColor="#FFFFFFFF"
+                android:pathData="M20,50 L49,44 L79,49 C84,50 87,54 87,59 L87,75 C87,81 82,85 76,85 L30,85 C23,85 18,80 18,73 L18,57 C18,54 19,51 20,50 Z"/>
+            <path android:fillColor="#FFE5F4FF"
+                android:pathData="M22,53 L49,48 L81,53 L81,59 L22,68 Z"/>
+            <path android:fillColor="#FF9BCBFF"
+                android:pathData="M22,71 L84,63 L84,76 C84,81 80,84 75,84 L30,84 C25,84 21,80 21,75 Z"/>
+            <!-- Glossy blue clasp. -->
+            <path android:fillColor="#FF1684E8"
+                android:pathData="M66,59 L89,59 L89,77 L66,77 C60,77 56,73 56,68 C56,63 60,59 66,59 Z"/>
+            <path android:fillColor="#FF78D9FF"
+                android:pathData="M66,61 L87,61 L87,65 L66,65 C63,65 61,67 61,68 C61,64 63,61 66,61 Z"/>
+            <!-- Gold rupee coin in front of the wallet. -->
+            <path android:fillColor="#FFB66A00"
+                android:pathData="M43,58 A19,19 0,1 0,43 96 A19,19 0,1 0,43 58 Z"/>
+            <path android:fillColor="#FFFFC83D"
+                android:pathData="M43,56 A18,18 0,1 0,43 92 A18,18 0,1 0,43 56 Z"/>
+            <path android:fillColor="#FFFFE59A"
+                android:pathData="M43,59 A15,15 0,1 0,43 89 A15,15 0,1 0,43 59 Z"/>
+            <path android:fillColor="#FFE99B18"
+                android:pathData="M43,62 A12,12 0,1 0,43 86 A12,12 0,1 0,43 62 Z"/>
+            <!-- Stylized rupee mark. -->
+            <path android:fillColor="#FFFFFFFF"
+                android:pathData="M36,67 L51,67 L51,70 L47,70 C46,73 44,75 40,76 L49,83 L45,83 L35,75 L35,73 C40,73 43,72 44,70 L36,70 Z M36,64 L51,64 L51,66 L36,66 Z"/>
+            <path android:fillColor="#FFFFFFFF"
+                android:pathData="M39,76 L42,76 L42,84 L39,84 Z"/>
+    </group>
 </vector>
