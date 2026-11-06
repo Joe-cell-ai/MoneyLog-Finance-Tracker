@@ -104,13 +104,14 @@ internal object BankSmsParser {
         // "Paid to AMAZON for Rs. 499"). Check explicit payee labels and
         // directional phrases on the complete message before using the old
         // after-amount extraction.
-        val preAmountText = body.substring(0, amountStart.coerceIn(0, body.length))
         val labeled = Regex(
             """(?i)\b(?:merchant|payee|beneficiary)\s*[:=-]\s*([^.;,\n]+)"""
         ).find(body)?.groupValues?.getOrNull(1)
+        // Search the full SMS, not a substring ending at the numeric amount:
+        // the look-ahead needs to see the digits after "Rs." / "INR".
         val beforeAmountDirectional = Regex(
             """(?i)\b(?:paid\s+to|payment\s+to|purchase\s+at|sent\s+to|transferred\s+to|to|at|towards)\s+(.+?)(?=\s+(?:for\s+)?(?:₹|rs\.?|inr)\s*[0-9]|[.;,\n]|$)"""
-        ).find(preAmountText)?.groupValues?.getOrNull(1)
+        ).find(body)?.takeIf { it.range.first < amountStart }?.groupValues?.getOrNull(1)
 
         val afterAmount = body.substring(amountEnd.coerceIn(0, body.length))
             .replace(Regex("""(?i)\bUPI\s*[:#].*$"""), "")
