@@ -1,0 +1,17 @@
+MoneyLog is an Android personal finance tracker for recording and reviewing your money.
+
+Features:
+• Track income and expenses with categories, notes, dates and payment methods.
+• Review monthly balances, budgets, spending breakdowns and trends.
+• Manage custom categories and tags.
+• Record loans, EMI amounts, repayment details and due-date reminders.
+• Browse transactions in a calendar and transaction history.
+• Import transactions from CSV and export records for your own use.
+• Create a JSON backup of supported local finance data.
+• Use app appearance and currency preferences.
+• Optionally use Android SMS permissions for supported bank transaction message detection and import.
+
+Privacy and permissions:
+MoneyLog stores finance records locally in the app. SMS reading and receiving are sensitive optional capabilities used for transaction detection; they do not provide direct access to bank accounts. Detection depends on message formats and may not recognise every transaction. Notification access, if enabled by the user, is used to process supported payment notifications. Review Android permission prompts and the in-app settings before enabling these features.
+
+MoneyLog does not provide verified credit-bureau scores, financial advice, or direct bank-account connectivity.

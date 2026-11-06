@@ -72,3 +72,8 @@ Before publishing, build the app and test core flows on a real Android device, i
 ## Project status
 
 MoneyLog is under active development. Feature availability may vary by current build; the list above describes the app's intended and repository-supported areas, not a guarantee that every flow has been fully verified on every device. No remote AI/cloud features are included unless deliberately added in a future change.
+
+
+## Open source licence and app stores
+
+MoneyLog is distributed under the [Apache License 2.0](LICENSE). See [PUBLISHING.md](PUBLISHING.md) for the current F-Droid and IzzyOnDroid preparation checklist. Store inclusion is pending dependency, build, release, and metadata review; this repository is not yet listed in either store.
