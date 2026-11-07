@@ -115,6 +115,11 @@ class SmsCategorizationEngineTest {
         assertEquals("Other", result.category)
     }
 
+    @Test fun recognizesPersonDirectedUpiPaymentAlerts() {
+        val result = category(payee = "Rahul", description = "UPI payment to Rahul")
+        assertEquals("PERSON_UPI_TRANSFER", result.transferKind)
+    }
+
     @Test fun merchantRuleTakesPrecedenceOverGenericUpiTransferWords() {
         assertEquals("Household", category(payee = "Amazon", description = "UPI payment").category)
     }
