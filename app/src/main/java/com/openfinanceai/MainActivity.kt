@@ -810,7 +810,7 @@ private fun FinanceApp() {
         }
     }
     fun scanBankSms() {
-        runCatching { readRecentBankSms(context, DEFAULT_MONEY_CATEGORIES) }
+        runCatching { readRecentBankSms(context, SmsTransactionImporter.availableCategories(context)) }
             .onSuccess { parsed ->
                 val existingKeys = transactions.map { transactionKey(it) }.toMutableSet()
                 val unique = parsed.distinctBy { transactionKey(it) }
@@ -1403,7 +1403,7 @@ private fun FinanceApp() {
             }
             transactionToEdit?.let { transaction ->
                 EditTransactionDialog(transaction, onDismiss = { transactionToEdit = null }) { edited ->
-                    val protectedEdit = edited.copy(categoryManuallySelected = transaction.categoryManuallySelected || !edited.category.equals(transaction.category, ignoreCase = true))
+                    val protectedEdit = edited.copy(categoryManuallySelected = true)
                     val index = transactions.indexOf(transaction)
                     if (index >= 0) { transactions = transactions.toMutableList().also { it[index] = protectedEdit }; saveTransactions(context, transactions) }
                     transactionToEdit = null
@@ -6923,7 +6923,7 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optBoolean("loanPaymentCounted", false),
             item.optBoolean("loanAllocationRecorded", false),
             item.optLong("loanReceiptPrincipalAdded", 0L),
-            item.optBoolean("categoryManuallySelected", false)
+            item.optBoolean("categoryManuallySelected", item.optString("source").contains("SMS", ignoreCase = true))
         )
     }
 }.getOrNull()
@@ -7172,7 +7172,8 @@ private fun readRecentBankSms(context: Context, availableCategories: List<String
                 notificationKey = "sms-import:" + id,
                 captureStatus = "",
                 notes = notes,
-                transactionKind = SmsCategorizationEngine.categorize(sender, parsed.merchant, body, parsed.income, availableCategories).transferKind
+                transactionKind = SmsCategorizationEngine.categorize(sender, parsed.merchant, body, parsed.income, availableCategories).transferKind,
+                categoryManuallySelected = false
             )
         }
     }
