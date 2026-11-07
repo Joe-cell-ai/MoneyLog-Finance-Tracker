@@ -10,6 +10,9 @@ import java.time.LocalDate
 class BankSmsParserTest {
     private val received = LocalDate.parse("2026-11-05")
 
+    private fun categoryOf(merchant: String?, body: String, income: Boolean) =
+        SmsCategorizer.categorize(SmsCategoryInput(payee = merchant, body = body, income = income)).category
+
     @Test
     fun parsesDebitMerchantAfterSemicolonEvenWhenPayeeIsSaidToBeCredited() {
         val parsed = BankSmsParser.parse(
@@ -83,16 +86,24 @@ class BankSmsParserTest {
 
     @Test
     fun categorizesSmsMerchantsInsteadOfDefaultingEveryExpenseToBankTransfer() {
-        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Amazon", "Paid to Amazon", false))
-        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Flipkart", "UPI purchase", false))
-        assertEquals("Taxi", SmsTransactionImporter.categoryForSms("Ola", "Ride payment", false))
-        assertEquals("Taxi", SmsTransactionImporter.categoryForSms("Uber", "Trip payment", false))
-        assertEquals("Food & Dining", SmsTransactionImporter.categoryForSms("Swiggy", "Order payment", false))
-        assertEquals("Bank transfer", SmsTransactionImporter.categoryForSms(null, "IMPS transferred to account", false))
-        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Amazon", "Transferred to Amazon by UPI", false))
-        assertEquals("Other", SmsTransactionImporter.categoryForSms("Unknown Merchant", "Transferred to merchant by UPI", false))
-        assertEquals("Other", SmsTransactionImporter.categoryForSms("Unknown Merchant", "Payment successful", false))
-        assertEquals("Salary", SmsTransactionImporter.categoryForSms("ACME Payroll", "Salary credited", true))
+        assertEquals("Shopping", categoryOf("Amazon", "Paid to Amazon", false))
+        assertEquals("Shopping", categoryOf("Flipkart", "UPI purchase", false))
+        assertEquals("Transport/Taxi", categoryOf("Ola", "Ride payment", false))
+        assertEquals("Transport/Taxi", categoryOf("Uber", "Trip payment", false))
+        assertEquals("Food/Takeout", categoryOf("Swiggy", "Order payment", false))
+        assertEquals("Bank transfer", categoryOf(null, "IMPS transferred to account", false))
+        assertEquals("Shopping", categoryOf("Amazon", "Transferred to Amazon by UPI", false))
+        assertEquals("Other", categoryOf("Unknown Merchant", "Transferred to merchant by UPI", false))
+        assertEquals("Other", categoryOf("Unknown Merchant", "Payment successful", false))
+        assertEquals("Salary", categoryOf("ACME Payroll", "Salary credited", true))
+    }
+
+    @Test
+    fun parsedSmsFeedsTheSharedCategoriserEndToEnd() {
+        val sms = "ICICI Bank Acct XX450 debited for Rs 1000.00 on 04-Nov-26; CRED Club credited. UPI:667400510260. Call 18002662 for dispute."
+        val parsed = BankSmsParser.parse(sms, received)!!
+        val result = SmsCategorizer.categorize(SmsCategoryInput("AX-ICICIB-S", parsed.merchant, sms, parsed.income))
+        assertEquals("Bills/Credit card", result.category)
     }
 
     @Test
@@ -117,7 +128,7 @@ class BankSmsParserTest {
         assertEquals(499L, parsed?.amount)
         assertEquals("AMAZON INDIA", parsed?.merchant)
         assertFalse(parsed!!.income)
-        assertEquals("Shopping", SmsTransactionImporter.categoryForSms(parsed.merchant, "UPI payment successful", parsed.income))
+        assertEquals("Shopping", categoryOf(parsed.merchant, "UPI payment successful", parsed.income))
     }
 
     @Test
@@ -128,24 +139,26 @@ class BankSmsParserTest {
         )
 
         assertEquals("SWIGGY", parsed?.merchant)
-        assertEquals("Food & Dining", SmsTransactionImporter.categoryForSms(parsed?.merchant, "UPI debit", false))
+        assertEquals("Food/Takeout", categoryOf(parsed?.merchant, "UPI debit", false))
     }
 
     @Test
     fun recognizesCommonIndianOnlineAndGroceryMerchants() {
-        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Myntra", "UPI payment", false))
-        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Croma", "Paid", false))
-        assertEquals("Groceries", SmsTransactionImporter.categoryForSms("Blinkit", "UPI payment", false))
-        assertEquals("Groceries", SmsTransactionImporter.categoryForSms("BigBasket", "Paid", false))
-        assertEquals("Food & Dining", SmsTransactionImporter.categoryForSms("Dominos", "UPI payment", false))
-        assertEquals("Health", SmsTransactionImporter.categoryForSms("Apollo Pharmacy", "UPI payment", false))
+        assertEquals("Shopping", categoryOf("Myntra", "UPI payment", false))
+        assertEquals("Shopping", categoryOf("Croma", "Paid", false))
+        assertEquals("Food", categoryOf("Blinkit", "UPI payment", false))
+        assertEquals("Food", categoryOf("BigBasket", "Paid", false))
+        assertEquals("Food/Dining out", categoryOf("Dominos", "UPI payment", false))
+        assertEquals("Healthcare", categoryOf("Apollo Pharmacy", "UPI payment", false))
     }
 
     @Test
     fun explicitBankRailsRemainTransfersButGenericUpiDoesNot() {
-        assertEquals("Bank transfer", SmsTransactionImporter.categoryForSms(null, "IMPS transfer successful", false))
-        assertEquals("Bank transfer", SmsTransactionImporter.categoryForSms(null, "NEFT credited to own account", false))
-        assertEquals("Other", SmsTransactionImporter.categoryForSms("Unknown Shop", "UPI payment successful", false))
+        assertEquals("Bank transfer", categoryOf(null, "IMPS transfer successful", false))
+        // Own-account wording is now recognised separately from a generic bank transfer.
+        assertEquals("Own account transfer", categoryOf(null, "NEFT credited to own account", false))
+        assertEquals("Bank transfer", categoryOf(null, "NEFT payment to account", false))
+        assertEquals("Other", categoryOf("Unknown Shop", "UPI payment successful", false))
     }
 
 
