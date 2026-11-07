@@ -242,6 +242,7 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
     "education" -> Color(0xFFAF5AB5)
     "loan repayment", "emi" -> Color(0xFFCF5A36)
     "other income", "income" -> Color(0xFF5470C6)
+    "other" -> Color(0xFF64748B)
     "food/takeout", "food/dining out" -> Color(0xFF148D91)
     "household", "shopping" -> Color(0xFFDB4765)
     "transport/fuel", "transport/taxi" -> Color(0xFFB18A16)
@@ -796,6 +797,7 @@ private fun FinanceApp() {
     var importMessage by remember { mutableStateOf("") }
     var importedPreview by remember { mutableStateOf<List<Transaction>>(emptyList()) }
     var smsRecategorizationPreview by remember { mutableStateOf<List<Pair<Transaction, Transaction>>>(emptyList()) }
+    var smsRecategorizationPreviewLoaded by remember { mutableStateOf(false) }
     val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching {
@@ -1196,7 +1198,9 @@ private fun FinanceApp() {
                     "Import transactions" -> ImportTransactionsScreen(
                         message = importMessage,
                         recategorizationPreview = smsRecategorizationPreview,
+                        recategorizationPreviewLoaded = smsRecategorizationPreviewLoaded,
                         onPreviewRecategorize = {
+                            smsRecategorizationPreviewLoaded = true
                             smsRecategorizationPreview = transactions.filter { transaction ->
                                 transaction.notificationKey.startsWith("sms-import:") &&
                                     transaction.category.equals("Other", ignoreCase = true) &&
@@ -1218,6 +1222,7 @@ private fun FinanceApp() {
                             saveTransactions(context, transactions)
                             importMessage = "Updated ${updates.size} SMS-imported transaction categorisation(s)."
                             smsRecategorizationPreview = emptyList()
+                            smsRecategorizationPreviewLoaded = false
                         },
                         preview = importedPreview,
                         onChooseFile = { csvPicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) },
@@ -7022,6 +7027,7 @@ private fun ImportTransactionsScreen(
     message: String,
     preview: List<Transaction>,
     recategorizationPreview: List<Pair<Transaction, Transaction>>,
+    recategorizationPreviewLoaded: Boolean,
     onPreviewRecategorize: () -> Unit,
     onApplyRecategorize: () -> Unit,
     onChooseFile: () -> Unit,
@@ -7042,7 +7048,7 @@ private fun ImportTransactionsScreen(
             Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Improve existing SMS categories", color = Ink, fontWeight = FontWeight.SemiBold)
-                    Text("Preview suggested changes for SMS-imported transactions still labelled Other. Manually selected categories are protected.", color = Muted, fontSize = 12.sp)
+                    Text("Preview suggested changes for SMS-imported transactions still labelled Other. Manually selected categories are protected; older records without category-origin data are excluded.", color = Muted, fontSize = 12.sp)
                     OutlinedButton(onClick = onPreviewRecategorize, modifier = Modifier.fillMaxWidth()) { Text("Preview re-categorisation") }
                     if (recategorizationPreview.isNotEmpty()) {
                         Text("${recategorizationPreview.size} suggested change(s)", color = Ink, fontWeight = FontWeight.SemiBold)
@@ -7054,7 +7060,7 @@ private fun ImportTransactionsScreen(
                         }
                         Button(onClick = onApplyRecategorize, modifier = Modifier.fillMaxWidth()) { Text("Apply reviewed changes") }
                     } else {
-                        Text("No preview loaded. Choose Preview to inspect eligible transactions.", color = Muted, fontSize = 11.sp)
+                        Text(if (recategorizationPreviewLoaded) "No safe category changes found. Older SMS records without category-origin data are intentionally skipped." else "Choose Preview to inspect eligible transactions.", color = Muted, fontSize = 11.sp)
                     }
                 }
             }
