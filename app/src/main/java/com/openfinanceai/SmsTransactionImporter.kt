@@ -26,12 +26,23 @@ internal object SmsTransactionImporter {
 
     // Compatibility entry point retained for callers/tests; the engine remains the
     // single source of categorisation rules.
-    internal fun categoryForSms(merchant: String?, body: String, income: Boolean): String =
-        SmsCategorizationEngine.categorize(
-            null, merchant, body, income,
-            listOf("Shopping", "Food & Dining", "Groceries", "Taxi", "Fuel", "Bills & Utilities",
-                "Health", "Entertainment", "Education", "Bank transfer", "Salary", "Other income", "Other")
-        ).category
+    internal fun categoryForSms(merchant: String?, body: String, income: Boolean): String {
+        val decision = SmsCategorizationEngine.categorize(
+            null, merchant, body, income, DEFAULT_MONEY_CATEGORIES
+        )
+        return when {
+            decision.transferKind == "BANK_TRANSFER" -> "Bank transfer"
+            decision.category == "Household" -> "Shopping"
+            decision.category == "Food/Takeout" -> "Food & Dining"
+            decision.category == "Food" -> "Groceries"
+            decision.category == "Transport/Taxi" -> "Taxi"
+            decision.category == "Transport/Fuel" -> "Fuel"
+            decision.category == "Utilities/Electricity" -> "Bills & Utilities"
+            decision.category == "Healthcare" -> "Health"
+            decision.category == "Leisure" -> "Entertainment"
+            else -> decision.category
+        }
+    }
 
     fun import(context: Context, senderRaw: String, timestamp: Long, body: String): Boolean = synchronized(lock) {
         val sender = senderRaw.trim()
