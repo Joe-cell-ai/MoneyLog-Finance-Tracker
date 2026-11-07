@@ -97,7 +97,7 @@ internal object SmsCategorizationEngine {
         val businessWords = Regex("""(?i)\b(amazon|flipkart|swiggy|zomato|cred|dreamplug|bank|account|wallet|merchant|shop|store|cafe|restaurant|food|market|services|technology|technologies|private|limited|pvt|ltd|online|internet|payments|supermarket)\b""")
         if (businessWords.containsMatchIn(candidate)) return false
         val looksLikePersonName = Regex("""^[\p{L}][\p{L}'-]*(?:\s+[\p{L}][\p{L}'-]*){0,2}$""").matches(candidate)
-        val hasPersonDirectedVerb = Regex("""(?i)\b(sent|transferred|paid)\s+to\b""").containsMatchIn(text)
+        val hasPersonDirectedVerb = Regex("""(?i)\b(sent|transfer(?:red)?|paid)\s+to\b""").containsMatchIn(text)
         return looksLikePersonName && hasPersonDirectedVerb
     }
 
