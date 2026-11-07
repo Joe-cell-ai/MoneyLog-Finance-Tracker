@@ -32,7 +32,7 @@ internal object SmsTransactionImporter {
         )
         if (income) return if (Regex("""(?i)\\b(salary|payroll|wages)\\b""").containsMatchIn("$merchant $body")) "Salary" else "Other income"
         return when {
-            decision.transferKind == "BANK_TRANSFER" -> "Bank transfer"
+            decision.transferKind.isNotBlank() -> "Bank transfer"
             decision.category == "Household" -> "Shopping"
             decision.category == "Food/Takeout" -> "Food & Dining"
             decision.category == "Food" -> "Groceries"
