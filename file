@@ -1,0 +1,1480 @@
+From a8f547bad598763f5a4f2cee7e11c1a566cebec6 Mon Sep 17 00:00:00 2001
+From: "Claude (draft)" <noreply@anthropic.com>
+Date: Sat, 7 Nov 2026 07:04:51 +0000
+Subject: [PATCH] Add shared SMS categorisation engine and preview-based
+ re-categorise
+
+- New pure-Kotlin SmsCategorizer used by automatic import, the hourly sync
+  and the manual SMS scan (matches payee, then sender, then SMS text).
+- Rules for CRED, Dreamplug, Amazon, Flipkart, Swiggy, Zomato; distinguishes
+  bank transfers, own-account transfers and person-to-person UPI payments.
+- Category names now come from the app's default category list; Shopping,
+  Education, Insurance, Bills/Credit card, Bank transfer, Own account
+  transfer and Person-to-person are added to the defaults.
+- Colours and icons for the new categories.
+- Transaction.categoryOrigin (auto/manual) persisted in storage and backups;
+  editing a category marks it manual.
+- Settings > Import: preview-based re-categorisation of SMS-imported
+  expenses labelled Other. Never touches manual categories; changes only the
+  category and origin so duplicate detection keys are preserved.
+- Tests for every rule id, the re-categoriser and the default-list contract.
+---
+ .../java/com/openfinanceai/MainActivity.kt    | 195 +++++++++--
+ .../java/com/openfinanceai/SmsCategorizer.kt  | 303 +++++++++++++++++
+ .../com/openfinanceai/SmsRecategorizer.kt     |  92 +++++
+ .../openfinanceai/SmsTransactionImporter.kt   |  70 ++--
+ .../com/openfinanceai/BankSmsParserTest.kt    |  55 +--
+ .../FinanceIconSuggestionsTest.kt             |  21 ++
+ .../com/openfinanceai/SmsCategorizerTest.kt   | 316 ++++++++++++++++++
+ .../com/openfinanceai/SmsRecategorizerTest.kt | 145 ++++++++
+ 8 files changed, 1101 insertions(+), 96 deletions(-)
+ create mode 100644 app/src/main/java/com/openfinanceai/SmsCategorizer.kt
+ create mode 100644 app/src/main/java/com/openfinanceai/SmsRecategorizer.kt
+ create mode 100644 app/src/test/java/com/openfinanceai/SmsCategorizerTest.kt
+ create mode 100644 app/src/test/java/com/openfinanceai/SmsRecategorizerTest.kt
+
+diff --git a/app/src/main/java/com/openfinanceai/MainActivity.kt b/app/src/main/java/com/openfinanceai/MainActivity.kt
+index ba4d09f..f26c96f 100644
+--- a/app/src/main/java/com/openfinanceai/MainActivity.kt
++++ b/app/src/main/java/com/openfinanceai/MainActivity.kt
+@@ -242,6 +242,16 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
+     "education" -> Color(0xFFAF5AB5)
+     "loan repayment", "emi" -> Color(0xFFCF5A36)
+     "other income", "income" -> Color(0xFF5470C6)
++    "food/takeout", "food/dining out", "food/coffee" -> Color(0xFF148D91)
++    "transport/taxi", "transport/fuel", "transport/public transit" -> Color(0xFFB18A16)
++    "utilities/electricity", "utilities/phone", "utilities/internet", "utilities/water", "utilities/gas" -> Color(0xFFD97732)
++    "healthcare" -> Color(0xFF477DAD)
++    "leisure", "leisure/travel" -> Color(0xFF6C63C9)
++    "bills/credit card" -> Color(0xFFE05A47)
++    "bank transfer" -> Color(0xFF3B82A6)
++    "own account transfer" -> Color(0xFF6B7A99)
++    "person-to-person" -> Color(0xFF5E8C31)
++    "insurance" -> Color(0xFF2F8F83)
+     else -> CategoryPalette[(category.trim().lowercase(Locale.ROOT).hashCode() and 0x7fffffff) % CategoryPalette.size]
+ }
+ private fun categoryTint(category: String): Color = categoryColor(category).copy(alpha = 0.12f)
+@@ -253,6 +263,9 @@ internal fun financeIconKeyForName(name: String): String {
+     fun hasToken(vararg candidates: String): Boolean = candidates.any { it in words }
+     return when {
+         listOf("cred", "cred app").any { value == it || value.startsWith("$it ") } -> "brand_cred"
++        value.contains("own account") -> "transfer"
++        value.contains("person to person") || hasToken("p2p") -> "person"
++        value.contains("credit card") -> "card"
+         listOf("google play", "play store").any { value.contains(it) } -> "brand_google_play"
+         value == "amazon pay" || value.startsWith("amazon pay ") -> "brand_amazon_pay"
+         value == "amazon" || value.startsWith("amazon ") -> "brand_amazon"
+@@ -292,7 +305,7 @@ internal fun financeIconKeyForName(name: String): String {
+         listOf("subscription", "membership").any { value.contains(it) } -> "subscription"
+         listOf("gift", "donation").any { value.contains(it) } -> "gift"
+         listOf("fitness", "gym", "sport").any { value.contains(it) } -> "fitness"
+-        listOf("movie", "music", "entertainment", "game").any { value.contains(it) } -> "entertainment"
++        listOf("movie", "music", "entertainment", "game", "leisure").any { value.contains(it) } -> "entertainment"
+         else -> "app"
+     }
+ }
+@@ -324,6 +337,8 @@ private fun financeIcon(key: String): ImageVector = when (key) {
+     "gift" -> Icons.Default.CardGiftcard
+     "fitness" -> Icons.Default.FitnessCenter
+     "pets" -> Icons.Default.Pets
++    "transfer" -> Icons.Default.SwapHoriz
++    "person" -> Icons.Default.Person
+     "entertainment" -> Icons.Default.Movie
+     else -> Icons.Default.Apps
+ }
+@@ -540,7 +555,7 @@ private fun loanAccent(lender: String): Color = when {
+ private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
+ 
+ 
+-internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L)
++internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L, val categoryOrigin: String = CategoryOrigin.UNKNOWN)
+ private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
+ 
+ private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
+@@ -787,6 +802,7 @@ private fun FinanceApp() {
+     LaunchedEffect(moneyNotes) { saveMoneyNotes(context, moneyNotes) }
+     var selectedLoan by remember { mutableStateOf<Loan?>(null) }
+     var importMessage by remember { mutableStateOf("") }
++    var recategorizeProposals by remember { mutableStateOf<List<RecategorizeProposal>?>(null) }
+     var importedPreview by remember { mutableStateOf<List<Transaction>>(emptyList()) }
+     val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+         if (uri != null) {
+@@ -922,7 +938,8 @@ private fun FinanceApp() {
+                 .put("loanLender", t.loanLender).put("emiInstallmentDate", t.emiInstallmentDate).put("transactionKind", t.transactionKind)
+                 .put("loanPrincipalReduction", t.loanPrincipalReduction).put("loanInterestPortion", t.loanInterestPortion)
+                 .put("loanPaymentCounted", t.loanPaymentCounted).put("loanAllocationRecorded", t.loanAllocationRecorded)
+-                .put("loanReceiptPrincipalAdded", t.loanReceiptPrincipalAdded)) }
++                .put("loanReceiptPrincipalAdded", t.loanReceiptPrincipalAdded)
++                .put("categoryOrigin", t.categoryOrigin)) }
+             val loanArray = JSONArray()
+             loans.forEach { l -> loanArray.put(JSONObject().put("lender", l.lender).put("balance", l.balance)
+                 .put("emi", l.emi).put("due", l.due).put("annualRate", l.annualRate).put("originalPrincipal", l.originalPrincipal).put("paymentsMade", l.paymentsMade).put("totalPayments", l.totalPayments)
+@@ -980,7 +997,8 @@ private fun FinanceApp() {
+                         j.getLong("amount"), j.optBoolean("income"), j.optString("source"), j.optString("notificationKey"),
+                         j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""), j.optString("loanLender", ""), j.optString("emiInstallmentDate", ""), j.optString("transactionKind", ""), j.optLong("loanPrincipalReduction", 0L),
+                         j.optLong("loanInterestPortion", 0L), j.optBoolean("loanPaymentCounted", false),
+-                        j.optBoolean("loanAllocationRecorded", false), j.optLong("loanReceiptPrincipalAdded", 0L))
++                        j.optBoolean("loanAllocationRecorded", false), j.optLong("loanReceiptPrincipalAdded", 0L),
++                        j.optString("categoryOrigin", CategoryOrigin.UNKNOWN))
+                 } }
+             }
+             val restoredLoans = root.optJSONArray("loans")?.let { a ->
+@@ -1189,6 +1207,14 @@ private fun FinanceApp() {
+                         message = importMessage,
+                         preview = importedPreview,
+                         onChooseFile = { csvPicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) },
++                        onReviewRecategorize = {
++                            val proposals = SmsRecategorizer.propose(transactions, SmsTransactionImporter.ownAccountKeys(context))
++                            if (proposals.isEmpty()) {
++                                importMessage = "No SMS-imported transactions labelled Other could be matched to a better category."
++                            } else {
++                                recategorizeProposals = proposals
++                            }
++                        },
+                         onScanSms = {
+                             val hasRead = context.checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+                             val hasReceive = context.checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+@@ -1380,6 +1406,19 @@ private fun FinanceApp() {
+                     transactionToEdit = null
+                 }
+             }
++            recategorizeProposals?.let { proposals ->
++                RecategorizePreviewDialog(
++                    proposals = proposals,
++                    onDismiss = { recategorizeProposals = null },
++                    onApply = { approved ->
++                        val updated = SmsRecategorizer.apply(transactions, approved)
++                        transactions = updated
++                        saveTransactions(context, updated)
++                        importMessage = "Re-categorised " + approved.size + " transaction(s). Other fields were not changed."
++                        recategorizeProposals = null
++                    }
++                )
++            }
+             emiQuickAction?.let { action ->
+                 val accent = loanAccent(action.lender)
+                 val tint = loanTint(action.lender)
+@@ -3592,13 +3631,7 @@ private fun InfoScreen(title: String, body: String, icon: ImageVector) {
+     }
+ }
+ 
+-private val DEFAULT_MONEY_CATEGORIES = listOf(
+-    "Food", "Food/Dining out", "Healthcare", "Income", "Leisure/Travel",
+-    "Savings/Emergency", "Transport/Fuel", "Transport/Taxi", "Utilities/Gas",
+-    "Utilities/Phone", "Food/Coffee", "Food/Takeout", "Household", "Leisure",
+-    "Other", "Savings/Investment", "Transport", "Transport/Public transit",
+-    "Utilities/Electricity", "Utilities/Internet", "Utilities/Water"
+-)
++private val DEFAULT_MONEY_CATEGORIES = DefaultFinanceCategories.MONEY
+ private val DEFAULT_MONEY_TAGS = listOf(
+     "Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play",
+     "Debit Card", "PayPal", "Google Pay", "Online Shopping"
+@@ -6308,7 +6341,12 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
+             Button(onClick = {
+                 val parsed = amount.toLongOrNull()
+                 if (title.isBlank() || parsed == null || parsed <= 0L) error = "Enter a description and valid amount."
+-                else onSave(transaction.copy(title = title.trim(), amount = parsed, category = if (isIncome) "Income" else category.ifBlank { "Other" }, date = date.ifBlank { "Date not set" }, income = isIncome, tag = tag.trim()))
++                else {
++                    val newCategory = if (isIncome) "Income" else category.ifBlank { "Other" }
++                    // A category the user changed is "manual" and is never overwritten by re-categorisation.
++                    val origin = CategoryOrigin.afterEdit(transaction.category, transaction.categoryOrigin, newCategory)
++                    onSave(transaction.copy(title = title.trim(), amount = parsed, category = newCategory, date = date.ifBlank { "Date not set" }, income = isIncome, tag = tag.trim(), categoryOrigin = origin))
++                }
+             }, shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White), modifier = Modifier.height(50.dp)) {
+                 Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(7.dp)); Text("Save changes", fontWeight = FontWeight.SemiBold)
+             }
+@@ -6861,6 +6899,7 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
+             put("loanPaymentCounted", transaction.loanPaymentCounted)
+             put("loanAllocationRecorded", transaction.loanAllocationRecorded)
+             put("loanReceiptPrincipalAdded", transaction.loanReceiptPrincipalAdded)
++            put("categoryOrigin", transaction.categoryOrigin)
+         })
+     }
+     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+@@ -6892,7 +6931,8 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
+             item.optLong("loanInterestPortion", 0L),
+             item.optBoolean("loanPaymentCounted", false),
+             item.optBoolean("loanAllocationRecorded", false),
+-            item.optLong("loanReceiptPrincipalAdded", 0L)
++            item.optLong("loanReceiptPrincipalAdded", 0L),
++            item.optString("categoryOrigin", CategoryOrigin.UNKNOWN)
+         )
+     }
+ }.getOrNull()
+@@ -6982,11 +7022,73 @@ private fun SalarySettingsScreen(onSave: (Boolean, Long) -> Unit) {
+     }
+ }
+ 
++@Composable
++private fun RecategorizePreviewDialog(
++    proposals: List<RecategorizeProposal>,
++    onDismiss: () -> Unit,
++    onApply: (List<RecategorizeProposal>) -> Unit
++) {
++    var selected by remember(proposals) { mutableStateOf(proposals.toSet()) }
++    AlertDialog(
++        onDismissRequest = onDismiss,
++        title = { Text("Review suggested categories") },
++        text = {
++            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
++                Text(
++                    "Untick anything you want to keep as Other. Only the category changes; the amount, date and title stay the same.",
++                    color = Muted,
++                    fontSize = 12.sp
++                )
++                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                    TextButton(onClick = { selected = proposals.toSet() }) { Text("Select all") }
++                    TextButton(onClick = { selected = emptySet() }) { Text("Select none") }
++                }
++                LazyColumn(modifier = Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
++                    items(proposals) { proposal ->
++                        val checked = proposal in selected
++                        Row(
++                            Modifier.fillMaxWidth().clickable {
++                                selected = if (checked) selected - proposal else selected + proposal
++                            },
++                            verticalAlignment = Alignment.CenterVertically
++                        ) {
++                            Checkbox(
++                                checked = checked,
++                                onCheckedChange = { selected = if (it) selected + proposal else selected - proposal }
++                            )
++                            Column(Modifier.weight(1f)) {
++                                Text(proposal.transaction.title, color = Ink, fontWeight = FontWeight.SemiBold, maxLines = 2)
++                                Text(
++                                    proposal.transaction.date + " · " + Money.format(proposal.transaction.amount),
++                                    color = Muted,
++                                    fontSize = 12.sp
++                                )
++                                Text(
++                                    "Other → " + proposal.newCategory + " (" + SmsRecategorizer.describe(proposal.kind) + ")",
++                                    color = categoryColor(proposal.newCategory),
++                                    fontSize = 12.sp
++                                )
++                            }
++                        }
++                    }
++                }
++            }
++        },
++        confirmButton = {
++            TextButton(onClick = { onApply(proposals.filter { it in selected }) }, enabled = selected.isNotEmpty()) {
++                Text("Apply " + selected.size)
++            }
++        },
++        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
++    )
++}
++
+ @Composable
+ private fun ImportTransactionsScreen(
+     message: String,
+     preview: List<Transaction>,
+     onChooseFile: () -> Unit,
++    onReviewRecategorize: () -> Unit,
+     onScanSms: () -> Unit,
+     onOpenAppSettings: () -> Unit,
+     onImport: () -> Unit
+@@ -7038,6 +7140,20 @@ private fun ImportTransactionsScreen(
+                 Text("Choose CSV file")
+             }
+         }
++        item {
++            InfoCard(
++                "Re-categorise older SMS transactions",
++                "Looks at SMS-imported expenses still labelled Other and suggests categories from the merchant or payee. You review every change first, and categories you chose yourself are never changed.",
++                Icons.Default.Sms
++            )
++        }
++        item {
++            OutlinedButton(onClick = onReviewRecategorize, modifier = Modifier.fillMaxWidth()) {
++                Icon(Icons.Default.Sms, null)
++                Spacer(Modifier.width(8.dp))
++                Text("Review suggested categories")
++            }
++        }
+         if (message.isNotBlank()) item { Text(message, color = Ink) }
+         if (preview.isNotEmpty()) {
+             item { Text("New SMS transactions are added automatically.", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+@@ -7076,7 +7192,8 @@ private fun ImportTransactionsScreen(
+ 
+ private fun readRecentBankSms(context: Context): List<Transaction> {
+     val cutoff = System.currentTimeMillis() - 90L * 24L * 60L * 60L * 1000L
+-    val results = mutableListOf<Transaction>()
++    // Collected first so own-account keys learned from every scanned SMS are available when categorising.
++    val pending = mutableListOf<PendingSms>()
+     val projection = arrayOf(android.provider.Telephony.Sms._ID, android.provider.Telephony.Sms.ADDRESS, android.provider.Telephony.Sms.BODY, android.provider.Telephony.Sms.DATE)
+     context.contentResolver.query(
+         android.provider.Telephony.Sms.Inbox.CONTENT_URI,
+@@ -7096,33 +7213,41 @@ private fun readRecentBankSms(context: Context): List<Transaction> {
+             val smsDate = cursor.getLong(dateIndex)
+             val receivedDate = java.time.Instant.ofEpochMilli(smsDate)
+                 .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
++            SmsTransactionImporter.learnOwnAccount(context, body)
+             val parsed = BankSmsParser.parse(body, receivedDate) ?: continue
+             val sender = if (addressIndex >= 0) cursor.getString(addressIndex).orEmpty().trim() else ""
+-            val id = sender.lowercase(Locale.ROOT) + ":" + smsDate + ":" + body.hashCode()
+-            val notes = buildString {
+-                append("Detected from a bank SMS. Verify details before relying on this entry.")
+-                if (parsed.exactAmount.contains('.')) {
+-                    append(" Exact SMS amount: ₹").append(parsed.exactAmount)
+-                    append(". Stored amount is rounded to the nearest rupee; verify before import.")
+-                }
+-            }
+-            results += Transaction(
+-                title = parsed.merchant?.let { (if (parsed.income) "From " else "To ") + it }
+-                    ?: if (sender.isBlank()) "Bank SMS transaction" else "Bank SMS · " + sender,
+-                category = if (parsed.income) "Other income" else "Bank transfer",
+-                date = parsed.date,
+-                amount = parsed.amount,
+-                income = parsed.income,
+-                source = "SMS import",
+-                notificationKey = "sms-import:" + id,
+-                captureStatus = "",
+-                notes = notes
+-            )
++            pending += PendingSms(sender, body, smsDate, parsed)
+         }
+     }
+-    return results
++    return pending.map { sms ->
++        val parsed = sms.parsed
++        val sender = sms.sender
++        val id = sender.lowercase(Locale.ROOT) + ":" + sms.smsDate + ":" + sms.body.hashCode()
++        val notes = buildString {
++            append("Detected from a bank SMS. Verify details before relying on this entry.")
++            if (parsed.exactAmount.contains('.')) {
++                append(" Exact SMS amount: ₹").append(parsed.exactAmount)
++                append(". Stored amount is rounded to the nearest rupee; verify before import.")
++            }
++        }
++        Transaction(
++            title = parsed.merchant?.let { (if (parsed.income) "From " else "To ") + it }
++                ?: if (sender.isBlank()) "Bank SMS transaction" else "Bank SMS · " + sender,
++            category = SmsTransactionImporter.categorize(context, sender, sms.body, parsed).category,
++            date = parsed.date,
++            amount = parsed.amount,
++            income = parsed.income,
++            source = "SMS import",
++            notificationKey = "sms-import:" + id,
++            captureStatus = "",
++            notes = notes,
++            categoryOrigin = CategoryOrigin.AUTO
++        )
++    }
+ }
+ 
++private data class PendingSms(val sender: String, val body: String, val smsDate: Long, val parsed: ParsedBankSmsTransaction)
++
+ internal fun parseTransactionCsv(csv: String): List<Transaction> {
+     val rows = mutableListOf<List<String>>()
+     var row = mutableListOf<String>()
+diff --git a/app/src/main/java/com/openfinanceai/SmsCategorizer.kt b/app/src/main/java/com/openfinanceai/SmsCategorizer.kt
+new file mode 100644
+index 0000000..322175d
+--- /dev/null
++++ b/app/src/main/java/com/openfinanceai/SmsCategorizer.kt
+@@ -0,0 +1,303 @@
++package com.openfinanceai
++
++import java.util.Locale
++
++/**
++ * Category names produced by [SmsCategorizer]. Every expense category here is a member of
++ * [DefaultFinanceCategories.MONEY], so imported transactions always land in a category the
++ * category picker offers. [SALARY] and [OTHER_INCOME] are appended to the picker separately.
++ */
++internal object SmsCategories {
++    const val SHOPPING = "Shopping"
++    const val FOOD = "Food"
++    const val FOOD_DINING_OUT = "Food/Dining out"
++    const val FOOD_COFFEE = "Food/Coffee"
++    const val FOOD_TAKEOUT = "Food/Takeout"
++    const val TAXI = "Transport/Taxi"
++    const val FUEL = "Transport/Fuel"
++    const val PUBLIC_TRANSIT = "Transport/Public transit"
++    const val TRAVEL = "Leisure/Travel"
++    const val LEISURE = "Leisure"
++    const val HEALTHCARE = "Healthcare"
++    const val ELECTRICITY = "Utilities/Electricity"
++    const val PHONE = "Utilities/Phone"
++    const val INTERNET = "Utilities/Internet"
++    const val WATER = "Utilities/Water"
++    const val GAS = "Utilities/Gas"
++    const val EDUCATION = "Education"
++    const val INSURANCE = "Insurance"
++    const val CREDIT_CARD_BILL = "Bills/Credit card"
++    const val BANK_TRANSFER = "Bank transfer"
++    const val OWN_ACCOUNT_TRANSFER = "Own account transfer"
++    const val PERSON_TO_PERSON = "Person-to-person"
++    const val SALARY = "Salary"
++    const val OTHER_INCOME = "Other income"
++    const val OTHER = "Other"
++
++    /** Categories that did not exist in the original default list and are added to it. */
++    val ADDED_DEFAULTS: List<String> = listOf(
++        SHOPPING, EDUCATION, INSURANCE, CREDIT_CARD_BILL, BANK_TRANSFER, OWN_ACCOUNT_TRANSFER, PERSON_TO_PERSON
++    )
++
++    /** Every category the engine can return. */
++    val ALL: List<String> = listOf(
++        SHOPPING, FOOD, FOOD_DINING_OUT, FOOD_COFFEE, FOOD_TAKEOUT, TAXI, FUEL, PUBLIC_TRANSIT, TRAVEL, LEISURE,
++        HEALTHCARE, ELECTRICITY, PHONE, INTERNET, WATER, GAS, EDUCATION, INSURANCE, CREDIT_CARD_BILL,
++        BANK_TRANSFER, OWN_ACCOUNT_TRANSFER, PERSON_TO_PERSON, SALARY, OTHER_INCOME, OTHER
++    )
++}
++
++/** The app's default category list (previously a private list in MainActivity). */
++internal object DefaultFinanceCategories {
++    val EXISTING: List<String> = listOf(
++        "Food", "Food/Dining out", "Healthcare", "Income", "Leisure/Travel",
++        "Savings/Emergency", "Transport/Fuel", "Transport/Taxi", "Utilities/Gas",
++        "Utilities/Phone", "Food/Coffee", "Food/Takeout", "Household", "Leisure",
++        "Other", "Savings/Investment", "Transport", "Transport/Public transit",
++        "Utilities/Electricity", "Utilities/Internet", "Utilities/Water"
++    )
++    val MONEY: List<String> = EXISTING + SmsCategories.ADDED_DEFAULTS
++}
++
++/** Whether a transaction's category was chosen by the engine or by the user. */
++internal object CategoryOrigin {
++    /** Legacy rows, or rows created before origin tracking existed. */
++    const val UNKNOWN = ""
++    const val AUTO = "auto"
++    const val MANUAL = "manual"
++
++    /**
++     * Origin to store after the user saves an edit: changing the category makes it a manual choice;
++     * leaving it as it was keeps whatever origin it already had.
++     */
++    fun afterEdit(previousCategory: String, previousOrigin: String, newCategory: String): String =
++        if (newCategory.trim().equals(previousCategory.trim(), ignoreCase = true)) previousOrigin else MANUAL
++}
++
++internal enum class SmsPaymentKind { INCOME, MERCHANT, CREDIT_CARD_BILL, BANK_TRANSFER, OWN_ACCOUNT, PERSON_TO_PERSON, KEYWORD, UNKNOWN }
++
++internal data class SmsCategoryInput(
++    /** SMS sender address (for example "AX-ICICIB-S"); may be blank. */
++    val sender: String = "",
++    /** Payee/merchant extracted by [BankSmsParser], without the "To "/"From " prefix. */
++    val payee: String? = null,
++    /** Full SMS text; blank when only a stored transaction is being re-categorised. */
++    val body: String = "",
++    val income: Boolean,
++    /** Keys from [SmsCategorizer.ownAccountKeyFrom] for accounts known to belong to the user. */
++    val ownAccountKeys: Set<String> = emptySet()
++)
++
++internal data class SmsCategorization(val category: String, val kind: SmsPaymentKind, val rule: String?)
++
++/**
++ * The single categorisation engine used by automatic SMS import, manual SMS import and the
++ * re-categorise action. It is pure Kotlin (no Android types) so every rule is unit-testable.
++ *
++ * Order of precedence for expenses: own-account transfer, known merchant (payee, then sender, then
++ * SMS text), credit-card bill, bank transfer, generic keywords, person-to-person UPI, "Other".
++ */
++internal object SmsCategorizer {
++    private class Rule(val id: String, val category: String, val pattern: Regex)
++
++    private fun rule(id: String, category: String, pattern: String) =
++        Rule(id, category, Regex(pattern, RegexOption.IGNORE_CASE))
++
++    // Specific merchants first: "Swiggy Instamart" must be groceries, "Amazon Prime Video" leisure.
++    private val merchantRules: List<Rule> = listOf(
++        rule("groceries", SmsCategories.FOOD,
++            """\b(?:bigbasket|bbnow|blinkit|zepto|instamart|dmart|d\s*mart|more\s+supermarket|reliance\s+fresh|nature'?s\s+basket)\b"""),
++        rule("streaming-entertainment", SmsCategories.LEISURE,
++            """\b(?:netflix|spotify|hotstar|jio\s*hotstar|prime\s+video|amazon\s+prime|youtube\s+premium|bookmyshow|pvr|inox)\b"""),
++        rule("cred", SmsCategories.CREDIT_CARD_BILL, """\b(?:cred|dreamplug)\b"""),
++        rule("swiggy", SmsCategories.FOOD_TAKEOUT, """\b(?:swiggy|bundl\s+technologies)\b"""),
++        rule("zomato", SmsCategories.FOOD_TAKEOUT, """\bzomato\b"""),
++        rule("coffee", SmsCategories.FOOD_COFFEE, """\b(?:starbucks|cafe\s+coffee\s+day|ccd)\b"""),
++        rule("restaurant-chains", SmsCategories.FOOD_DINING_OUT,
++            """\b(?:dominos|domino'?s|mcdonald'?s|kfc|pizza\s*hut|burger\s*king|subway|behrouz|faasos|eatclub)\b"""),
++        rule("flipkart", SmsCategories.SHOPPING, """\b(?:flipkart|fkrt)\b"""),
++        rule("amazon", SmsCategories.SHOPPING, """\b(?:amazon(?:\s*pay)?|amzn)\b"""),
++        rule("online-shopping", SmsCategories.SHOPPING,
++            """\b(?:myntra|ajio|meesho|nykaa|tata\s*cliq|jiomart|croma|reliance\s+digital|decathlon|shoppers\s+stop|lifestyle|westside|ikea|zara|h\s*&\s*m)\b"""),
++        rule("taxi", SmsCategories.TAXI, """\b(?:ola|uber|rapido)\b"""),
++        rule("public-transit", SmsCategories.PUBLIC_TRANSIT, """\b(?:namma\s+metro|metro\s+rail|bmtc|irctc|redbus)\b"""),
++        rule("travel-booking", SmsCategories.TRAVEL, """\b(?:makemytrip|goibibo|cleartrip|ixigo)\b"""),
++        rule("fuel", SmsCategories.FUEL,
++            """\b(?:indian\s+oil|bharat\s+petroleum|hpcl|hindustan\s+petroleum|iocl|shell|essar\s+oil|nayara\s+energy)\b"""),
++        rule("internet", SmsCategories.INTERNET, """\b(?:jio\s*fiber|act\s+fibernet|airtel\s+xstream)\b"""),
++        rule("electricity", SmsCategories.ELECTRICITY,
++            """\b(?:tata\s+power|bescom|adani\s+electricity|electricity\s+board)\b"""),
++        rule("phone", SmsCategories.PHONE, """\b(?:airtel|jio|vodafone|vi\s+recharge|bsnl)\b"""),
++        rule("health-brands", SmsCategories.HEALTHCARE,
++            """\b(?:apollo\s+pharmacy|1mg|tata\s*1mg|pharmeasy|netmeds|medplus|wellness\s+forever|practo)\b"""),
++        rule("education-brands", SmsCategories.EDUCATION,
++            """\b(?:udemy|coursera|unacademy|byju'?s|upgrad|vedantu|simplilearn)\b""")
++    )
++
++    // Generic words, used only when no merchant, transfer or card-bill rule matched.
++    private val keywordRules: List<Rule> = listOf(
++        rule("kw-taxi", SmsCategories.TAXI, """\b(?:taxi|cab\s+ride)\b"""),
++        rule("kw-transit", SmsCategories.PUBLIC_TRANSIT, """\b(?:metro)\b"""),
++        rule("kw-dining", SmsCategories.FOOD_DINING_OUT, """\b(?:restaurant|cafe|food\s+delivery|food\s+order)\b"""),
++        rule("kw-groceries", SmsCategories.FOOD, """\b(?:grocery|groceries)\b"""),
++        rule("kw-fuel", SmsCategories.FUEL, """\b(?:petrol|fuel|diesel)\b"""),
++        rule("kw-electricity", SmsCategories.ELECTRICITY, """\belectricity\b"""),
++        rule("kw-water", SmsCategories.WATER, """\bwater\s+bill\b"""),
++        rule("kw-gas", SmsCategories.GAS, """\bgas\s+bill\b"""),
++        rule("kw-internet", SmsCategories.INTERNET, """\bbroadband\b"""),
++        rule("kw-phone", SmsCategories.PHONE, """\bmobile\s+recharge\b"""),
++        rule("kw-health", SmsCategories.HEALTHCARE, """\b(?:pharmacy|medical|hospital|clinic|medicine)\b"""),
++        rule("kw-leisure", SmsCategories.LEISURE, """\b(?:movie|cinema)\b"""),
++        rule("kw-education", SmsCategories.EDUCATION, """\b(?:school|college|university|tuition|course\s+fee|education)\b"""),
++        rule("kw-insurance", SmsCategories.INSURANCE, """\b(?:insurance|premium\s+payment|lic\s+premium)\b"""),
++        // Last on purpose: "purchase" appears in most card SMS, so any more specific keyword should win.
++        rule("kw-shopping", SmsCategories.SHOPPING, """\b(?:shopping|retail|purchase|online\s+order|e-commerce)\b""")
++    )
++
++    /** Every rule id [categorize] can report; tests assert each one has a covering case. */
++    val ruleIds: Set<String> = (merchantRules + keywordRules).map { it.id }.toSet() +
++        setOf("own-account", "salary", "credit-card-bill", "bank-transfer", "person-to-person")
++
++    private val salaryWords = Regex("""(?i)\b(?:salary|payroll|wages)\b""")
++
++    // ---- transfers --------------------------------------------------------------------------
++
++    /** Payee text that means "my own account". Only trusted for expenses (see [categorize]). */
++    private val ownAccountPayee = Regex(
++        """(?i)^(?:your|my|own|self)(?:\s+own)?(?:\s+(?:bank|savings|current|salary))*(?:\s+(?:a/c|acct|account))?$"""
++    )
++    private val ownAccountBody = Regex(
++        """(?i)\b(?:own[- ]account|self[- ]?transfer|(?:transfer(?:red)?|sent)\s+to\s+(?:your\s+)?own\s+account|between\s+(?:your\s+)?(?:own\s+)?accounts)\b"""
++    )
++    private val maskedAccountPayee = Regex(
++        """(?i)^(.*?)\s*(?:(?:a/c|acct?|account)\s*(?:no\.?\s*)?[x*]+|[x*]{2,})\s*(\d{3,4})$"""
++    )
++    // "mobile number XXXXX2400" ends in a mask-like suffix but is a phone number, not an account.
++    private val mobilePayee = Regex("""(?i)\bmobile\s*(?:number|no\.?)\b|^[x*\d]{8,}$""")
++    private val bankTransferBody = Regex("""(?i)\b(?:neft|imps|rtgs|bank\s+transfer|transfer\s+between\s+accounts)\b""")
++    private val bankInPayee = Regex("""(?i)\bbank\b""")
++    private val creditCardPayee = Regex("""(?i)\b(?:credit\s*card|cc|card\s+(?:bill|payment))\b""")
++    private val creditCardBillBody = Regex("""(?i)\b(?:credit\s*card\s+(?:bill|payment|dues)|card\s+bill)\b""")
++
++    // Used to learn which accounts belong to the user, from SMS the user's own bank sent them.
++    private val ownAccountInSmsWithBank = Regex(
++        """(?i)\b([a-z][a-z&]{1,14})\s+bank\s+(?:a/c|acct?|account)\s*(?:no\.?\s*)?[x*]+\s*(\d{3,4})\b"""
++    )
++    private val ownAccountInSmsNoBank = Regex(
++        """(?i)\b([a-z][a-z&]{1,14})\s+(?:a/c|acct?|account)\s*(?:no\.?\s*)?[x*]+\s*(\d{3,4})\b"""
++    )
++    private val notABankName = setOf("bank", "your", "the", "savings", "current", "salary", "to", "from", "with", "in", "my", "own")
++
++    private fun accountKey(bankName: String, last4: String): String? {
++        val bank = bankName.lowercase(Locale.ROOT)
++            .replace(Regex("""\b(?:bank|a/c|acct|account)\b"""), " ")
++            .trim().split(Regex("""\s+""")).firstOrNull { it.isNotBlank() }
++            ?.filter { it.isLetter() } ?: return null
++        if (bank.isBlank() || bank in notABankName) return null
++        return "$bank:$last4"
++    }
++
++    /**
++     * Returns a key such as "icici:450" for the account the SMS was sent about (the first account
++     * mentioned), or null. Keys are stored locally and used to recognise own-account transfers.
++     */
++    fun ownAccountKeyFrom(body: String): String? {
++        ownAccountInSmsWithBank.find(body)?.let { m ->
++            accountKey(m.groupValues[1], m.groupValues[2])?.let { return it }
++        }
++        ownAccountInSmsNoBank.findAll(body).forEach { m ->
++            accountKey(m.groupValues[1], m.groupValues[2])?.let { return it }
++        }
++        return null
++    }
++
++    // ---- person-to-person -------------------------------------------------------------------
++
++    private val businessWords = setOf(
++        "pvt", "private", "ltd", "limited", "llp", "inc", "corp", "company", "co", "services", "service", "servi",
++        "technologies", "technology", "tech", "solutions", "enterprises", "enterprise", "traders", "trading",
++        "stores", "store", "mart", "market", "supermarket", "super", "hotel", "restaurant", "cafe", "bakery",
++        "sweets", "foods", "food", "kitchen", "medicals", "medical", "pharmacy", "hospital", "clinic", "labs",
++        "lab", "school", "college", "institute", "academy", "agency", "agencies", "motors", "auto", "garage",
++        "petrol", "fuel", "bank", "finance", "insurance", "pay", "payments", "wallet", "upi", "recharge", "bill",
++        "bills", "electricals", "electronics", "mobiles", "digital", "online", "retail", "wholesale", "fashion",
++        "textiles", "jewellers", "jewelers", "salon", "parlour", "gym", "fitness", "travels", "tours", "transport",
++        "logistics", "courier", "merchant", "shop", "mall", "club", "app", "global", "international", "industries"
++    )
++    private val mobileNumberPayee = Regex("""(?i)^(?:mobile\s*(?:number|no\.?)\s*)?[x*\d]{8,}$""")
++    private val vpaPhone = Regex("""^\d{10}@[a-z0-9.]+$""", RegexOption.IGNORE_CASE)
++    private val personNameShape = Regex("""^[A-Za-z][A-Za-z.'-]*(?: [A-Za-z][A-Za-z.'-]*){0,3}$""")
++    private val upiEvidence = Regex("""(?i)\bupi\b|@[a-z0-9]+""")
++
++    internal fun looksLikePerson(rawPayee: String): Boolean {
++        val payee = rawPayee.trim().replace(Regex("""\s+"""), " ")
++            .replace(Regex("""(?i)^(?:mr|mrs|ms|shri|smt|sri)\.?\s+"""), "")
++        if (payee.isBlank() || payee.length > 40) return false
++        if (mobileNumberPayee.matches(payee) || vpaPhone.matches(payee)) return true
++        if (!personNameShape.matches(payee)) return false
++        return payee.lowercase(Locale.ROOT).split(' ').none { it.trim('.', '\'', '-') in businessWords }
++    }
++
++    // ---- entry point ------------------------------------------------------------------------
++
++    fun normalizeSender(sender: String): String = sender.trim()
++        .replace(Regex("""^[A-Za-z]{2}-"""), "")
++        .replace(Regex("""-[A-Za-z]$"""), "")
++        .trim()
++
++    fun categorize(input: SmsCategoryInput): SmsCategorization {
++        val payee = input.payee.orEmpty().trim()
++        val sender = normalizeSender(input.sender)
++        val body = input.body
++
++        fun done(category: String, kind: SmsPaymentKind, rule: String?) = SmsCategorization(category, kind, rule)
++
++        // 1. Own account. "your account" as a payee is only trusted for expenses, because a credit
++        //    SMS says "credited to your account" and that is not a transfer between own accounts.
++        val masked = if (mobilePayee.containsMatchIn(payee)) null else maskedAccountPayee.find(payee)
++        val maskedKey = masked?.let { accountKey(it.groupValues[1], it.groupValues[2]) }
++        val ownByPayee = (!input.income && ownAccountPayee.matches(payee)) ||
++            (maskedKey != null && maskedKey in input.ownAccountKeys)
++        if (ownByPayee || ownAccountBody.containsMatchIn(body)) {
++            return done(SmsCategories.OWN_ACCOUNT_TRANSFER, SmsPaymentKind.OWN_ACCOUNT, "own-account")
++        }
++
++        if (input.income) {
++            val salary = salaryWords.containsMatchIn("$payee $body")
++            return if (salary) done(SmsCategories.SALARY, SmsPaymentKind.INCOME, "salary")
++            else done(SmsCategories.OTHER_INCOME, SmsPaymentKind.INCOME, null)
++        }
++
++        // 2. Known merchants: payee first, then sender, then the SMS description.
++        for (text in listOf(payee, sender, body)) {
++            if (text.isBlank()) continue
++            merchantRules.firstOrNull { it.pattern.containsMatchIn(text) }?.let {
++                return done(it.category, SmsPaymentKind.MERCHANT, it.id)
++            }
++        }
++
++        // 3. Credit-card bill payments to a card, without a known merchant brand.
++        if (creditCardPayee.containsMatchIn(payee) || creditCardBillBody.containsMatchIn(body)) {
++            return done(SmsCategories.CREDIT_CARD_BILL, SmsPaymentKind.CREDIT_CARD_BILL, "credit-card-bill")
++        }
++
++        // 4. Bank transfers: NEFT/IMPS/RTGS, a masked account payee, or a bank named as the payee.
++        if (bankTransferBody.containsMatchIn(body) || masked != null || bankInPayee.containsMatchIn(payee)) {
++            return done(SmsCategories.BANK_TRANSFER, SmsPaymentKind.BANK_TRANSFER, "bank-transfer")
++        }
++
++        // 5. Generic keywords anywhere in the payee, sender or SMS text.
++        val combined = "$payee $sender $body"
++        keywordRules.firstOrNull { it.pattern.containsMatchIn(combined) }?.let {
++            return done(it.category, SmsPaymentKind.KEYWORD, it.id)
++        }
++
++        // 6. A UPI payment to a person. When the SMS text is unavailable (stored transactions) the
++        //    shape of the payee name is the only evidence.
++        if (payee.isNotBlank() && looksLikePerson(payee) && (body.isBlank() || upiEvidence.containsMatchIn(body))) {
++            return done(SmsCategories.PERSON_TO_PERSON, SmsPaymentKind.PERSON_TO_PERSON, "person-to-person")
++        }
++
++        return done(SmsCategories.OTHER, SmsPaymentKind.UNKNOWN, null)
++    }
++}
+diff --git a/app/src/main/java/com/openfinanceai/SmsRecategorizer.kt b/app/src/main/java/com/openfinanceai/SmsRecategorizer.kt
+new file mode 100644
+index 0000000..bddce04
+--- /dev/null
++++ b/app/src/main/java/com/openfinanceai/SmsRecategorizer.kt
+@@ -0,0 +1,92 @@
++package com.openfinanceai
++
++import java.util.Locale
++
++/** One suggested change, shown to the user before anything is saved. */
++internal data class RecategorizeProposal(
++    val transaction: Transaction,
++    val newCategory: String,
++    val kind: SmsPaymentKind
++)
++
++/**
++ * Re-categorises previously imported SMS transactions that were left as "Other".
++ *
++ * Safety rules:
++ *  - Only SMS-imported, non-loan expenses currently labelled "Other" are considered.
++ *  - A transaction whose category was chosen by the user ([CategoryOrigin.MANUAL]) is never touched.
++ *  - Only the category (and its origin marker) changes. Title, date, amount, direction, source and
++ *    notification key are preserved, so duplicate detection keeps working.
++ *  - Nothing is applied unless the caller passes the proposals the user approved.
++ *
++ * Limitation: rows imported before origin tracking existed have [CategoryOrigin.UNKNOWN]. If the user
++ * had deliberately set such a row to "Other", it is indistinguishable from an automatic "Other", so it
++ * can appear in the preview. That is why the preview lets the user untick any row.
++ */
++internal object SmsRecategorizer {
++    private val smsSources = setOf("SMS auto import", "SMS import")
++
++    fun isEligible(transaction: Transaction): Boolean =
++        transaction.source in smsSources &&
++            !transaction.income &&
++            transaction.category.trim().equals(SmsCategories.OTHER, ignoreCase = true) &&
++            transaction.categoryOrigin != CategoryOrigin.MANUAL &&
++            transaction.transactionKind.isBlank() &&
++            transaction.loanLender.isBlank()
++
++    /** Notification keys look like "sms-import:<sender>:<timestamp>:<bodyHash>". */
++    fun senderFromKey(notificationKey: String): String {
++        if (!notificationKey.startsWith("sms-import:")) return ""
++        val rest = notificationKey.removePrefix("sms-import:")
++        val withoutHash = rest.substringBeforeLast(':', "")
++        return withoutHash.substringBeforeLast(':', "")
++    }
++
++    /** Importers title transactions "To <payee>" / "From <payee>"; titles without a payee return null. */
++    fun payeeFromTitle(title: String): String? {
++        val trimmed = title.trim()
++        val payee = Regex("""(?i)^(?:to|from)\s+(.+)$""").find(trimmed)?.groupValues?.getOrNull(1)?.trim()
++        return payee?.takeIf { it.isNotBlank() }
++    }
++
++    fun propose(transactions: List<Transaction>, ownAccountKeys: Set<String> = emptySet()): List<RecategorizeProposal> =
++        transactions.filter(::isEligible).mapNotNull { transaction ->
++            val result = SmsCategorizer.categorize(
++                SmsCategoryInput(
++                    sender = senderFromKey(transaction.notificationKey),
++                    payee = payeeFromTitle(transaction.title),
++                    body = "",
++                    income = false,
++                    ownAccountKeys = ownAccountKeys
++                )
++            )
++            if (result.category.equals(SmsCategories.OTHER, ignoreCase = true)) null
++            else RecategorizeProposal(transaction, result.category, result.kind)
++        }
++
++    /**
++     * Applies only the approved proposals. A proposal is skipped if its transaction no longer exists
++     * unchanged (for example because the user edited it after opening the preview).
++     */
++    fun apply(transactions: List<Transaction>, approved: Collection<RecategorizeProposal>): List<Transaction> {
++        if (approved.isEmpty()) return transactions
++        val byTransaction = approved.associateBy { it.transaction }
++        return transactions.map { transaction ->
++            val proposal = byTransaction[transaction]
++            if (proposal != null && isEligible(transaction)) {
++                transaction.copy(category = proposal.newCategory, categoryOrigin = CategoryOrigin.AUTO)
++            } else transaction
++        }
++    }
++
++    /** Short label for the preview list. */
++    fun describe(kind: SmsPaymentKind): String = when (kind) {
++        SmsPaymentKind.MERCHANT -> "Known merchant"
++        SmsPaymentKind.CREDIT_CARD_BILL -> "Credit card bill"
++        SmsPaymentKind.BANK_TRANSFER -> "Bank transfer"
++        SmsPaymentKind.OWN_ACCOUNT -> "Own-account transfer"
++        SmsPaymentKind.PERSON_TO_PERSON -> "Looks like a payment to a person"
++        SmsPaymentKind.KEYWORD -> "Matched from the description"
++        SmsPaymentKind.INCOME, SmsPaymentKind.UNKNOWN -> ""
++    }.let { it.replaceFirstChar { c -> c.titlecase(Locale.ROOT) } }
++}
+diff --git a/app/src/main/java/com/openfinanceai/SmsTransactionImporter.kt b/app/src/main/java/com/openfinanceai/SmsTransactionImporter.kt
+index 3ab14be..6d0fefd 100644
+--- a/app/src/main/java/com/openfinanceai/SmsTransactionImporter.kt
++++ b/app/src/main/java/com/openfinanceai/SmsTransactionImporter.kt
+@@ -14,51 +14,40 @@ import java.util.Locale
+ internal object SmsTransactionImporter {
+     private val lock = Any()
+ 
+-    private data class MerchantRule(val category: String, val pattern: Regex)
++    private const val OWN_ACCOUNT_KEYS = "sms_own_account_keys"
+ 
+-    // Match recognizable merchants independently of how the bank formats the SMS.
+-    // Keep this list local and deterministic so categorisation works offline.
+-    private val merchantRules = listOf(
+-        MerchantRule("Shopping", Regex("""(?i)\b(amazon|amazon\s+pay|flipkart|myntra|ajio|meesho|nykaa|tata\s*cliq|jiomart|croma|reliance\s+digital|decathlon|shoppers\s+stop|lifestyle|westside|ikea|zara|h\s*&\s*m)\b""")),
+-        MerchantRule("Food & Dining", Regex("""(?i)\b(swiggy|zomato|dominos|domino'?s|mcdonald'?s|kfc|pizza\s*hut|burger\s*king|subway|starbucks|cafe\s*coffee\s*day|ccd|behrouz|faasos|eatclub)\b""")),
+-        MerchantRule("Groceries", Regex("""(?i)\b(bigbasket|bbnow|blinkit|zepto|instamart|dmart|d\s*mart|more\s+supermarket|reliance\s+fresh|nature'?s\s+basket)\b""")),
+-        MerchantRule("Taxi", Regex("""(?i)\b(ola|uber|rapido|namma\s+metro|metro\s+rail|irctc|redbus|makemytrip|goibibo|cleartrip)\b""")),
+-        MerchantRule("Fuel", Regex("""(?i)\b(indian\s+oil|bharat\s+petroleum|hpcl|hindustan\s+petroleum|iocl|shell|essar\s+oil|nayara\s+energy)\b""")),
+-        MerchantRule("Bills & Utilities", Regex("""(?i)\b(airtel|jio\s*fiber|jio|vodafone|vi\s+recharge|bsnl|tata\s+power|bescom|adani\s+electricity|electricity\s+board)\b""")),
+-        MerchantRule("Health", Regex("""(?i)\b(apollo\s+pharmacy|1mg|tata\s*1mg|pharmeasy|netmeds|medplus|wellness\s+forever|practo)\b""")),
+-        MerchantRule("Entertainment", Regex("""(?i)\b(netflix|spotify|hotstar|jio\s*hotstar|prime\s+video|youtube\s+premium|bookmyshow|pvr|inox)\b""")),
+-        MerchantRule("Education", Regex("""(?i)\b(udemy|coursera|unacademy|byju'?s|upgrad|vedantu|simplilearn)\b"""))
+-    )
++    /** Accounts (for example "icici:450") that bank SMS have shown to belong to this user. */
++    fun ownAccountKeys(context: Context): Set<String> =
++        context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
++            .getStringSet(OWN_ACCOUNT_KEYS, emptySet()).orEmpty().toSet()
+ 
+-    internal fun categoryForSms(merchant: String?, body: String, income: Boolean): String {
+-        val text = "${merchant.orEmpty()} $body".lowercase(Locale.ROOT)
+-        if (income) {
+-            return if (Regex("""(?i)\b(salary|payroll|wages)\b""").containsMatchIn(text)) "Salary" else "Other income"
+-        }
+-
+-        // A known merchant wins over generic UPI/payment words in the SMS.
+-        merchantRules.firstOrNull { it.pattern.containsMatchIn(text) }?.let { return it.category }
+-
+-        return when {
+-            Regex("""(?i)\b(neft|imps|rtgs|bank transfer|own account transfer|self transfer|transfer between accounts|transferred to (?:your )?(?:own )?account)\b""")
+-                .containsMatchIn(text) -> "Bank transfer"
+-            Regex("""(?i)\b(shopping|retail|purchase|online order|e-commerce)\b""").containsMatchIn(text) -> "Shopping"
+-            Regex("""(?i)\b(ola|uber|rapido|taxi|cab ride|metro|namma metro|irctc|redbus|makemytrip)\b""").containsMatchIn(text) -> "Taxi"
+-            Regex("""(?i)\b(swiggy|zomato|restaurant|cafe|food delivery|dominos|mcdonald|kfc|pizzahut|food order)\b""").containsMatchIn(text) -> "Food & Dining"
+-            Regex("""(?i)\b(bigbasket|blinkit|zepto|instamart|grocery|groceries)\b""").containsMatchIn(text) -> "Groceries"
+-            Regex("""(?i)\b(petrol|fuel|diesel|indian oil|bharat petroleum|hpcl|shell fuel)\b""").containsMatchIn(text) -> "Fuel"
+-            Regex("""(?i)\b(electricity|water bill|gas bill|broadband|mobile recharge|utility|jio fiber|airtel)\b""").containsMatchIn(text) -> "Bills & Utilities"
+-            Regex("""(?i)\b(pharmacy|medical|hospital|clinic|medicine|apollo pharmacy)\b""").containsMatchIn(text) -> "Health"
+-            Regex("""(?i)\b(movie|cinema|netflix|spotify|hotstar|prime video|bookmyshow)\b""").containsMatchIn(text) -> "Entertainment"
+-            Regex("""(?i)\b(school|college|university|tuition|course fee|education|udemy|coursera)\b""").containsMatchIn(text) -> "Education"
+-            Regex("""(?i)\b(insurance|premium payment|lic premium)\b""").containsMatchIn(text) -> "Insurance"
+-            else -> "Other"
+-        }
++    /**
++     * Remembers the account an SMS was sent about so later transfers to it are recognised as
++     * own-account transfers. Only the bank name and last digits are stored.
++     */
++    fun learnOwnAccount(context: Context, body: String) {
++        val key = SmsCategorizer.ownAccountKeyFrom(body) ?: return
++        val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
++        val current = prefs.getStringSet(OWN_ACCOUNT_KEYS, emptySet()).orEmpty()
++        if (key in current) return
++        prefs.edit().putStringSet(OWN_ACCOUNT_KEYS, HashSet(current).apply { add(key) }).apply()
+     }
+ 
++    /** The single categorisation entry point shared by automatic and manual SMS import. */
++    fun categorize(context: Context, sender: String, body: String, parsed: ParsedBankSmsTransaction): SmsCategorization =
++        SmsCategorizer.categorize(
++            SmsCategoryInput(
++                sender = sender,
++                payee = parsed.merchant,
++                body = body,
++                income = parsed.income,
++                ownAccountKeys = ownAccountKeys(context)
++            )
++        )
+ 
+     fun import(context: Context, senderRaw: String, timestamp: Long, body: String): Boolean = synchronized(lock) {
+         val sender = senderRaw.trim()
++        learnOwnAccount(context, body)
+         val receivedDate = Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+         val parsed = BankSmsParser.parse(body, receivedDate) ?: return false
+         val key = "sms-import:${sender.lowercase(Locale.ROOT)}:$timestamp:${body.hashCode()}"
+@@ -80,7 +69,7 @@ internal object SmsTransactionImporter {
+         }
+         rows.put(JSONObject()
+             .put("title", title)
+-            .put("category", categoryForSms(parsed.merchant, body, parsed.income))
++            .put("category", categorize(context, sender, body, parsed).category)
+             .put("date", parsed.date)
+             .put("amount", parsed.amount)
+             .put("income", parsed.income)
+@@ -89,7 +78,8 @@ internal object SmsTransactionImporter {
+             .put("captureStatus", "")
+             .put("paymentMethod", "Not set")
+             .put("notes", notes)
+-            .put("tag", ""))
++            .put("tag", "")
++            .put("categoryOrigin", CategoryOrigin.AUTO))
+         prefs.edit().putString("transactions", rows.toString()).commit()
+     }
+ }
+diff --git a/app/src/test/java/com/openfinanceai/BankSmsParserTest.kt b/app/src/test/java/com/openfinanceai/BankSmsParserTest.kt
+index 1df0eba..2aab3f1 100644
+--- a/app/src/test/java/com/openfinanceai/BankSmsParserTest.kt
++++ b/app/src/test/java/com/openfinanceai/BankSmsParserTest.kt
+@@ -10,6 +10,9 @@ import java.time.LocalDate
+ class BankSmsParserTest {
+     private val received = LocalDate.parse("2026-11-05")
+ 
++    private fun categoryOf(merchant: String?, body: String, income: Boolean) =
++        SmsCategorizer.categorize(SmsCategoryInput(payee = merchant, body = body, income = income)).category
++
+     @Test
+     fun parsesDebitMerchantAfterSemicolonEvenWhenPayeeIsSaidToBeCredited() {
+         val parsed = BankSmsParser.parse(
+@@ -83,16 +86,24 @@ class BankSmsParserTest {
+ 
+     @Test
+     fun categorizesSmsMerchantsInsteadOfDefaultingEveryExpenseToBankTransfer() {
+-        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Amazon", "Paid to Amazon", false))
+-        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Flipkart", "UPI purchase", false))
+-        assertEquals("Taxi", SmsTransactionImporter.categoryForSms("Ola", "Ride payment", false))
+-        assertEquals("Taxi", SmsTransactionImporter.categoryForSms("Uber", "Trip payment", false))
+-        assertEquals("Food & Dining", SmsTransactionImporter.categoryForSms("Swiggy", "Order payment", false))
+-        assertEquals("Bank transfer", SmsTransactionImporter.categoryForSms(null, "IMPS transferred to account", false))
+-        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Amazon", "Transferred to Amazon by UPI", false))
+-        assertEquals("Other", SmsTransactionImporter.categoryForSms("Unknown Merchant", "Transferred to merchant by UPI", false))
+-        assertEquals("Other", SmsTransactionImporter.categoryForSms("Unknown Merchant", "Payment successful", false))
+-        assertEquals("Salary", SmsTransactionImporter.categoryForSms("ACME Payroll", "Salary credited", true))
++        assertEquals("Shopping", categoryOf("Amazon", "Paid to Amazon", false))
++        assertEquals("Shopping", categoryOf("Flipkart", "UPI purchase", false))
++        assertEquals("Transport/Taxi", categoryOf("Ola", "Ride payment", false))
++        assertEquals("Transport/Taxi", categoryOf("Uber", "Trip payment", false))
++        assertEquals("Food/Takeout", categoryOf("Swiggy", "Order payment", false))
++        assertEquals("Bank transfer", categoryOf(null, "IMPS transferred to account", false))
++        assertEquals("Shopping", categoryOf("Amazon", "Transferred to Amazon by UPI", false))
++        assertEquals("Other", categoryOf("Unknown Merchant", "Transferred to merchant by UPI", false))
++        assertEquals("Other", categoryOf("Unknown Merchant", "Payment successful", false))
++        assertEquals("Salary", categoryOf("ACME Payroll", "Salary credited", true))
++    }
++
++    @Test
++    fun parsedSmsFeedsTheSharedCategoriserEndToEnd() {
++        val sms = "ICICI Bank Acct XX450 debited for Rs 1000.00 on 04-Nov-26; CRED Club credited. UPI:667400510260. Call 18002662 for dispute."
++        val parsed = BankSmsParser.parse(sms, received)!!
++        val result = SmsCategorizer.categorize(SmsCategoryInput("AX-ICICIB-S", parsed.merchant, sms, parsed.income))
++        assertEquals("Bills/Credit card", result.category)
+     }
+ 
+     @Test
+@@ -117,7 +128,7 @@ class BankSmsParserTest {
+         assertEquals(499L, parsed?.amount)
+         assertEquals("AMAZON INDIA", parsed?.merchant)
+         assertFalse(parsed!!.income)
+-        assertEquals("Shopping", SmsTransactionImporter.categoryForSms(parsed.merchant, "UPI payment successful", parsed.income))
++        assertEquals("Shopping", categoryOf(parsed.merchant, "UPI payment successful", parsed.income))
+     }
+ 
+     @Test
+@@ -128,24 +139,26 @@ class BankSmsParserTest {
+         )
+ 
+         assertEquals("SWIGGY", parsed?.merchant)
+-        assertEquals("Food & Dining", SmsTransactionImporter.categoryForSms(parsed?.merchant, "UPI debit", false))
++        assertEquals("Food/Takeout", categoryOf(parsed?.merchant, "UPI debit", false))
+     }
+ 
+     @Test
+     fun recognizesCommonIndianOnlineAndGroceryMerchants() {
+-        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Myntra", "UPI payment", false))
+-        assertEquals("Shopping", SmsTransactionImporter.categoryForSms("Croma", "Paid", false))
+-        assertEquals("Groceries", SmsTransactionImporter.categoryForSms("Blinkit", "UPI payment", false))
+-        assertEquals("Groceries", SmsTransactionImporter.categoryForSms("BigBasket", "Paid", false))
+-        assertEquals("Food & Dining", SmsTransactionImporter.categoryForSms("Dominos", "UPI payment", false))
+-        assertEquals("Health", SmsTransactionImporter.categoryForSms("Apollo Pharmacy", "UPI payment", false))
++        assertEquals("Shopping", categoryOf("Myntra", "UPI payment", false))
++        assertEquals("Shopping", categoryOf("Croma", "Paid", false))
++        assertEquals("Food", categoryOf("Blinkit", "UPI payment", false))
++        assertEquals("Food", categoryOf("BigBasket", "Paid", false))
++        assertEquals("Food/Dining out", categoryOf("Dominos", "UPI payment", false))
++        assertEquals("Healthcare", categoryOf("Apollo Pharmacy", "UPI payment", false))
+     }
+ 
+     @Test
+     fun explicitBankRailsRemainTransfersButGenericUpiDoesNot() {
+-        assertEquals("Bank transfer", SmsTransactionImporter.categoryForSms(null, "IMPS transfer successful", false))
+-        assertEquals("Bank transfer", SmsTransactionImporter.categoryForSms(null, "NEFT credited to own account", false))
+-        assertEquals("Other", SmsTransactionImporter.categoryForSms("Unknown Shop", "UPI payment successful", false))
++        assertEquals("Bank transfer", categoryOf(null, "IMPS transfer successful", false))
++        // Own-account wording is now recognised separately from a generic bank transfer.
++        assertEquals("Own account transfer", categoryOf(null, "NEFT credited to own account", false))
++        assertEquals("Bank transfer", categoryOf(null, "NEFT payment to account", false))
++        assertEquals("Other", categoryOf("Unknown Shop", "UPI payment successful", false))
+     }
+ 
+ 
+diff --git a/app/src/test/java/com/openfinanceai/FinanceIconSuggestionsTest.kt b/app/src/test/java/com/openfinanceai/FinanceIconSuggestionsTest.kt
+index e706c73..d95ebbf 100644
+--- a/app/src/test/java/com/openfinanceai/FinanceIconSuggestionsTest.kt
++++ b/app/src/test/java/com/openfinanceai/FinanceIconSuggestionsTest.kt
+@@ -41,4 +41,25 @@ class FinanceIconSuggestionsTest {
+     fun unknownNamesReceiveGenericAppIcon() {
+         assertEquals("app", financeIconKeyForName("Custom label xyz"))
+     }
++    @Test
++    fun mapsTheSmsCategoryNamesToSensibleIcons() {
++        val expected = mapOf(
++            "Shopping" to "shopping",
++            "Food/Takeout" to "food",
++            "Food/Dining out" to "food",
++            "Transport/Taxi" to "transport",
++            "Transport/Fuel" to "fuel",
++            "Healthcare" to "health",
++            "Leisure" to "entertainment",
++            "Leisure/Travel" to "travel",
++            "Utilities/Electricity" to "bills",
++            "Bills/Credit card" to "card",
++            "Bank transfer" to "bank",
++            "Own account transfer" to "transfer",
++            "Person-to-person" to "person"
++        )
++        expected.forEach { (name, key) ->
++            assertEquals("Wrong icon for category $name", key, financeIconKeyForName(name))
++        }
++    }
+ }
+diff --git a/app/src/test/java/com/openfinanceai/SmsCategorizerTest.kt b/app/src/test/java/com/openfinanceai/SmsCategorizerTest.kt
+new file mode 100644
+index 0000000..153593a
+--- /dev/null
++++ b/app/src/test/java/com/openfinanceai/SmsCategorizerTest.kt
+@@ -0,0 +1,316 @@
++package com.openfinanceai
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class SmsCategorizerTest {
++    private fun expense(
++        payee: String? = null,
++        sender: String = "",
++        body: String = "",
++        own: Set<String> = emptySet()
++    ) = SmsCategorizer.categorize(SmsCategoryInput(sender, payee, body, income = false, ownAccountKeys = own))
++
++    private fun income(payee: String? = null, body: String = "", own: Set<String> = emptySet()) =
++        SmsCategorizer.categorize(SmsCategoryInput("", payee, body, income = true, ownAccountKeys = own))
++
++    // ---- requested merchants: matched from payee, sender and SMS description -----------------
++
++    @Test
++    fun credMatchesPayeeSenderAndDescription() {
++        assertEquals(SmsCategories.CREDIT_CARD_BILL, expense(payee = "CRED Club").category)
++        assertEquals(SmsCategories.CREDIT_CARD_BILL, expense(payee = "cred.club@axisb").category)
++        assertEquals(SmsCategories.CREDIT_CARD_BILL, expense(sender = "AX-CRED-S", body = "Rs 871 debited").category)
++        assertEquals(SmsCategories.CREDIT_CARD_BILL, expense(body = "Rs 871 debited; CRED Club credited. UPI:123").category)
++    }
++
++    @Test
++    fun dreamplugMatchesPayeeSenderAndDescriptionIncludingTruncatedNames() {
++        assertEquals(SmsCategories.CREDIT_CARD_BILL, expense(payee = "Dreamplug Servi").category)
++        assertEquals(SmsCategories.CREDIT_CARD_BILL, expense(payee = "DREAMPLUG TECHNOLOGIES PRIVATE LIMITED").category)
++        assertEquals(SmsCategories.CREDIT_CARD_BILL, expense(sender = "VM-DREAMPLUG", body = "Rs 27032 debited").category)
++        assertEquals(SmsCategories.CREDIT_CARD_BILL, expense(body = "Rs 27032 debited; Dreamplug Services credited. UPI:1").category)
++    }
++
++    @Test
++    fun amazonMatchesPayeeSenderAndDescription() {
++        assertEquals(SmsCategories.SHOPPING, expense(payee = "Amazon").category)
++        assertEquals(SmsCategories.SHOPPING, expense(payee = "AMAZONPAY").category)
++        assertEquals(SmsCategories.SHOPPING, expense(payee = "amazon@apl").category)
++        assertEquals(SmsCategories.SHOPPING, expense(sender = "AX-AMAZON-S", body = "Rs 499 paid").category)
++        assertEquals(SmsCategories.SHOPPING, expense(body = "Transferred to Amazon by UPI").category)
++    }
++
++    @Test
++    fun flipkartMatchesPayeeSenderAndDescription() {
++        assertEquals(SmsCategories.SHOPPING, expense(payee = "Flipkart").category)
++        assertEquals(SmsCategories.SHOPPING, expense(payee = "FLIPKART INTERNET PVT LTD").category)
++        assertEquals(SmsCategories.SHOPPING, expense(sender = "VK-FLIPKT", body = "Flipkart order Rs 999 paid").category)
++        assertEquals(SmsCategories.SHOPPING, expense(body = "UPI purchase at Flipkart").category)
++    }
++
++    @Test
++    fun swiggyMatchesPayeeSenderAndDescription() {
++        assertEquals(SmsCategories.FOOD_TAKEOUT, expense(payee = "Swiggy").category)
++        assertEquals(SmsCategories.FOOD_TAKEOUT, expense(payee = "Bundl Technologies").category)
++        assertEquals(SmsCategories.FOOD_TAKEOUT, expense(sender = "AD-SWIGGY", body = "Rs 320 paid").category)
++        assertEquals(SmsCategories.FOOD_TAKEOUT, expense(body = "Order payment to Swiggy").category)
++    }
++
++    @Test
++    fun zomatoMatchesPayeeSenderAndDescription() {
++        assertEquals(SmsCategories.FOOD_TAKEOUT, expense(payee = "Zomato").category)
++        assertEquals(SmsCategories.FOOD_TAKEOUT, expense(payee = "ZOMATO LTD").category)
++        assertEquals(SmsCategories.FOOD_TAKEOUT, expense(sender = "VM-ZOMATO", body = "Rs 410 paid").category)
++        assertEquals(SmsCategories.FOOD_TAKEOUT, expense(body = "Paid Rs 410 to Zomato via UPI").category)
++    }
++
++    @Test
++    fun specificMerchantsBeatMoreGeneralOnes() {
++        assertEquals(SmsCategories.FOOD, expense(payee = "Swiggy Instamart").category)
++        assertEquals(SmsCategories.FOOD, expense(payee = "Blinkit").category)
++        assertEquals(SmsCategories.LEISURE, expense(payee = "Amazon Prime Video").category)
++    }
++
++    @Test
++    fun payeeTakesPrecedenceOverSenderAndDescription() {
++        assertEquals(SmsCategories.FOOD_TAKEOUT, expense(payee = "Swiggy", sender = "AX-AMAZON", body = "Amazon").category)
++    }
++
++    @Test
++    fun matchingUsesWordBoundariesSoSubstringsDoNotFalseMatch() {
++        // "credited"/"credit" must not trigger CRED, and "Ola" must not match inside other words.
++        assertEquals(SmsCategories.OTHER, expense(payee = "Unknown Merchant", body = "Rs 100 credited reversal").category)
++        assertEquals(SmsCategories.OTHER, expense(payee = "Unknown Merchant", body = "Payment successful").category)
++        assertFalse(expense(payee = "Nikola Tesla Fan Club").category == SmsCategories.TAXI)
++    }
++
++    // ---- pre-existing merchant and keyword behaviour, now using the app's default names -----
++
++    @Test
++    fun existingMerchantRulesMapToDefaultCategoryNames() {
++        assertEquals(SmsCategories.TAXI, expense(payee = "Ola", body = "Ride payment").category)
++        assertEquals(SmsCategories.TAXI, expense(payee = "Uber", body = "Trip payment").category)
++        assertEquals(SmsCategories.FUEL, expense(payee = "Indian Oil").category)
++        assertEquals(SmsCategories.ELECTRICITY, expense(payee = "BESCOM").category)
++        assertEquals(SmsCategories.INTERNET, expense(payee = "Jio Fiber").category)
++        assertEquals(SmsCategories.PHONE, expense(payee = "Airtel").category)
++        assertEquals(SmsCategories.LEISURE, expense(payee = "Netflix").category)
++        assertEquals(SmsCategories.HEALTHCARE, expense(payee = "Apollo Pharmacy").category)
++        assertEquals(SmsCategories.PUBLIC_TRANSIT, expense(payee = "Namma Metro").category)
++        assertEquals(SmsCategories.TRAVEL, expense(payee = "MakeMyTrip").category)
++        assertEquals(SmsCategories.EDUCATION, expense(payee = "Udemy").category)
++        assertEquals(SmsCategories.FOOD_COFFEE, expense(payee = "Starbucks").category)
++        assertEquals(SmsCategories.FOOD_DINING_OUT, expense(payee = "Dominos").category)
++    }
++
++    @Test
++    fun genericKeywordsStillWorkWhenNoBrandMatches() {
++        assertEquals(SmsCategories.FUEL, expense(payee = "Rao Filling Station", body = "petrol purchase").category)
++        assertEquals(SmsCategories.HEALTHCARE, expense(payee = "City Hospital").category)
++        assertEquals(SmsCategories.INSURANCE, expense(payee = "Star Health Insurance").category)
++        assertEquals(SmsCategories.WATER, expense(body = "water bill paid").category)
++        assertEquals(SmsCategories.GAS, expense(body = "gas bill paid").category)
++        assertEquals(SmsCategories.FOOD, expense(body = "Grocery payment").category)
++    }
++
++    // ---- transfers ---------------------------------------------------------------------------
++
++    @Test
++    fun bankTransferIsRecognisedFromNeftImpsRtgsAndBankPayees() {
++        assertEquals(SmsCategories.BANK_TRANSFER, expense(body = "IMPS transferred to account").category)
++        assertEquals(SmsCategories.BANK_TRANSFER, expense(payee = "Ravi Kumar", body = "NEFT payment Rs 5000").category)
++        assertEquals(SmsCategories.BANK_TRANSFER, expense(body = "RTGS of Rs 200000 sent").category)
++        assertEquals(SmsCategories.BANK_TRANSFER, expense(payee = "HDFC Bank").category)
++    }
++
++    @Test
++    fun maskedAccountPayeeIsABankTransferWhenTheAccountIsNotKnownToBeOwn() {
++        val result = expense(payee = "ICICI Bank XX450", body = "Rs 4842 debited. UPI:1")
++        assertEquals(SmsCategories.BANK_TRANSFER, result.category)
++        assertEquals(SmsPaymentKind.BANK_TRANSFER, result.kind)
++    }
++
++    @Test
++    fun maskedAccountPayeeIsAnOwnAccountTransferWhenTheAccountWasSeenInTheUsersOwnSms() {
++        val result = expense(payee = "ICICI Bank XX450", own = setOf("icici:450"))
++        assertEquals(SmsCategories.OWN_ACCOUNT_TRANSFER, result.category)
++        assertEquals(SmsPaymentKind.OWN_ACCOUNT, result.kind)
++        // A different account at the same bank, or the same digits at another bank, is not own.
++        assertEquals(SmsCategories.BANK_TRANSFER, expense(payee = "ICICI Bank XX999", own = setOf("icici:450")).category)
++        assertEquals(SmsCategories.BANK_TRANSFER, expense(payee = "HDFC Bank XX450", own = setOf("icici:450")).category)
++    }
++
++    @Test
++    fun ownAccountKeyIsLearnedFromTheUsersOwnBankSms() {
++        assertEquals(
++            "icici:450",
++            SmsCategorizer.ownAccountKeyFrom("ICICI Bank Acct XX450 debited for Rs 1000.00 on 04-Nov-26; AKASH S credited. UPI:667400510260.")
++        )
++        assertEquals("hdfc:1234", SmsCategorizer.ownAccountKeyFrom("Rs 500 debited from HDFC Bank A/c XX1234 on 01-Nov-26"))
++        assertEquals("sbi:9876", SmsCategorizer.ownAccountKeyFrom("Your SBI A/c X9876 is credited with Rs 100"))
++        assertNull(SmsCategorizer.ownAccountKeyFrom("Your OTP is 123456"))
++        assertNull(SmsCategorizer.ownAccountKeyFrom("Rs 200 debited from your account"))
++    }
++
++    @Test
++    fun ownAccountIsRecognisedFromPayeeWordsAndFromDescription() {
++        assertEquals(SmsCategories.OWN_ACCOUNT_TRANSFER, expense(payee = "your account").category)
++        assertEquals(SmsCategories.OWN_ACCOUNT_TRANSFER, expense(payee = "Own Account").category)
++        assertEquals(SmsCategories.OWN_ACCOUNT_TRANSFER, expense(payee = "self").category)
++        assertEquals(SmsCategories.OWN_ACCOUNT_TRANSFER, expense(body = "Self transfer of Rs 5000 done").category)
++        assertEquals(SmsCategories.OWN_ACCOUNT_TRANSFER, expense(body = "Rs 5000 transferred to own account").category)
++    }
++
++    @Test
++    fun routineDebitWordingIsNotMistakenForAnOwnAccountTransfer() {
++        // "debited from your account" is boilerplate in nearly every debit SMS.
++        val result = expense(payee = "Unknown Merchant", body = "Rs 200 debited from your account at Unknown Merchant")
++        assertEquals(SmsCategories.OTHER, result.category)
++    }
++
++    @Test
++    fun incomingCreditedToYourAccountIsNotAnOwnAccountTransfer() {
++        assertEquals(SmsCategories.OTHER_INCOME, income(payee = "your account", body = "Rs 9559 credited to your account").category)
++        assertEquals(SmsCategories.OTHER_INCOME, income(payee = "mobile number XXXXX52400").category)
++    }
++
++    @Test
++    fun incomeFromAnOwnAccountIsRecognised() {
++        assertEquals(SmsCategories.OWN_ACCOUNT_TRANSFER, income(payee = "ICICI Bank XX450", own = setOf("icici:450")).category)
++        assertEquals(SmsCategories.OWN_ACCOUNT_TRANSFER, income(body = "Self transfer received").category)
++    }
++
++    @Test
++    fun personToPersonUpiPaymentsAreDistinguishedFromMerchantsAndBanks() {
++        val upi = "Rs 10000 debited. UPI:123456789"
++        val person = expense(payee = "VEERAMREDDY NAG", body = upi)
++        assertEquals(SmsCategories.PERSON_TO_PERSON, person.category)
++        assertEquals(SmsPaymentKind.PERSON_TO_PERSON, person.kind)
++        assertEquals(SmsCategories.PERSON_TO_PERSON, expense(payee = "AKASH S", body = upi).category)
++        assertEquals(SmsCategories.PERSON_TO_PERSON, expense(payee = "mobile number XXXXX52400", body = upi).category)
++        assertEquals(SmsCategories.PERSON_TO_PERSON, expense(payee = "9876543210@ybl", body = upi).category)
++        // Businesses, even with person-like shapes, are not person-to-person.
++        assertEquals(SmsCategories.OTHER, expense(payee = "Sri Lakshmi Stores", body = upi).category)
++        assertEquals(SmsCategories.OTHER, expense(payee = "Unknown Merchant", body = upi).category)
++        assertEquals(SmsCategories.OTHER, expense(payee = "Dreamplug Servi".replace("Dreamplug", "Acme"), body = upi).category)
++    }
++
++    @Test
++    fun personToPersonNeedsUpiEvidenceWhenTheSmsTextIsAvailable() {
++        assertEquals(SmsCategories.OTHER, expense(payee = "VEERAMREDDY NAG", body = "Rs 10000 debited at VEERAMREDDY NAG").category)
++        // Without any SMS text (stored transactions) the payee shape is the only evidence.
++        assertEquals(SmsCategories.PERSON_TO_PERSON, expense(payee = "VEERAMREDDY NAG").category)
++    }
++
++    @Test
++    fun creditCardPaymentsToACardAreCardBillsButCardSpendIsNot() {
++        assertEquals(SmsCategories.CREDIT_CARD_BILL, expense(payee = "HDFC Bank Credit Card XX1234").category)
++        assertEquals(SmsCategories.CREDIT_CARD_BILL, expense(body = "Credit card bill payment of Rs 15000").category)
++        // Spending ON a credit card at an unknown merchant is not a bill payment.
++        val spend = expense(payee = "Unknown Merchant", body = "Spent Rs 500 on ICICI Bank Credit Card XX1234 at Unknown Merchant")
++        assertEquals(SmsCategories.OTHER, spend.category)
++        // ...and a known merchant on a card still wins.
++        assertEquals(SmsCategories.SHOPPING, expense(payee = "Amazon", body = "Spent Rs 500 on HDFC Credit Card at Amazon").category)
++    }
++
++    @Test
++    fun merchantsBeatTransferHeuristics() {
++        assertEquals(SmsCategories.SHOPPING, expense(payee = "Amazon", body = "IMPS payment").category)
++    }
++
++    // ---- income ------------------------------------------------------------------------------
++
++    @Test
++    fun incomeKeepsSalaryAndOtherIncomeCategories() {
++        assertEquals(SmsCategories.SALARY, income(payee = "ACME Payroll", body = "Salary credited").category)
++        assertEquals(SmsCategories.OTHER_INCOME, income(payee = "Someone", body = "Rs 100 credited").category)
++    }
++
++    // ---- sender handling and the default category list ---------------------------------------
++
++    @Test
++    fun senderPrefixAndSuffixAreStripped() {
++        assertEquals("AMAZON", SmsCategorizer.normalizeSender("AX-AMAZON-S"))
++        assertEquals("ICICIB", SmsCategorizer.normalizeSender(" VM-ICICIB "))
++        assertEquals("919876543210", SmsCategorizer.normalizeSender("919876543210"))
++    }
++
++    @Test
++    fun everyCategoryTheEngineCanReturnExistsInTheDefaultCategoryList() {
++        val picker = DefaultFinanceCategories.MONEY + listOf(SmsCategories.SALARY, SmsCategories.OTHER_INCOME)
++        SmsCategories.ALL.forEach { category ->
++            assertTrue("$category is not offered by the default category list", category in picker)
++        }
++    }
++
++    @Test
++    fun addedDefaultsDoNotDuplicateExistingOnesAndKeepTheOriginalOrder() {
++        assertEquals(DefaultFinanceCategories.MONEY.size, DefaultFinanceCategories.MONEY.toSet().size)
++        assertEquals(DefaultFinanceCategories.EXISTING, DefaultFinanceCategories.MONEY.take(DefaultFinanceCategories.EXISTING.size))
++        assertTrue(SmsCategories.ADDED_DEFAULTS.none { it in DefaultFinanceCategories.EXISTING })
++    }
++    @Test
++    fun everyRuleIdHasAtLeastOneCoveringCase() {
++        val upi = "Rs 100 debited. UPI:123456789"
++        val cases: Map<String, SmsCategoryInput> = mapOf(
++            "groceries" to SmsCategoryInput(payee = "BigBasket", income = false),
++            "streaming-entertainment" to SmsCategoryInput(payee = "Netflix", income = false),
++            "cred" to SmsCategoryInput(payee = "CRED Club", income = false),
++            "swiggy" to SmsCategoryInput(payee = "Swiggy", income = false),
++            "zomato" to SmsCategoryInput(payee = "Zomato", income = false),
++            "coffee" to SmsCategoryInput(payee = "Starbucks", income = false),
++            "restaurant-chains" to SmsCategoryInput(payee = "Dominos", income = false),
++            "flipkart" to SmsCategoryInput(payee = "Flipkart", income = false),
++            "amazon" to SmsCategoryInput(payee = "Amazon", income = false),
++            "online-shopping" to SmsCategoryInput(payee = "Myntra", income = false),
++            "taxi" to SmsCategoryInput(payee = "Ola", income = false),
++            "public-transit" to SmsCategoryInput(payee = "Namma Metro", income = false),
++            "travel-booking" to SmsCategoryInput(payee = "MakeMyTrip", income = false),
++            "fuel" to SmsCategoryInput(payee = "Indian Oil", income = false),
++            "internet" to SmsCategoryInput(payee = "Jio Fiber", income = false),
++            "electricity" to SmsCategoryInput(payee = "BESCOM", income = false),
++            "phone" to SmsCategoryInput(payee = "Airtel", income = false),
++            "health-brands" to SmsCategoryInput(payee = "Apollo Pharmacy", income = false),
++            "education-brands" to SmsCategoryInput(payee = "Udemy", income = false),
++            "kw-taxi" to SmsCategoryInput(payee = "Unknown Merchant", body = "cab ride booked", income = false),
++            "kw-transit" to SmsCategoryInput(payee = "Unknown Merchant", body = "metro card top-up", income = false),
++            "kw-dining" to SmsCategoryInput(payee = "Unknown Merchant", body = "restaurant bill", income = false),
++            "kw-groceries" to SmsCategoryInput(payee = "Unknown Merchant", body = "grocery items", income = false),
++            "kw-fuel" to SmsCategoryInput(payee = "Unknown Merchant", body = "diesel refill", income = false),
++            "kw-electricity" to SmsCategoryInput(payee = "Unknown Merchant", body = "electricity charges", income = false),
++            "kw-water" to SmsCategoryInput(payee = "Unknown Merchant", body = "water bill", income = false),
++            "kw-gas" to SmsCategoryInput(payee = "Unknown Merchant", body = "gas bill", income = false),
++            "kw-internet" to SmsCategoryInput(payee = "Unknown Merchant", body = "broadband plan", income = false),
++            "kw-phone" to SmsCategoryInput(payee = "Unknown Merchant", body = "mobile recharge", income = false),
++            "kw-health" to SmsCategoryInput(payee = "Unknown Merchant", body = "pharmacy order", income = false),
++            "kw-leisure" to SmsCategoryInput(payee = "Unknown Merchant", body = "movie tickets", income = false),
++            "kw-education" to SmsCategoryInput(payee = "Unknown Merchant", body = "tuition fee", income = false),
++            "kw-insurance" to SmsCategoryInput(payee = "Unknown Merchant", body = "insurance renewal", income = false),
++            "kw-shopping" to SmsCategoryInput(payee = "Unknown Merchant", body = "purchase", income = false),
++            "own-account" to SmsCategoryInput(payee = "your account", income = false),
++            "salary" to SmsCategoryInput(body = "Salary credited", income = true),
++            "credit-card-bill" to SmsCategoryInput(body = "Credit card bill payment", income = false),
++            "bank-transfer" to SmsCategoryInput(body = "IMPS transfer", income = false),
++            "person-to-person" to SmsCategoryInput(payee = "AKASH S", body = upi, income = false)
++        )
++        assertEquals("Add a covering case for every rule id", SmsCategorizer.ruleIds, cases.keys)
++        cases.forEach { (id, input) ->
++            assertEquals("Case for $id matched a different rule", id, SmsCategorizer.categorize(input).rule)
++        }
++    }
++
++    @Test
++    fun editingACategoryMarksItManualButEditingOtherFieldsDoesNot() {
++        assertEquals(CategoryOrigin.MANUAL, CategoryOrigin.afterEdit("Other", CategoryOrigin.AUTO, "Household"))
++        assertEquals(CategoryOrigin.MANUAL, CategoryOrigin.afterEdit("Other", CategoryOrigin.UNKNOWN, "Shopping"))
++        // Re-selecting "Other" explicitly over an automatic Other is not a change, so it stays automatic...
++        assertEquals(CategoryOrigin.AUTO, CategoryOrigin.afterEdit("Other", CategoryOrigin.AUTO, "other"))
++        // ...and saving an edit that leaves the category alone keeps whatever origin it had.
++        assertEquals(CategoryOrigin.MANUAL, CategoryOrigin.afterEdit("Household", CategoryOrigin.MANUAL, "Household"))
++        assertEquals(CategoryOrigin.UNKNOWN, CategoryOrigin.afterEdit("Other", CategoryOrigin.UNKNOWN, " Other "))
++    }
++}
+diff --git a/app/src/test/java/com/openfinanceai/SmsRecategorizerTest.kt b/app/src/test/java/com/openfinanceai/SmsRecategorizerTest.kt
+new file mode 100644
+index 0000000..7e4c1e3
+--- /dev/null
++++ b/app/src/test/java/com/openfinanceai/SmsRecategorizerTest.kt
+@@ -0,0 +1,145 @@
++package com.openfinanceai
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class SmsRecategorizerTest {
++    private fun sms(
++        title: String,
++        category: String = "Other",
++        income: Boolean = false,
++        source: String = "SMS auto import",
++        key: String = "sms-import:ax-icicib-s:1762300000000:-12345",
++        origin: String = CategoryOrigin.UNKNOWN,
++        amount: Long = 100L,
++        date: String = "2026-11-05"
++    ) = Transaction(
++        title = title, category = category, date = date, amount = amount, income = income,
++        source = source, notificationKey = key, notes = "Imported automatically from a bank SMS.",
++        categoryOrigin = origin
++    )
++
++    @Test
++    fun onlySmsImportedExpensesLabelledOtherAreEligible() {
++        assertTrue(SmsRecategorizer.isEligible(sms("To CRED Club")))
++        assertTrue(SmsRecategorizer.isEligible(sms("To CRED Club", source = "SMS import")))
++        assertTrue(SmsRecategorizer.isEligible(sms("To CRED Club", category = " other ")))
++        assertFalse(SmsRecategorizer.isEligible(sms("To CRED Club", category = "Shopping")))
++        assertFalse(SmsRecategorizer.isEligible(sms("From mobile number XXXXX52400", category = "Other income", income = true)))
++        assertFalse(SmsRecategorizer.isEligible(sms("To CRED Club", income = true)))
++        assertFalse(SmsRecategorizer.isEligible(sms("To CRED Club", source = "")))
++        assertFalse(SmsRecategorizer.isEligible(sms("To CRED Club", source = "Notification")))
++        assertFalse(SmsRecategorizer.isEligible(sms("To CRED Club").copy(loanLender = "HDFC")))
++        assertFalse(SmsRecategorizer.isEligible(sms("To CRED Club").copy(transactionKind = "loan_payment")))
++    }
++
++    @Test
++    fun manuallySelectedCategoriesAreNeverEligibleEvenWhenTheyAreOther() {
++        val manual = sms("To CRED Club", origin = CategoryOrigin.MANUAL)
++        assertFalse(SmsRecategorizer.isEligible(manual))
++        assertTrue(SmsRecategorizer.propose(listOf(manual)).isEmpty())
++        assertEquals(listOf(manual), SmsRecategorizer.apply(listOf(manual), listOf(RecategorizeProposal(manual, "Bills/Credit card", SmsPaymentKind.MERCHANT))))
++    }
++
++    @Test
++    fun parsesSenderFromNotificationKeyAndPayeeFromTitle() {
++        assertEquals("ax-icicib-s", SmsRecategorizer.senderFromKey("sms-import:ax-icicib-s:1762300000000:-12345"))
++        assertEquals("", SmsRecategorizer.senderFromKey("notification:abc"))
++        assertEquals("", SmsRecategorizer.senderFromKey(""))
++        assertEquals("CRED Club", SmsRecategorizer.payeeFromTitle("To CRED Club"))
++        assertEquals("mobile number XXXXX52400", SmsRecategorizer.payeeFromTitle("From mobile number XXXXX52400"))
++        assertEquals(null, SmsRecategorizer.payeeFromTitle("Bank SMS · AX-ICICIB-S"))
++        assertEquals(null, SmsRecategorizer.payeeFromTitle("Bank SMS transaction"))
++    }
++
++    @Test
++    fun proposesCategoriesForTheTransactionsInTheReportedScreenshot() {
++        val rows = listOf(
++            sms("To VEERAMREDDY NAG", amount = 10000),
++            sms("To ICICI Bank XX450", amount = 4842),
++            sms("To CRED Club", amount = 871),
++            sms("To your account", amount = 37640),
++            sms("To Dreamplug Servi", amount = 27032),
++            sms("From mobile number XXXXX52400", category = "Other income", income = true, amount = 9559)
++        )
++        val proposals = SmsRecategorizer.propose(rows).associate { it.transaction.title to it.newCategory }
++        assertEquals(SmsCategories.PERSON_TO_PERSON, proposals["To VEERAMREDDY NAG"])
++        assertEquals(SmsCategories.BANK_TRANSFER, proposals["To ICICI Bank XX450"])
++        assertEquals(SmsCategories.CREDIT_CARD_BILL, proposals["To CRED Club"])
++        assertEquals(SmsCategories.OWN_ACCOUNT_TRANSFER, proposals["To your account"])
++        assertEquals(SmsCategories.CREDIT_CARD_BILL, proposals["To Dreamplug Servi"])
++        assertEquals("income rows are not proposed", 5, proposals.size)
++    }
++
++    @Test
++    fun knownOwnAccountKeysTurnAMaskedBankPayeeIntoAnOwnAccountTransfer() {
++        val row = sms("To ICICI Bank XX450")
++        assertEquals(SmsCategories.OWN_ACCOUNT_TRANSFER, SmsRecategorizer.propose(listOf(row), setOf("icici:450")).single().newCategory)
++    }
++
++    @Test
++    fun rowsWithNoBetterCategoryAreNotProposed() {
++        assertTrue(SmsRecategorizer.propose(listOf(sms("To Unknown Merchant"), sms("Bank SMS · AX-ICICIB-S"))).isEmpty())
++    }
++
++    @Test
++    fun applyChangesOnlyApprovedRowsAndOnlyTheirCategoryAndOrigin() {
++        val cred = sms("To CRED Club", amount = 871, key = "sms-import:a:1:1")
++        val person = sms("To VEERAMREDDY NAG", amount = 10000, key = "sms-import:a:2:2")
++        val untouched = sms("To Unknown Merchant", key = "sms-import:a:3:3")
++        val shopping = sms("To Amazon", category = "Shopping", key = "sms-import:a:4:4", origin = CategoryOrigin.AUTO)
++        val all = listOf(cred, person, untouched, shopping)
++
++        val proposals = SmsRecategorizer.propose(all)
++        val approved = proposals.filter { it.transaction == cred }
++        val result = SmsRecategorizer.apply(all, approved)
++
++        assertEquals(all.size, result.size)
++        // Approved row: category and origin change, nothing else.
++        assertEquals(cred.copy(category = SmsCategories.CREDIT_CARD_BILL, categoryOrigin = CategoryOrigin.AUTO), result[0])
++        // Row the user did not approve, row with no proposal, and an already-categorised row are identical.
++        assertEquals(person, result[1])
++        assertEquals(untouched, result[2])
++        assertEquals(shopping, result[3])
++    }
++
++    @Test
++    fun applyPreservesEveryFieldThatFeedsDuplicateDetection() {
++        val original = sms("To CRED Club", amount = 871, date = "2026-11-05", key = "sms-import:ax-icicib-s:1762300000000:-12345")
++        val updated = SmsRecategorizer.apply(listOf(original), SmsRecategorizer.propose(listOf(original))).single()
++        assertEquals(original.title, updated.title)
++        assertEquals(original.date, updated.date)
++        assertEquals(original.amount, updated.amount)
++        assertEquals(original.income, updated.income)
++        assertEquals(original.source, updated.source)
++        assertEquals(original.notificationKey, updated.notificationKey)
++        assertEquals(original.notes, updated.notes)
++        assertEquals(original.tag, updated.tag)
++        assertEquals(original.paymentMethod, updated.paymentMethod)
++        assertEquals(original.copy(category = updated.category, categoryOrigin = updated.categoryOrigin), updated)
++    }
++
++    @Test
++    fun applyingWithNothingApprovedChangesNothing() {
++        val rows = listOf(sms("To CRED Club"))
++        assertEquals(rows, SmsRecategorizer.apply(rows, emptyList()))
++    }
++
++    @Test
++    fun aProposalIsSkippedIfTheTransactionWasChangedAfterThePreviewWasOpened() {
++        val original = sms("To CRED Club")
++        val proposal = SmsRecategorizer.propose(listOf(original)).single()
++        val editedByUser = original.copy(category = "Household", categoryOrigin = CategoryOrigin.MANUAL)
++        assertEquals(listOf(editedByUser), SmsRecategorizer.apply(listOf(editedByUser), listOf(proposal)))
++    }
++
++    @Test
++    fun runningTheActionTwiceIsHarmless() {
++        val rows = listOf(sms("To CRED Club"), sms("To your account", key = "sms-import:a:2:2"))
++        val once = SmsRecategorizer.apply(rows, SmsRecategorizer.propose(rows))
++        assertTrue(SmsRecategorizer.propose(once).isEmpty())
++        assertEquals(once, SmsRecategorizer.apply(once, SmsRecategorizer.propose(once)))
++    }
++}
+-- 
+2.43.0
