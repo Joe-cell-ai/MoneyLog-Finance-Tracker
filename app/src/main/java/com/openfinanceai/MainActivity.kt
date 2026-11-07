@@ -243,7 +243,11 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
     "loan repayment", "emi" -> Color(0xFFCF5A36)
     "other income", "income" -> Color(0xFF5470C6)
     "food/takeout", "food/dining out" -> Color(0xFF148D91)
-    "household" -> Color(0xFFDB4765)
+    "household", "shopping" -> Color(0xFFDB4765)
+    "transport/fuel", "transport/taxi" -> Color(0xFFB18A16)
+    "utilities/electricity" -> Color(0xFFD97732)
+    "healthcare" -> Color(0xFF477DAD)
+    "leisure" -> Color(0xFFAF5AB5)
     "transfers/bank", "transfers/own account", "transfers/person-to-person upi", "bank transfer" -> Color(0xFF477DAD)
     else -> CategoryPalette[(category.trim().lowercase(Locale.ROOT).hashCode() and 0x7fffffff) % CategoryPalette.size]
 }
