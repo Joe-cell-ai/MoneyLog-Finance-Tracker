@@ -82,7 +82,9 @@ internal object SmsTransactionImporter {
             .put("notes", notes)
             .put("tag", "")
             .put("transactionKind", decision.transferKind)
-            .put("categoryManuallySelected", false))
+            .put("categoryManuallySelected", false)
+            .put("categoryIconKey", decision.iconKey)
+            .put("categoryColorHex", decision.colorHex))
         prefs.edit().putString("transactions", rows.toString()).commit()
     }
 }
