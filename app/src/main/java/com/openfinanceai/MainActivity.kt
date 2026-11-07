@@ -242,6 +242,9 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
     "education" -> Color(0xFFAF5AB5)
     "loan repayment", "emi" -> Color(0xFFCF5A36)
     "other income", "income" -> Color(0xFF5470C6)
+    "food/takeout", "food/dining out" -> Color(0xFF148D91)
+    "household" -> Color(0xFFDB4765)
+    "transfers/bank", "transfers/own account", "transfers/person-to-person upi", "bank transfer" -> Color(0xFF477DAD)
     else -> CategoryPalette[(category.trim().lowercase(Locale.ROOT).hashCode() and 0x7fffffff) % CategoryPalette.size]
 }
 private fun categoryTint(category: String): Color = categoryColor(category).copy(alpha = 0.12f)
@@ -540,7 +543,7 @@ private fun loanAccent(lender: String): Color = when {
 private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
 
 
-internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L)
+internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L, val categoryManuallySelected: Boolean = false)
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
@@ -788,6 +791,7 @@ private fun FinanceApp() {
     var selectedLoan by remember { mutableStateOf<Loan?>(null) }
     var importMessage by remember { mutableStateOf("") }
     var importedPreview by remember { mutableStateOf<List<Transaction>>(emptyList()) }
+    var smsRecategorizationPreview by remember { mutableStateOf<List<Pair<Transaction, Transaction>>>(emptyList()) }
     val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching {
@@ -806,7 +810,7 @@ private fun FinanceApp() {
         }
     }
     fun scanBankSms() {
-        runCatching { readRecentBankSms(context) }
+        runCatching { readRecentBankSms(context, DEFAULT_MONEY_CATEGORIES) }
             .onSuccess { parsed ->
                 val existingKeys = transactions.map { transactionKey(it) }.toMutableSet()
                 val unique = parsed.distinctBy { transactionKey(it) }
@@ -1187,6 +1191,30 @@ private fun FinanceApp() {
                     )
                     "Import transactions" -> ImportTransactionsScreen(
                         message = importMessage,
+                        recategorizationPreview = smsRecategorizationPreview,
+                        onPreviewRecategorize = {
+                            smsRecategorizationPreview = transactions.filter { transaction ->
+                                transaction.notificationKey.startsWith("sms-import:") &&
+                                    transaction.category.equals("Other", ignoreCase = true) &&
+                                    !transaction.categoryManuallySelected
+                            }.map { transaction ->
+                                val decision = SmsCategorizationEngine.categorize(
+                                    transaction.source, transaction.title, transaction.notes,
+                                    transaction.income, DEFAULT_MONEY_CATEGORIES
+                                )
+                                transaction to transaction.copy(category = decision.category, transactionKind = decision.transferKind)
+                            }.filter { (before, after) -> !before.category.equals(after.category, ignoreCase = true) || before.transactionKind != after.transactionKind }
+                        },
+                        onApplyRecategorize = {
+                            val updates = smsRecategorizationPreview.associateBy { it.first.notificationKey }
+                            transactions = transactions.map { current ->
+                                val update = updates[current.notificationKey]
+                                if (update != null && !current.categoryManuallySelected && current.category.equals("Other", true)) update.second else current
+                            }
+                            saveTransactions(context, transactions)
+                            importMessage = "Updated ${updates.size} SMS-imported transaction categorisation(s)."
+                            smsRecategorizationPreview = emptyList()
+                        },
                         preview = importedPreview,
                         onChooseFile = { csvPicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) },
                         onScanSms = {
@@ -1375,8 +1403,9 @@ private fun FinanceApp() {
             }
             transactionToEdit?.let { transaction ->
                 EditTransactionDialog(transaction, onDismiss = { transactionToEdit = null }) { edited ->
+                    val protectedEdit = edited.copy(categoryManuallySelected = transaction.categoryManuallySelected || !edited.category.equals(transaction.category, ignoreCase = true))
                     val index = transactions.indexOf(transaction)
-                    if (index >= 0) { transactions = transactions.toMutableList().also { it[index] = edited }; saveTransactions(context, transactions) }
+                    if (index >= 0) { transactions = transactions.toMutableList().also { it[index] = protectedEdit }; saveTransactions(context, transactions) }
                     transactionToEdit = null
                 }
             }
@@ -3592,7 +3621,7 @@ private fun InfoScreen(title: String, body: String, icon: ImageVector) {
     }
 }
 
-private val DEFAULT_MONEY_CATEGORIES = listOf(
+internal val DEFAULT_MONEY_CATEGORIES = listOf(
     "Food", "Food/Dining out", "Healthcare", "Income", "Leisure/Travel",
     "Savings/Emergency", "Transport/Fuel", "Transport/Taxi", "Utilities/Gas",
     "Utilities/Phone", "Food/Coffee", "Food/Takeout", "Household", "Leisure",
@@ -6861,6 +6890,7 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("loanPaymentCounted", transaction.loanPaymentCounted)
             put("loanAllocationRecorded", transaction.loanAllocationRecorded)
             put("loanReceiptPrincipalAdded", transaction.loanReceiptPrincipalAdded)
+            put("categoryManuallySelected", transaction.categoryManuallySelected)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -6892,7 +6922,8 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optLong("loanInterestPortion", 0L),
             item.optBoolean("loanPaymentCounted", false),
             item.optBoolean("loanAllocationRecorded", false),
-            item.optLong("loanReceiptPrincipalAdded", 0L)
+            item.optLong("loanReceiptPrincipalAdded", 0L),
+            item.optBoolean("categoryManuallySelected", false)
         )
     }
 }.getOrNull()
@@ -6986,6 +7017,9 @@ private fun SalarySettingsScreen(onSave: (Boolean, Long) -> Unit) {
 private fun ImportTransactionsScreen(
     message: String,
     preview: List<Transaction>,
+    recategorizationPreview: List<Pair<Transaction, Transaction>>,
+    onPreviewRecategorize: () -> Unit,
+    onApplyRecategorize: () -> Unit,
     onChooseFile: () -> Unit,
     onScanSms: () -> Unit,
     onOpenAppSettings: () -> Unit,
@@ -6999,6 +7033,27 @@ private fun ImportTransactionsScreen(
         item {
             Text("Import transactions", fontSize = 26.sp, color = Ink, fontWeight = FontWeight.Bold)
             Text("Import a bank statement or manage bank SMS transactions. New eligible bank alerts are saved automatically after permission is granted.", color = Muted)
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = appGlassSurface()), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Improve existing SMS categories", color = Ink, fontWeight = FontWeight.SemiBold)
+                    Text("Preview suggested changes for SMS-imported transactions still labelled Other. Manually selected categories are protected.", color = Muted, fontSize = 12.sp)
+                    OutlinedButton(onClick = onPreviewRecategorize, modifier = Modifier.fillMaxWidth()) { Text("Preview re-categorisation") }
+                    if (recategorizationPreview.isNotEmpty()) {
+                        Text("${recategorizationPreview.size} suggested change(s)", color = Ink, fontWeight = FontWeight.SemiBold)
+                        recategorizationPreview.take(50).forEach { (before, after) ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text(before.title, color = Ink, modifier = Modifier.weight(1f), maxLines = 1)
+                                Text("${before.category} → ${after.category}", color = Green, fontSize = 12.sp)
+                            }
+                        }
+                        Button(onClick = onApplyRecategorize, modifier = Modifier.fillMaxWidth()) { Text("Apply reviewed changes") }
+                    } else {
+                        Text("No preview loaded. Choose Preview to inspect eligible transactions.", color = Muted, fontSize = 11.sp)
+                    }
+                }
+            }
         }
         item {
             InfoCard(
@@ -7074,7 +7129,7 @@ private fun ImportTransactionsScreen(
 }
 
 
-private fun readRecentBankSms(context: Context): List<Transaction> {
+private fun readRecentBankSms(context: Context, availableCategories: List<String> = DEFAULT_MONEY_CATEGORIES): List<Transaction> {
     val cutoff = System.currentTimeMillis() - 90L * 24L * 60L * 60L * 1000L
     val results = mutableListOf<Transaction>()
     val projection = arrayOf(android.provider.Telephony.Sms._ID, android.provider.Telephony.Sms.ADDRESS, android.provider.Telephony.Sms.BODY, android.provider.Telephony.Sms.DATE)
@@ -7109,14 +7164,15 @@ private fun readRecentBankSms(context: Context): List<Transaction> {
             results += Transaction(
                 title = parsed.merchant?.let { (if (parsed.income) "From " else "To ") + it }
                     ?: if (sender.isBlank()) "Bank SMS transaction" else "Bank SMS · " + sender,
-                category = if (parsed.income) "Other income" else "Bank transfer",
+                category = SmsCategorizationEngine.categorize(sender, parsed.merchant, body, parsed.income, availableCategories).category,
                 date = parsed.date,
                 amount = parsed.amount,
                 income = parsed.income,
                 source = "SMS import",
                 notificationKey = "sms-import:" + id,
                 captureStatus = "",
-                notes = notes
+                notes = notes,
+                transactionKind = SmsCategorizationEngine.categorize(sender, parsed.merchant, body, parsed.income, availableCategories).transferKind
             )
         }
     }
