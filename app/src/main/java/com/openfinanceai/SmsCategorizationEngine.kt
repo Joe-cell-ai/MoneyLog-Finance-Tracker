@@ -92,8 +92,13 @@ internal object SmsCategorizationEngine {
 
     private fun hasPersonPayee(payee: String?, text: String): Boolean {
         val candidate = payee.orEmpty().trim()
-        if (candidate.isBlank()) return Regex("""(?i)\b(to|from)\s+[a-z]{2,}(?:\s+[a-z]{2,}){0,2}\b""").containsMatchIn(text)
-        return !Regex("""(?i)\b(amazon|flipkart|swiggy|zomato|cred|dreamplug|bank|account|wallet|merchant)\b""").containsMatchIn(candidate)
+        if (Regex("""(?i)\b(person[- ]to[- ]person|p2p)\b""").containsMatchIn(text)) return true
+        if (candidate.isBlank()) return false
+        val businessWords = Regex("""(?i)\b(amazon|flipkart|swiggy|zomato|cred|dreamplug|bank|account|wallet|merchant|shop|store|cafe|restaurant|food|market|services|technology|technologies|private|limited|pvt|ltd|online|internet|payments|supermarket)\b""")
+        if (businessWords.containsMatchIn(candidate)) return false
+        val looksLikePersonName = Regex("""^[\\p{L}][\\p{L}'-]*(?:\\s+[\\p{L}][\\p{L}'-]*){0,2}$""").matches(candidate)
+        val hasPersonDirectedVerb = Regex("""(?i)\b(sent|transferred|paid)\s+to\b""").containsMatchIn(text)
+        return looksLikePersonName && hasPersonDirectedVerb
     }
 
     private fun resolveCategory(proposed: String, available: List<String>): String {
