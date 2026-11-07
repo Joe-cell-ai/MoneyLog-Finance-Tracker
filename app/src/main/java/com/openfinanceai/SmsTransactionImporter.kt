@@ -30,7 +30,7 @@ internal object SmsTransactionImporter {
         val decision = SmsCategorizationEngine.categorize(
             null, merchant, body, income, DEFAULT_MONEY_CATEGORIES
         )
-        if (income) return if (Regex("""(?i)\\b(salary|payroll|wages)\\b""").containsMatchIn("$merchant $body")) "Salary" else "Other income"
+        if (income) return if (Regex("""(?i)\b(salary|payroll|wages)\b""").containsMatchIn("$merchant $body")) "Salary" else "Other income"
         return when {
             decision.transferKind.isNotBlank() -> "Bank transfer"
             decision.category == "Household" -> "Shopping"
