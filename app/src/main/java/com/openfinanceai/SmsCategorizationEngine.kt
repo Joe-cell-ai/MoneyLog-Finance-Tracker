@@ -85,8 +85,8 @@ internal object SmsCategorizationEngine {
         return Decision(
             category = resolved,
             transferKind = transferKind,
-            iconKey = iconFor(resolved, text),
-            colorHex = colorFor(resolved)
+            iconKey = iconFor(resolved, text, transferKind),
+            colorHex = colorFor(resolved, transferKind)
         )
     }
 
@@ -119,7 +119,8 @@ internal object SmsCategorizationEngine {
     private fun normalize(value: String): String =
         value.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "")
 
-    private fun iconFor(category: String, text: String): String = when {
+    private fun iconFor(category: String, text: String, transferKind: String): String = when {
+        transferKind.isNotBlank() -> "bank"
         Regex("""(?i)\b(cred(?:club)?|dreamplug)\b""").containsMatchIn(text) -> "brand_cred"
         Regex("""(?i)\bamazon\b""").containsMatchIn(text) -> "brand_amazon"
         Regex("""(?i)\bflipkart\b""").containsMatchIn(text) -> "brand_flipkart"
@@ -135,7 +136,8 @@ internal object SmsCategorizationEngine {
         else -> "app"
     }
 
-    private fun colorFor(category: String): String = when {
+    private fun colorFor(category: String, transferKind: String): String = when {
+        transferKind.isNotBlank() -> "#477DAD"
         category.startsWith("Transfers/") -> "#477DAD"
         category.startsWith("Food") -> "#148D91"
         category == "Household" -> "#DB4765"
