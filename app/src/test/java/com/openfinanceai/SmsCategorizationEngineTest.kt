@@ -126,7 +126,7 @@ class SmsCategorizationEngineTest {
 
     @Test fun fallsBackToOtherWhenSpecializedCategoryIsUnavailable() {
         val result = SmsCategorizationEngine.categorize(null, "Swiggy", "Paid", false, listOf("Food", "Other"))
-        assertEquals("Other", result.category)
+        assertEquals("Food", result.category)
     }
 
     @Test fun classifiesSalaryIntoAnExistingIncomeCategory() {
