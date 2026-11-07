@@ -119,6 +119,12 @@ class SmsCategorizationEngineTest {
         assertEquals("Household", category(payee = "Amazon", description = "UPI payment").category)
     }
 
+    @Test fun genericMerchantIsNotMisclassifiedAsPersonToPersonUpi() {
+        val result = category(payee = "Unknown Shop", description = "UPI payment to Unknown Shop")
+        assertEquals("", result.transferKind)
+        assertEquals("Other", result.category)
+    }
+
     @Test fun usesTheUsersExistingCategorySpellingCaseInsensitively() {
         val result = SmsCategorizationEngine.categorize(null, "SWIGGY", "UPI payment", false, listOf("food/takeout", "Other"))
         assertEquals("food/takeout", result.category)
