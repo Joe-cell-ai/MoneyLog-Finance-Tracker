@@ -22,7 +22,7 @@ internal object SmsCategorizationEngine {
     )
 
     private val merchantRules = listOf(
-        Rule("Other", "brand_cred", "#64748B", Regex("""(?i)\b(cred|dreamplug|dreamplug technologies)\b""")),
+        Rule("Other", "brand_cred", "#64748B", Regex("""(?i)\b(cred(?:club)?|dreamplug|dreamplug technologies)\b""")),
         Rule("Household", "brand_amazon", "#DB4765", Regex("""(?i)\b(amazon(?:\s+pay)?|amzn|flipkart)\b""")),
         Rule("Food/Takeout", "food", "#148D91", Regex("""(?i)\b(swiggy|zomato)\b"""))
     )
@@ -50,7 +50,7 @@ internal object SmsCategorizationEngine {
             .lowercase(Locale.ROOT)
 
         val proposed = when {
-            income -> if (Regex("""(?i)\b(salary|payroll|wages)\b""").containsMatchIn(text)) "Income" else "Income"
+            income -> if (Regex("""(?i)\b(salary|payroll|wages)\b""").containsMatchIn(text)) "Salary" else "Other income"
             else -> merchantRules.firstOrNull { it.pattern.containsMatchIn(text) }?.category
                 ?: when {
                     ownAccountTransfer.containsMatchIn(text) -> "Transfers/Own account"
@@ -100,7 +100,7 @@ internal object SmsCategorizationEngine {
             "Food/Takeout" -> listOf("Food/Dining out", "Food", "Other")
             "Food" -> listOf("Food/Dining out", "Food/Takeout", "Other")
             "Healthcare" -> listOf("Health", "Other")
-            "Income" -> listOf("Salary", "Other income", "Other")
+            "Income", "Salary", "Other income" -> listOf("Income", "Salary", "Other income", "Other")
             "Transfers/Bank", "Transfers/Own account", "Transfers/Person-to-person UPI" -> listOf("Bank transfer", "Other")
             else -> listOf("Other")
         }
@@ -113,7 +113,7 @@ internal object SmsCategorizationEngine {
         value.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "")
 
     private fun iconFor(category: String, text: String): String = when {
-        Regex("""(?i)\b(cred|dreamplug)\b""").containsMatchIn(text) -> "brand_cred"
+        Regex("""(?i)\b(cred(?:club)?|dreamplug)\b""").containsMatchIn(text) -> "brand_cred"
         Regex("""(?i)\bamazon\b""").containsMatchIn(text) -> "brand_amazon"
         Regex("""(?i)\bflipkart\b""").containsMatchIn(text) -> "brand_flipkart"
         Regex("""(?i)\bswiggy\b""").containsMatchIn(text) -> "brand_swiggy"
