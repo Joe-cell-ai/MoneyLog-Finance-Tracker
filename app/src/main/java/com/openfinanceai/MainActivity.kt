@@ -7164,6 +7164,7 @@ private fun readRecentBankSms(context: Context, availableCategories: List<String
             val parsed = BankSmsParser.parse(body, receivedDate) ?: continue
             val sender = if (addressIndex >= 0) cursor.getString(addressIndex).orEmpty().trim() else ""
             val id = sender.lowercase(Locale.ROOT) + ":" + smsDate + ":" + body.hashCode()
+            val decision = SmsCategorizationEngine.categorize(sender, parsed.merchant, body, parsed.income, availableCategories)
             val notes = buildString {
                 append("Detected from a bank SMS. Verify details before relying on this entry.")
                 if (parsed.exactAmount.contains('.')) {
@@ -7174,7 +7175,7 @@ private fun readRecentBankSms(context: Context, availableCategories: List<String
             results += Transaction(
                 title = parsed.merchant?.let { (if (parsed.income) "From " else "To ") + it }
                     ?: if (sender.isBlank()) "Bank SMS transaction" else "Bank SMS · " + sender,
-                category = SmsCategorizationEngine.categorize(sender, parsed.merchant, body, parsed.income, availableCategories).category,
+                category = decision.category,
                 date = parsed.date,
                 amount = parsed.amount,
                 income = parsed.income,
@@ -7182,7 +7183,7 @@ private fun readRecentBankSms(context: Context, availableCategories: List<String
                 notificationKey = "sms-import:" + id,
                 captureStatus = "",
                 notes = notes,
-                transactionKind = SmsCategorizationEngine.categorize(sender, parsed.merchant, body, parsed.income, availableCategories).transferKind,
+                transactionKind = decision.transferKind,
                 categoryManuallySelected = false
             )
         }
