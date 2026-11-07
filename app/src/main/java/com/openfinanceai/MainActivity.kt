@@ -1204,7 +1204,7 @@ private fun FinanceApp() {
                             }.map { transaction ->
                                 val decision = SmsCategorizationEngine.categorize(
                                     transaction.source, transaction.title, transaction.notes,
-                                    transaction.income, DEFAULT_MONEY_CATEGORIES
+                                    transaction.income, SmsTransactionImporter.availableCategories(context)
                                 )
                                 transaction to transaction.copy(category = decision.category, transactionKind = decision.transferKind)
                             }.filter { (before, after) -> !before.category.equals(after.category, ignoreCase = true) || before.transactionKind != after.transactionKind }
