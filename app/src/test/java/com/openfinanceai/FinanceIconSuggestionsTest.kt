@@ -41,4 +41,26 @@ class FinanceIconSuggestionsTest {
     fun unknownNamesReceiveGenericAppIcon() {
         assertEquals("app", financeIconKeyForName("Custom label xyz"))
     }
+    @Test
+    fun mapsTheSmsCategoryNamesToSensibleIcons() {
+        val expected = mapOf(
+            "Shopping" to "shopping",
+            "Food/Takeout" to "food",
+            "Food/Dining out" to "food",
+            "Transport/Taxi" to "transport",
+            "Transport/Fuel" to "fuel",
+            "Healthcare" to "health",
+            "Leisure" to "entertainment",
+            "Leisure/Travel" to "travel",
+            "Utilities/Electricity" to "bills",
+            "Bills/Credit card" to "card",
+            "Bank transfer" to "bank",
+            "Own account transfer" to "transfer",
+            "Person-to-person" to "person"
+        )
+        expected.forEach { (name, key) ->
+            assertEquals("Wrong icon for category $name", key, financeIconKeyForName(name))
+        }
+    }
 }
+

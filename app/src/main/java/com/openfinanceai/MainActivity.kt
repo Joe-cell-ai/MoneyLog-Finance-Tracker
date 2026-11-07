@@ -242,6 +242,16 @@ private fun categoryColor(category: String): Color = when (category.trim().lower
     "education" -> Color(0xFFAF5AB5)
     "loan repayment", "emi" -> Color(0xFFCF5A36)
     "other income", "income" -> Color(0xFF5470C6)
+    "food/takeout", "food/dining out", "food/coffee" -> Color(0xFF148D91)
+    "transport/taxi", "transport/fuel", "transport/public transit" -> Color(0xFFB18A16)
+    "utilities/electricity", "utilities/phone", "utilities/internet", "utilities/water", "utilities/gas" -> Color(0xFFD97732)
+    "healthcare" -> Color(0xFF477DAD)
+    "leisure", "leisure/travel" -> Color(0xFF6C63C9)
+    "bills/credit card" -> Color(0xFFE05A47)
+    "bank transfer" -> Color(0xFF3B82A6)
+    "own account transfer" -> Color(0xFF6B7A99)
+    "person-to-person" -> Color(0xFF5E8C31)
+    "insurance" -> Color(0xFF2F8F83)
     else -> CategoryPalette[(category.trim().lowercase(Locale.ROOT).hashCode() and 0x7fffffff) % CategoryPalette.size]
 }
 private fun categoryTint(category: String): Color = categoryColor(category).copy(alpha = 0.12f)
@@ -253,6 +263,9 @@ internal fun financeIconKeyForName(name: String): String {
     fun hasToken(vararg candidates: String): Boolean = candidates.any { it in words }
     return when {
         listOf("cred", "cred app").any { value == it || value.startsWith("$it ") } -> "brand_cred"
+        value.contains("own account") -> "transfer"
+        value.contains("person to person") || hasToken("p2p") -> "person"
+        value.contains("credit card") -> "card"
         listOf("google play", "play store").any { value.contains(it) } -> "brand_google_play"
         value == "amazon pay" || value.startsWith("amazon pay ") -> "brand_amazon_pay"
         value == "amazon" || value.startsWith("amazon ") -> "brand_amazon"
@@ -292,7 +305,7 @@ internal fun financeIconKeyForName(name: String): String {
         listOf("subscription", "membership").any { value.contains(it) } -> "subscription"
         listOf("gift", "donation").any { value.contains(it) } -> "gift"
         listOf("fitness", "gym", "sport").any { value.contains(it) } -> "fitness"
-        listOf("movie", "music", "entertainment", "game").any { value.contains(it) } -> "entertainment"
+        listOf("movie", "music", "entertainment", "game", "leisure").any { value.contains(it) } -> "entertainment"
         else -> "app"
     }
 }
@@ -324,6 +337,8 @@ private fun financeIcon(key: String): ImageVector = when (key) {
     "gift" -> Icons.Default.CardGiftcard
     "fitness" -> Icons.Default.FitnessCenter
     "pets" -> Icons.Default.Pets
+    "transfer" -> Icons.Default.SwapHoriz
+    "person" -> Icons.Default.Person
     "entertainment" -> Icons.Default.Movie
     else -> Icons.Default.Apps
 }
@@ -540,7 +555,7 @@ private fun loanAccent(lender: String): Color = when {
 private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
 
 
-internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L)
+internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L, val categoryOrigin: String = CategoryOrigin.UNKNOWN)
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
@@ -787,6 +802,7 @@ private fun FinanceApp() {
     LaunchedEffect(moneyNotes) { saveMoneyNotes(context, moneyNotes) }
     var selectedLoan by remember { mutableStateOf<Loan?>(null) }
     var importMessage by remember { mutableStateOf("") }
+    var recategorizeProposals by remember { mutableStateOf<List<RecategorizeProposal>?>(null) }
     var importedPreview by remember { mutableStateOf<List<Transaction>>(emptyList()) }
     val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -922,7 +938,8 @@ private fun FinanceApp() {
                 .put("loanLender", t.loanLender).put("emiInstallmentDate", t.emiInstallmentDate).put("transactionKind", t.transactionKind)
                 .put("loanPrincipalReduction", t.loanPrincipalReduction).put("loanInterestPortion", t.loanInterestPortion)
                 .put("loanPaymentCounted", t.loanPaymentCounted).put("loanAllocationRecorded", t.loanAllocationRecorded)
-                .put("loanReceiptPrincipalAdded", t.loanReceiptPrincipalAdded)) }
+                .put("loanReceiptPrincipalAdded", t.loanReceiptPrincipalAdded)
+                .put("categoryOrigin", t.categoryOrigin)) }
             val loanArray = JSONArray()
             loans.forEach { l -> loanArray.put(JSONObject().put("lender", l.lender).put("balance", l.balance)
                 .put("emi", l.emi).put("due", l.due).put("annualRate", l.annualRate).put("originalPrincipal", l.originalPrincipal).put("paymentsMade", l.paymentsMade).put("totalPayments", l.totalPayments)
@@ -980,7 +997,8 @@ private fun FinanceApp() {
                         j.getLong("amount"), j.optBoolean("income"), j.optString("source"), j.optString("notificationKey"),
                         j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""), j.optString("loanLender", ""), j.optString("emiInstallmentDate", ""), j.optString("transactionKind", ""), j.optLong("loanPrincipalReduction", 0L),
                         j.optLong("loanInterestPortion", 0L), j.optBoolean("loanPaymentCounted", false),
-                        j.optBoolean("loanAllocationRecorded", false), j.optLong("loanReceiptPrincipalAdded", 0L))
+                        j.optBoolean("loanAllocationRecorded", false), j.optLong("loanReceiptPrincipalAdded", 0L),
+                        j.optString("categoryOrigin", CategoryOrigin.UNKNOWN))
                 } }
             }
             val restoredLoans = root.optJSONArray("loans")?.let { a ->
@@ -1189,6 +1207,14 @@ private fun FinanceApp() {
                         message = importMessage,
                         preview = importedPreview,
                         onChooseFile = { csvPicker.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel")) },
+                        onReviewRecategorize = {
+                            val proposals = SmsRecategorizer.propose(transactions, SmsTransactionImporter.ownAccountKeys(context))
+                            if (proposals.isEmpty()) {
+                                importMessage = "No SMS-imported transactions labelled Other could be matched to a better category."
+                            } else {
+                                recategorizeProposals = proposals
+                            }
+                        },
                         onScanSms = {
                             val hasRead = context.checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
                             val hasReceive = context.checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
@@ -1379,6 +1405,19 @@ private fun FinanceApp() {
                     if (index >= 0) { transactions = transactions.toMutableList().also { it[index] = edited }; saveTransactions(context, transactions) }
                     transactionToEdit = null
                 }
+            }
+            recategorizeProposals?.let { proposals ->
+                RecategorizePreviewDialog(
+                    proposals = proposals,
+                    onDismiss = { recategorizeProposals = null },
+                    onApply = { approved ->
+                        val updated = SmsRecategorizer.apply(transactions, approved)
+                        transactions = updated
+                        saveTransactions(context, updated)
+                        importMessage = "Re-categorised " + approved.size + " transaction(s). Other fields were not changed."
+                        recategorizeProposals = null
+                    }
+                )
             }
             emiQuickAction?.let { action ->
                 val accent = loanAccent(action.lender)
@@ -3592,13 +3631,7 @@ private fun InfoScreen(title: String, body: String, icon: ImageVector) {
     }
 }
 
-private val DEFAULT_MONEY_CATEGORIES = listOf(
-    "Food", "Food/Dining out", "Healthcare", "Income", "Leisure/Travel",
-    "Savings/Emergency", "Transport/Fuel", "Transport/Taxi", "Utilities/Gas",
-    "Utilities/Phone", "Food/Coffee", "Food/Takeout", "Household", "Leisure",
-    "Other", "Savings/Investment", "Transport", "Transport/Public transit",
-    "Utilities/Electricity", "Utilities/Internet", "Utilities/Water"
-)
+private val DEFAULT_MONEY_CATEGORIES = DefaultFinanceCategories.MONEY
 private val DEFAULT_MONEY_TAGS = listOf(
     "Credit Card", "Cash", "Apple Pay", "Amazon", "Google Play",
     "Debit Card", "PayPal", "Google Pay", "Online Shopping"
@@ -6308,7 +6341,12 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
             Button(onClick = {
                 val parsed = amount.toLongOrNull()
                 if (title.isBlank() || parsed == null || parsed <= 0L) error = "Enter a description and valid amount."
-                else onSave(transaction.copy(title = title.trim(), amount = parsed, category = if (isIncome) "Income" else category.ifBlank { "Other" }, date = date.ifBlank { "Date not set" }, income = isIncome, tag = tag.trim()))
+                else {
+                    val newCategory = if (isIncome) "Income" else category.ifBlank { "Other" }
+                    // A category the user changed is "manual" and is never overwritten by re-categorisation.
+                    val origin = CategoryOrigin.afterEdit(transaction.category, transaction.categoryOrigin, newCategory)
+                    onSave(transaction.copy(title = title.trim(), amount = parsed, category = newCategory, date = date.ifBlank { "Date not set" }, income = isIncome, tag = tag.trim(), categoryOrigin = origin))
+                }
             }, shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White), modifier = Modifier.height(50.dp)) {
                 Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(7.dp)); Text("Save changes", fontWeight = FontWeight.SemiBold)
             }
@@ -6861,6 +6899,7 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("loanPaymentCounted", transaction.loanPaymentCounted)
             put("loanAllocationRecorded", transaction.loanAllocationRecorded)
             put("loanReceiptPrincipalAdded", transaction.loanReceiptPrincipalAdded)
+            put("categoryOrigin", transaction.categoryOrigin)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -6892,7 +6931,8 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optLong("loanInterestPortion", 0L),
             item.optBoolean("loanPaymentCounted", false),
             item.optBoolean("loanAllocationRecorded", false),
-            item.optLong("loanReceiptPrincipalAdded", 0L)
+            item.optLong("loanReceiptPrincipalAdded", 0L),
+            item.optString("categoryOrigin", CategoryOrigin.UNKNOWN)
         )
     }
 }.getOrNull()
@@ -6983,10 +7023,72 @@ private fun SalarySettingsScreen(onSave: (Boolean, Long) -> Unit) {
 }
 
 @Composable
+private fun RecategorizePreviewDialog(
+    proposals: List<RecategorizeProposal>,
+    onDismiss: () -> Unit,
+    onApply: (List<RecategorizeProposal>) -> Unit
+) {
+    var selected by remember(proposals) { mutableStateOf(proposals.toSet()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Review suggested categories") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Untick anything you want to keep as Other. Only the category changes; the amount, date and title stay the same.",
+                    color = Muted,
+                    fontSize = 12.sp
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { selected = proposals.toSet() }) { Text("Select all") }
+                    TextButton(onClick = { selected = emptySet() }) { Text("Select none") }
+                }
+                LazyColumn(modifier = Modifier.heightIn(max = 380.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(proposals) { proposal ->
+                        val checked = proposal in selected
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                selected = if (checked) selected - proposal else selected + proposal
+                            },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = { selected = if (it) selected + proposal else selected - proposal }
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(proposal.transaction.title, color = Ink, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                                Text(
+                                    proposal.transaction.date + " · " + Money.format(proposal.transaction.amount),
+                                    color = Muted,
+                                    fontSize = 12.sp
+                                )
+                                Text(
+                                    "Other → " + proposal.newCategory + " (" + SmsRecategorizer.describe(proposal.kind) + ")",
+                                    color = categoryColor(proposal.newCategory),
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onApply(proposals.filter { it in selected }) }, enabled = selected.isNotEmpty()) {
+                Text("Apply " + selected.size)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
 private fun ImportTransactionsScreen(
     message: String,
     preview: List<Transaction>,
     onChooseFile: () -> Unit,
+    onReviewRecategorize: () -> Unit,
     onScanSms: () -> Unit,
     onOpenAppSettings: () -> Unit,
     onImport: () -> Unit
@@ -7038,6 +7140,20 @@ private fun ImportTransactionsScreen(
                 Text("Choose CSV file")
             }
         }
+        item {
+            InfoCard(
+                "Re-categorise older SMS transactions",
+                "Looks at SMS-imported expenses still labelled Other and suggests categories from the merchant or payee. You review every change first, and categories you chose yourself are never changed.",
+                Icons.Default.Sms
+            )
+        }
+        item {
+            OutlinedButton(onClick = onReviewRecategorize, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Sms, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Review suggested categories")
+            }
+        }
         if (message.isNotBlank()) item { Text(message, color = Ink) }
         if (preview.isNotEmpty()) {
             item { Text("New SMS transactions are added automatically.", color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
@@ -7076,7 +7192,8 @@ private fun ImportTransactionsScreen(
 
 private fun readRecentBankSms(context: Context): List<Transaction> {
     val cutoff = System.currentTimeMillis() - 90L * 24L * 60L * 60L * 1000L
-    val results = mutableListOf<Transaction>()
+    // Collected first so own-account keys learned from every scanned SMS are available when categorising.
+    val pending = mutableListOf<PendingSms>()
     val projection = arrayOf(android.provider.Telephony.Sms._ID, android.provider.Telephony.Sms.ADDRESS, android.provider.Telephony.Sms.BODY, android.provider.Telephony.Sms.DATE)
     context.contentResolver.query(
         android.provider.Telephony.Sms.Inbox.CONTENT_URI,
@@ -7096,32 +7213,40 @@ private fun readRecentBankSms(context: Context): List<Transaction> {
             val smsDate = cursor.getLong(dateIndex)
             val receivedDate = java.time.Instant.ofEpochMilli(smsDate)
                 .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            SmsTransactionImporter.learnOwnAccount(context, body)
             val parsed = BankSmsParser.parse(body, receivedDate) ?: continue
             val sender = if (addressIndex >= 0) cursor.getString(addressIndex).orEmpty().trim() else ""
-            val id = sender.lowercase(Locale.ROOT) + ":" + smsDate + ":" + body.hashCode()
-            val notes = buildString {
-                append("Detected from a bank SMS. Verify details before relying on this entry.")
-                if (parsed.exactAmount.contains('.')) {
-                    append(" Exact SMS amount: ₹").append(parsed.exactAmount)
-                    append(". Stored amount is rounded to the nearest rupee; verify before import.")
-                }
-            }
-            results += Transaction(
-                title = parsed.merchant?.let { (if (parsed.income) "From " else "To ") + it }
-                    ?: if (sender.isBlank()) "Bank SMS transaction" else "Bank SMS · " + sender,
-                category = if (parsed.income) "Other income" else "Bank transfer",
-                date = parsed.date,
-                amount = parsed.amount,
-                income = parsed.income,
-                source = "SMS import",
-                notificationKey = "sms-import:" + id,
-                captureStatus = "",
-                notes = notes
-            )
+            pending += PendingSms(sender, body, smsDate, parsed)
         }
     }
-    return results
+    return pending.map { sms ->
+        val parsed = sms.parsed
+        val sender = sms.sender
+        val id = sender.lowercase(Locale.ROOT) + ":" + sms.smsDate + ":" + sms.body.hashCode()
+        val notes = buildString {
+            append("Detected from a bank SMS. Verify details before relying on this entry.")
+            if (parsed.exactAmount.contains('.')) {
+                append(" Exact SMS amount: ₹").append(parsed.exactAmount)
+                append(". Stored amount is rounded to the nearest rupee; verify before import.")
+            }
+        }
+        Transaction(
+            title = parsed.merchant?.let { (if (parsed.income) "From " else "To ") + it }
+                ?: if (sender.isBlank()) "Bank SMS transaction" else "Bank SMS · " + sender,
+            category = SmsTransactionImporter.categorize(context, sender, sms.body, parsed).category,
+            date = parsed.date,
+            amount = parsed.amount,
+            income = parsed.income,
+            source = "SMS import",
+            notificationKey = "sms-import:" + id,
+            captureStatus = "",
+            notes = notes,
+            categoryOrigin = CategoryOrigin.AUTO
+        )
+    }
 }
+
+private data class PendingSms(val sender: String, val body: String, val smsDate: Long, val parsed: ParsedBankSmsTransaction)
 
 internal fun parseTransactionCsv(csv: String): List<Transaction> {
     val rows = mutableListOf<List<String>>()
@@ -7291,3 +7416,4 @@ internal fun GlassCalendarDialog(
         }
     }
 }
+
