@@ -548,7 +548,7 @@ private fun loanAccent(lender: String): Color = when {
 private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
 
 
-internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L, val categoryManuallySelected: Boolean = false)
+internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L, val categoryManuallySelected: Boolean = false, val categoryIconKey: String = "", val categoryColorHex: String = ""}
 private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
@@ -1210,7 +1210,7 @@ private fun FinanceApp() {
                                     transaction.source, transaction.title, transaction.notes,
                                     transaction.income, SmsTransactionImporter.availableCategories(context)
                                 )
-                                transaction to transaction.copy(category = decision.category, transactionKind = decision.transferKind)
+                                transaction to transaction.copy(category = decision.category, transactionKind = decision.transferKind, categoryIconKey = decision.iconKey, categoryColorHex = decision.colorHex)
                             }.filter { (before, after) -> !before.category.equals(after.category, ignoreCase = true) || before.transactionKind != after.transactionKind }
                         },
                         onApplyRecategorize = {
@@ -1412,7 +1412,11 @@ private fun FinanceApp() {
             }
             transactionToEdit?.let { transaction ->
                 EditTransactionDialog(transaction, onDismiss = { transactionToEdit = null }) { edited ->
-                    val protectedEdit = edited.copy(categoryManuallySelected = true)
+                    val protectedEdit = edited.copy(
+                        categoryManuallySelected = true,
+                        categoryIconKey = if (edited.category.equals(transaction.category, ignoreCase = true)) transaction.categoryIconKey else "",
+                        categoryColorHex = if (edited.category.equals(transaction.category, ignoreCase = true)) transaction.categoryColorHex else ""
+                    )
                     val index = transactions.indexOf(transaction)
                     if (index >= 0) { transactions = transactions.toMutableList().also { it[index] = protectedEdit }; saveTransactions(context, transactions) }
                     transactionToEdit = null
@@ -6178,7 +6182,7 @@ private fun TransactionDetailsDialog(
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         Box(Modifier.size(68.dp).clip(CircleShape).background(categoryTint(transaction.category)), contentAlignment = Alignment.Center) {
-                            FinanceIconDisplay(savedFinanceIconKey(context, "category", transaction.category), categoryColor(transaction.category), Modifier.size(34.dp))
+                            FinanceIconDisplay(transaction.categoryIconKey.ifBlank { savedFinanceIconKey(context, "category", transaction.category) }, transaction.categoryColorHex.takeIf { it.matches(Regex("#[0-9A-Fa-f]{6}")) }?.let { Color(android.graphics.Color.parseColor(it)) } ?: categoryColor(transaction.category), Modifier.size(34.dp))
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(transaction.category, color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -6900,6 +6904,8 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("loanAllocationRecorded", transaction.loanAllocationRecorded)
             put("loanReceiptPrincipalAdded", transaction.loanReceiptPrincipalAdded)
             put("categoryManuallySelected", transaction.categoryManuallySelected)
+            put("categoryIconKey", transaction.categoryIconKey)
+            put("categoryColorHex", transaction.categoryColorHex)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -6932,7 +6938,9 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optBoolean("loanPaymentCounted", false),
             item.optBoolean("loanAllocationRecorded", false),
             item.optLong("loanReceiptPrincipalAdded", 0L),
-            item.optBoolean("categoryManuallySelected", item.optString("source").contains("SMS", ignoreCase = true))
+            item.optBoolean("categoryManuallySelected", item.optString("source").contains("SMS", ignoreCase = true)),
+            item.optString("categoryIconKey", ""),
+            item.optString("categoryColorHex", "")
         )
     }
 }.getOrNull()
@@ -7184,7 +7192,9 @@ private fun readRecentBankSms(context: Context, availableCategories: List<String
                 captureStatus = "",
                 notes = notes,
                 transactionKind = decision.transferKind,
-                categoryManuallySelected = false
+                categoryManuallySelected = false,
+                categoryIconKey = decision.iconKey,
+                categoryColorHex = decision.colorHex
             )
         }
     }
