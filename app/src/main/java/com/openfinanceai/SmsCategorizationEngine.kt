@@ -24,7 +24,14 @@ internal object SmsCategorizationEngine {
     private val merchantRules = listOf(
         Rule("Other", "brand_cred", "#64748B", Regex("""(?i)\b(cred(?:club)?|dreamplug|dreamplug technologies)\b""")),
         Rule("Household", "brand_amazon", "#DB4765", Regex("""(?i)\b(amazon(?:\s+pay)?|amzn|flipkart)\b""")),
-        Rule("Food/Takeout", "food", "#148D91", Regex("""(?i)\b(swiggy|zomato)\b"""))
+        Rule("Food/Takeout", "food", "#148D91", Regex("""(?i)\b(swiggy|zomato|dominos|domino'?s|mcdonald'?s|kfc|pizza\s*hut|burger\s*king|subway|starbucks|cafe\s*coffee\s*day|behrouz|faasos|eatclub)\b""")),
+        Rule("Food", "groceries", "#148D91", Regex("""(?i)\b(bigbasket|bbnow|blinkit|zepto|instamart|dmart|more\s+supermarket|reliance\s+fresh)\b""")),
+        Rule("Transport/Taxi", "transport", "#B18A16", Regex("""(?i)\b(ola|uber|rapido|namma\s+metro|metro\s+rail|irctc|redbus|makemytrip|goibibo|cleartrip)\b""")),
+        Rule("Transport/Fuel", "fuel", "#B18A16", Regex("""(?i)\b(indian\s+oil|bharat\s+petroleum|hpcl|hindustan\s+petroleum|iocl|shell|nayara\s+energy)\b""")),
+        Rule("Utilities/Electricity", "bills", "#D97732", Regex("""(?i)\b(airtel|jio\s*fiber|jio|vodafone|vi\s+recharge|bsnl|tata\s+power|bescom|adani\s+electricity)\b""")),
+        Rule("Healthcare", "health", "#477DAD", Regex("""(?i)\b(apollo\s+pharmacy|1mg|tata\s*1mg|pharmeasy|netmeds|medplus|wellness\s+forever|practo)\b""")),
+        Rule("Leisure", "entertainment", "#AF5AB5", Regex("""(?i)\b(netflix|spotify|hotstar|prime\s+video|youtube\s+premium|bookmyshow|pvr|inox)\b""")),
+        Rule("Household", "home", "#DB4765", Regex("""(?i)\b(myntra|ajio|meesho|nykaa|tata\s*cliq|jiomart|croma|decathlon|ikea|zara)\b"""))
     )
 
     private val ownAccountTransfer = Regex(
