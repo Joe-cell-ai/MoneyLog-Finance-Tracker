@@ -7,7 +7,7 @@ import java.util.UUID
 internal data class LegacyLoan(
     val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double,
     val originalPrincipal: Long, val paymentsMade: Long, val totalPayments: Long, val borrowerName: String,
-    val agreementNumber: String, val loanNumber: String, val startDate: String
+    val agreementNumber: String, val loanNumber: String, val startDate: String, val existingId: String? = null
 )
 
 internal data class PlannedLoan(val loanId: String, val position: Int, val legacy: LegacyLoan) {
@@ -47,7 +47,8 @@ internal object LoanIdMigration {
                     borrowerName = item.optString("borrowerName", ""),
                     agreementNumber = item.optString("agreementNumber", item.optString("loanNumber", "")),
                     loanNumber = item.optString("loanNumber", ""),
-                    startDate = item.optString("startDate", item.optString("due", ""))
+                    startDate = item.optString("startDate", item.optString("due", "")),
+                    existingId = item.optString("id", "").trim().takeIf { it.isNotEmpty() }
                 )
             }
         } catch (_: Exception) {
@@ -63,7 +64,21 @@ internal object LoanIdMigration {
     ).toString()
 
     fun plan(legacy: List<LegacyLoan>): LoanIdPlan {
-        val loans = legacy.mapIndexed { index, loan -> PlannedLoan(deterministicId(index, loan), index, loan) }
+        val usedIds = LinkedHashSet<String>()
+        val reservedExistingIds = legacy.mapNotNull { it.existingId?.trim()?.takeIf(String::isNotEmpty) }.toSet()
+        val loans = legacy.mapIndexed { index, loan ->
+            val existing = loan.existingId?.trim()?.takeIf { it.isNotEmpty() && usedIds.add(it) }
+            val id = existing ?: run {
+                var candidate = deterministicId(index, loan)
+                var salt = 0
+                while (candidate in reservedExistingIds || !usedIds.add(candidate)) {
+                    salt += 1
+                    candidate = UUID.nameUUIDFromBytes("moneylog-loan-v1|$index|$salt".toByteArray(Charsets.UTF_8)).toString()
+                }
+                candidate
+            }
+            PlannedLoan(id, index, loan)
+        }
         val grouped = loans.groupBy { lenderKey(it.legacy.lender) }
         val uniqueMappings = LinkedHashMap<String, String>()
         val ambiguous = LinkedHashSet<String>()
