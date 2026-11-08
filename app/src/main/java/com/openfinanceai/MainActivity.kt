@@ -1734,11 +1734,11 @@ private fun FinanceApp() {
                         loans = listOf(newLoan) + loans
                         saveLoans(context, loans)
                     },
-                    onSave = { title, amount, kind, category, date, paymentMethod, notes, tag, loanLender, emiDate ->
+                    onSave = { title, amount, kind, category, date, paymentMethod, notes, tag, loanLender, emiDate, loanId ->
                         val isLoanReceipt = kind == "Loan received"
                         val isLoanRepayment = kind == "Loan repayment / EMI"
                         val isIncome = kind == "Income" || isLoanReceipt
-                        val loan = loans.singleOrNull { it.lender.equals(loanLender, ignoreCase = true) }
+                        val loan = loans.firstOrNull { it.id == loanId } ?: if (loanId.isBlank()) loans.singleOrNull { it.lender.equals(loanLender, ignoreCase = true) } else null
                         var principalReductionForTransaction = 0L
                         var interestPortionForTransaction = 0L
                         var paymentCountedForTransaction = false
@@ -6424,7 +6424,7 @@ private fun AddTransactionDialog(
     categoryRefreshToken: Int = 0,
     loans: List<Loan>,
     onAddLoan: (Loan) -> Unit,
-    onSave: (String, Long, String, String, String, String, String, String, String, String) -> Unit
+    onSave: (String, Long, String, String, String, String, String, String, String, String, String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
@@ -6441,7 +6441,9 @@ private fun AddTransactionDialog(
         .distinctBy { it.lowercase(Locale.ROOT) }
     var isIncome by remember { mutableStateOf(initialIncome) }
     var transactionKind by remember { mutableStateOf(if (initialIncome) "Income" else "Expense") }
-    var selectedLoanLender by remember { mutableStateOf(loans.firstOrNull()?.lender.orEmpty()) }
+    var selectedLoanId by remember { mutableStateOf(loans.firstOrNull()?.id.orEmpty()) }
+    val selectedLoan = loans.firstOrNull { it.id == selectedLoanId }
+    val selectedLoanLender = selectedLoan?.lender.orEmpty()
     var selectedEmiDate by remember { mutableStateOf("") }
     var loanMenuExpanded by remember { mutableStateOf(false) }
     var emiMenuExpanded by remember { mutableStateOf(false) }
@@ -6452,9 +6454,8 @@ private fun AddTransactionDialog(
     var newLoanTenure by remember { mutableStateOf("12") }
     var newLoanDue by remember { mutableStateOf(java.time.LocalDate.now().plusMonths(1).withDayOfMonth(1).toString()) }
     var newLoanError by remember { mutableStateOf("") }
-    val selectedLoan = loans.firstOrNull { it.lender.equals(selectedLoanLender, ignoreCase = true) }
-    val emiChoices = remember(selectedLoanLender, loans) {
-        val currentLoan = loans.firstOrNull { it.lender.equals(selectedLoanLender, ignoreCase = true) }
+    val emiChoices = remember(selectedLoanId, loans) {
+        val currentLoan = loans.firstOrNull { it.id == selectedLoanId }
         if (currentLoan == null) emptyList() else runCatching {
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
             val raw = prefs.getString("bank_schedule_${currentLoan.lender}", null)
@@ -6495,7 +6496,7 @@ private fun AddTransactionDialog(
     var notes by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
 
-    LaunchedEffect(selectedLoanLender, amount, date, emiChoices) {
+    LaunchedEffect(selectedLoanId, amount, date, emiChoices) {
         if (emiChoices.isNotEmpty()) {
             val parsedAmount = amount.toLongOrNull()
             val transactionDate = runCatching { java.time.LocalDate.parse(date) }.getOrNull()
@@ -6683,7 +6684,7 @@ private fun AddTransactionDialog(
                             ExposedDropdownMenuBox(expanded = loanMenuExpanded, onExpandedChange = { loanMenuExpanded = it }) {
                                 OutlinedTextField(value = selectedLoanLender, onValueChange = {}, readOnly = true, modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), label = { Text("Select existing loan") }, placeholder = { Text("Choose a loan") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = loanMenuExpanded) }, singleLine = true, shape = RoundedCornerShape(12.dp))
                                 ExposedDropdownMenu(expanded = loanMenuExpanded, onDismissRequest = { loanMenuExpanded = false }) {
-                                    loans.forEach { loan -> DropdownMenuItem(text = { Text(loan.lender) }, onClick = { selectedLoanLender = loan.lender; loanMenuExpanded = false; selectedEmiDate = "" }) }
+                                    loans.forEach { loan -> DropdownMenuItem(text = { Text(listOf(loan.lender, loan.loanNumber, loan.agreementNumber).filter { it.isNotBlank() }.distinct().joinToString(" · ")) }, onClick = { selectedLoanId = loan.id; loanMenuExpanded = false; selectedEmiDate = "" }) }
                                 }
                             }
                             OutlinedButton(onClick = { newLoanLender = ""; newLoanEmi = ""; newLoanRate = "0"; newLoanTenure = "12"; newLoanDue = java.time.LocalDate.now().plusMonths(1).withDayOfMonth(1).toString(); newLoanError = ""; showInlineAddLoan = true }, modifier = Modifier.fillMaxWidth()) {
@@ -6720,7 +6721,7 @@ private fun AddTransactionDialog(
                         else if (!validDate) error = "Enter the date as YYYY-MM-DD."
                         else if (transactionKind.startsWith("Loan") && selectedLoanLender.isBlank()) error = "Select an existing loan or add a new loan first."
                         else if (transactionKind == "Loan repayment / EMI" && selectedEmiDate.isBlank()) error = "Select the EMI installment to match this repayment."
-                        else onSave(title.trim().ifBlank { notes.trim().ifBlank { category.ifBlank { "Other" } } }, parsed, transactionKind, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTags.joinToString(", "), selectedLoanLender, selectedEmiDate)
+                        else onSave(title.trim().ifBlank { notes.trim().ifBlank { category.ifBlank { "Other" } } }, parsed, transactionKind, category.ifBlank { "Other" }, date, paymentMethod, notes.trim(), selectedTags.joinToString(", "), selectedLoanLender, selectedEmiDate, selectedLoanId)
                     },
                 contentAlignment = Alignment.Center
             ) { Text("Save Transaction", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
@@ -6780,7 +6781,7 @@ private fun AddTransactionDialog(
                         val principal = amount.toLongOrNull()?.coerceAtLeast(1L) ?: parsedEmi
                         val newLoan = Loan(newLoanLender.trim(), 0L, parsedEmi, newLoanDue, parsedRate, principal, 0L, parsedTenure, startDate = newLoanDue)
                         onAddLoan(newLoan)
-                        selectedLoanLender = newLoan.lender
+                        selectedLoanId = newLoan.id
                         selectedEmiDate = ""
                         if (transactionKind == "Expense" || transactionKind == "Income") {
                             transactionKind = "Loan received"
@@ -6823,7 +6824,7 @@ private fun AddTransactionDialog(
                         val principal = amount.toLongOrNull()?.coerceAtLeast(1L) ?: parsedEmi
                         val newLoan = Loan(newLoanLender.trim(), 0L, parsedEmi, newLoanDue, parsedRate, principal, 0L, parsedTenure, startDate = newLoanDue)
                         onAddLoan(newLoan)
-                        selectedLoanLender = newLoan.lender
+                        selectedLoanId = newLoan.id
                         selectedEmiDate = ""
                         if (transactionKind == "Expense" || transactionKind == "Income") {
                             transactionKind = "Loan received"
