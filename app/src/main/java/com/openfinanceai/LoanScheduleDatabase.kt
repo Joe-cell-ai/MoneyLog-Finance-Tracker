@@ -81,14 +81,12 @@ internal data class LoanRecord(
 
 @Dao
 internal interface LoanScheduleDao {
-    @Insert(onConflict = OnConflictStrategy.ABORT)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLoans(rows: List<LoanRecord>)
 
     @Query("SELECT * FROM loans ORDER BY sortOrder, loanId")
     suspend fun allLoans(): List<LoanRecord>
 
-    @Query("DELETE FROM loans")
-    suspend fun deleteAllLoans()
 
     /** lenderKey must already be trimmed and lower-cased; ambiguous lenders must not be passed here. */
     @Query("UPDATE loan_document_imports SET loanId = :newId WHERE lower(trim(loanId)) = :lenderKey")
