@@ -1286,7 +1286,7 @@ private fun FinanceApp() {
                         var remainingTransactions = transactions.filterNot { it === transaction }
                         val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
                         if (transaction.transactionKind == "Loan repayment / EMI") {
-                            val loan = loans.firstOrNull { transaction.loanId.isNotBlank() && it.id == transaction.loanId } ?: loans.singleOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
+                            val loan = if (transaction.loanId.isNotBlank()) loans.firstOrNull { it.id == transaction.loanId } else loans.singleOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
                             if (loan != null) {
                                 val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
                                 val estimatedLegacyReduction = if (monthlyRate <= 0.0) transaction.amount else
@@ -1296,7 +1296,7 @@ private fun FinanceApp() {
                                     .coerceAtMost(loan.originalPrincipal.coerceAtLeast(loan.balance))
                                 val sameInstallment = remainingTransactions.filter {
                                     it.transactionKind == "Loan repayment / EMI" &&
-                                        it.loanLender.equals(transaction.loanLender, ignoreCase = true) &&
+                                        (if (transaction.loanId.isNotBlank()) it.loanId == transaction.loanId else it.loanId.isBlank() && it.loanLender.equals(transaction.loanLender, ignoreCase = true)) &&
                                         it.emiInstallmentDate == transaction.emiInstallmentDate
                                 }
                                 val remainingAmount = sameInstallment.sumOf { it.amount }
@@ -1338,7 +1338,7 @@ private fun FinanceApp() {
                             } else {
                                 val remainingAmount = remainingTransactions.filter {
                                     it.transactionKind == "Loan repayment / EMI" &&
-                                        it.loanLender.equals(transaction.loanLender, ignoreCase = true) &&
+                                        (if (transaction.loanId.isNotBlank()) it.loanId == transaction.loanId else it.loanId.isBlank() && it.loanLender.equals(transaction.loanLender, ignoreCase = true)) &&
                                         it.emiInstallmentDate == transaction.emiInstallmentDate
                                 }.sumOf { it.amount }
                                 val meta = runCatching { JSONObject(prefs.getString("loan_document_metadata_${transaction.loanLender}", "{}") ?: "{}") }.getOrDefault(JSONObject())
@@ -1358,7 +1358,7 @@ private fun FinanceApp() {
                                 else prefs.edit().remove("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}").apply()
                             }
                         } else if (transaction.transactionKind == "Loan received") {
-                            val loan = loans.firstOrNull { transaction.loanId.isNotBlank() && it.id == transaction.loanId } ?: loans.singleOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
+                            val loan = if (transaction.loanId.isNotBlank()) loans.firstOrNull { it.id == transaction.loanId } else loans.singleOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
                             if (loan != null) {
                                 val newBalance = (loan.balance - transaction.amount).coerceAtLeast(0L)
                                 val newPrincipal = (loan.originalPrincipal - transaction.loanReceiptPrincipalAdded).coerceAtLeast(newBalance)
@@ -1679,9 +1679,9 @@ private fun FinanceApp() {
                     text = { Text("This permanently removes this loan, its saved EMI schedule and status records, and transactions linked to this loan. This cannot be undone.", color = Color(0xFF536782), fontSize = 13.sp) },
                     confirmButton = {
                         TextButton(onClick = {
-                            EmiReminderReceiver.cancelMonthly(context, loan.lender)
                             val lenderKey = loan.lender.trim()
                             val onlyLoanForLender = loans.count { it.lender.equals(lenderKey, ignoreCase = true) } == 1
+                            if (onlyLoanForLender) EmiReminderReceiver.cancelMonthly(context, loan.lender)
                             loans = loans.filterNot { it.id == loan.id }
                             transactions = transactions.filterNot { transaction ->
                                 transaction.loanId == loan.id || (onlyLoanForLender && transaction.loanId.isBlank() && transaction.loanLender.equals(lenderKey, ignoreCase = true))
@@ -1702,8 +1702,12 @@ private fun FinanceApp() {
                             financeScope.launch {
                                 withContext(kotlinx.coroutines.Dispatchers.IO) {
                                     val dao = LoanScheduleDatabase.get(context).loanScheduleDao()
-                                    dao.deleteLoanSchedules(lenderKey)
-                                    dao.deleteLoanDocuments(lenderKey)
+                                    dao.deleteLoanSchedules(loan.id)
+                                    dao.deleteLoanDocuments(loan.id)
+                                    if (onlyLoanForLender) {
+                                        dao.deleteLoanSchedules(lenderKey)
+                                        dao.deleteLoanDocuments(lenderKey)
+                                    }
                                 }
                             }
                             loanPendingDelete = null
