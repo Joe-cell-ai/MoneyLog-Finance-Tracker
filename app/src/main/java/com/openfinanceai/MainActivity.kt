@@ -1681,22 +1681,23 @@ private fun FinanceApp() {
                         TextButton(onClick = {
                             EmiReminderReceiver.cancelMonthly(context, loan.lender)
                             val lenderKey = loan.lender.trim()
-                            loans = loans.filterNot { it.lender.equals(lenderKey, ignoreCase = true) }
-                            transactions = transactions.filterNot {
-                                it.loanLender.equals(lenderKey, ignoreCase = true)
+                            val onlyLoanForLender = loans.count { it.lender.equals(lenderKey, ignoreCase = true) } == 1
+                            loans = loans.filterNot { it.id == loan.id }
+                            transactions = transactions.filterNot { transaction ->
+                                transaction.loanId == loan.id || (onlyLoanForLender && transaction.loanId.isBlank() && transaction.loanLender.equals(lenderKey, ignoreCase = true))
                             }
                             saveLoans(context, loans)
                             saveTransactions(context, transactions)
                             val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
                             val editor = prefs.edit()
-                            prefs.all.keys.filter { key ->
+                            prefs.all.keys.filter { key -> onlyLoanForLender && (
                                 key == "bank_schedule_${lenderKey}" ||
                                     key == "loan_document_metadata_${lenderKey}" ||
                                     key.startsWith("emi_status_${lenderKey}_") ||
                                     key.startsWith("emi_amount_${lenderKey}_") ||
                                     key.startsWith("emi_amount_paise_${lenderKey}_") ||
                                     key.startsWith("emi_rescheduled_${lenderKey}_")
-                            }.forEach(editor::remove)
+                            ) }.forEach(editor::remove)
                             editor.apply()
                             financeScope.launch {
                                 withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -1742,7 +1743,7 @@ private fun FinanceApp() {
                             val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
                             val recorded = transactions.filter {
                                 it.transactionKind == "Loan repayment / EMI" &&
-                                    it.loanLender.equals(loan.lender, ignoreCase = true) &&
+                                    (it.loanId == loan.id || (it.loanId.isBlank() && it.loanLender.equals(loan.lender, ignoreCase = true))) &&
                                     it.emiInstallmentDate == emiDate
                             }
                             val recordedAmount = recorded.sumOf { it.amount }
