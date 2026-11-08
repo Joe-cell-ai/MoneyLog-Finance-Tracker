@@ -1286,7 +1286,7 @@ private fun FinanceApp() {
                         var remainingTransactions = transactions.filterNot { it === transaction }
                         val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
                         if (transaction.transactionKind == "Loan repayment / EMI") {
-                            val loan = loans.firstOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
+                            val loan = loans.firstOrNull { transaction.loanId.isNotBlank() && it.id == transaction.loanId } ?: loans.singleOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
                             if (loan != null) {
                                 val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
                                 val estimatedLegacyReduction = if (monthlyRate <= 0.0) transaction.amount else
@@ -1317,7 +1317,7 @@ private fun FinanceApp() {
                                 val hadCountedPayment = transaction.loanPaymentCounted || sameInstallment.any { it.loanPaymentCounted }
                                 val shouldKeepCountedPayment = installmentStillPaid && hadCountedPayment
                                 loans = loans.map { existing ->
-                                    if (existing.lender.equals(loan.lender, true)) existing.copy(
+                                    if (existing.id == loan.id) existing.copy(
                                         balance = existing.balance + principalReduction,
                                         paymentsMade = if (hadCountedPayment && !shouldKeepCountedPayment) (existing.paymentsMade - 1L).coerceAtLeast(0L) else existing.paymentsMade
                                     ) else existing
@@ -1358,12 +1358,12 @@ private fun FinanceApp() {
                                 else prefs.edit().remove("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}").apply()
                             }
                         } else if (transaction.transactionKind == "Loan received") {
-                            val loan = loans.firstOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
+                            val loan = loans.firstOrNull { transaction.loanId.isNotBlank() && it.id == transaction.loanId } ?: loans.singleOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
                             if (loan != null) {
                                 val newBalance = (loan.balance - transaction.amount).coerceAtLeast(0L)
                                 val newPrincipal = (loan.originalPrincipal - transaction.loanReceiptPrincipalAdded).coerceAtLeast(newBalance)
                                 loans = loans.map { existing ->
-                                    if (existing.lender.equals(loan.lender, true)) existing.copy(balance = newBalance, originalPrincipal = newPrincipal) else existing
+                                    if (existing.id == loan.id) existing.copy(balance = newBalance, originalPrincipal = newPrincipal) else existing
                                 }
                                 saveLoans(context, loans)
                             }
@@ -1472,7 +1472,7 @@ private fun FinanceApp() {
                                 }
                                 EmiQuickActionRow(Icons.Default.CheckCircle, "Mark as paid", "Record this installment and update the loan balance", Color(0xFF10B981), Color(0xFF10B981), AppDarkTheme, dialogText, dialogMuted) {
                                     val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
-                                    val loan = loans.firstOrNull { it.lender.equals(action.lender, ignoreCase = true) }
+                                    val loan = loans.singleOrNull { it.lender.equals(action.lender, ignoreCase = true) }
                                     val recorded = transactions.filter {
                                         it.transactionKind == "Loan repayment / EMI" &&
                                             it.loanLender.equals(action.lender, ignoreCase = true) &&
@@ -1526,7 +1526,7 @@ private fun FinanceApp() {
                                         saveTransactions(context, transactions)
                                         if (loan != null) {
                                             loans = loans.map { existing ->
-                                                if (existing.lender.equals(loan.lender, true)) existing.copy(
+                                                if (existing.id == loan.id) existing.copy(
                                                     balance = (existing.balance - principalReduction).coerceAtLeast(0L),
                                                     paymentsMade = if (sequentialPayment) existing.paymentsMade + 1L else existing.paymentsMade
                                                 ) else existing
@@ -1733,7 +1733,7 @@ private fun FinanceApp() {
                         val isLoanReceipt = kind == "Loan received"
                         val isLoanRepayment = kind == "Loan repayment / EMI"
                         val isIncome = kind == "Income" || isLoanReceipt
-                        val loan = loans.firstOrNull { it.lender.equals(loanLender, ignoreCase = true) }
+                        val loan = loans.singleOrNull { it.lender.equals(loanLender, ignoreCase = true) }
                         var principalReductionForTransaction = 0L
                         var interestPortionForTransaction = 0L
                         var paymentCountedForTransaction = false
@@ -1780,7 +1780,7 @@ private fun FinanceApp() {
                             principalReductionForTransaction = (amount - interestPortionForTransaction).coerceAtLeast(0L).coerceAtMost(loan.balance)
                             if (fullPayment) prefs.edit().putString("emi_status_${loan.lender}_${emiDate}", "Paid").apply()
                             loans = loans.map { existing ->
-                                if (existing.lender.equals(loan.lender, true)) existing.copy(
+                                if (existing.id == loan.id) existing.copy(
                                     balance = (existing.balance - principalReductionForTransaction).coerceAtLeast(0L),
                                     paymentsMade = if (paymentCountedForTransaction) existing.paymentsMade + 1L else existing.paymentsMade
                                 ) else existing
@@ -1788,7 +1788,7 @@ private fun FinanceApp() {
                             saveLoans(context, loans)
                         } else if (isLoanReceipt && loan != null) {
                             loans = loans.map { existing ->
-                                if (existing.lender.equals(loan.lender, true)) {
+                                if (existing.id == loan.id) {
                                     val updatedPrincipal = if (existing.balance == 0L) maxOf(existing.originalPrincipal, amount) else existing.originalPrincipal + amount
                                     loanReceiptPrincipalAddedForTransaction = (updatedPrincipal - existing.originalPrincipal).coerceAtLeast(0L)
                                     existing.copy(balance = existing.balance + amount, originalPrincipal = updatedPrincipal)
