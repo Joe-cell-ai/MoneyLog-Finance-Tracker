@@ -556,7 +556,7 @@ private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if
 
 
 internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L, val categoryOrigin: String = CategoryOrigin.UNKNOWN, val loanId: String = "")
-private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "", val id: String = "")
+private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "", val id: String = java.util.UUID.randomUUID().toString())
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
 @Composable
@@ -939,9 +939,9 @@ private fun FinanceApp() {
                 .put("loanPrincipalReduction", t.loanPrincipalReduction).put("loanInterestPortion", t.loanInterestPortion)
                 .put("loanPaymentCounted", t.loanPaymentCounted).put("loanAllocationRecorded", t.loanAllocationRecorded)
                 .put("loanReceiptPrincipalAdded", t.loanReceiptPrincipalAdded)
-                .put("categoryOrigin", t.categoryOrigin)) }
+                .put("categoryOrigin", t.categoryOrigin).put("loanId", t.loanId)) }
             val loanArray = JSONArray()
-            loans.forEach { l -> loanArray.put(JSONObject().put("lender", l.lender).put("balance", l.balance)
+            loans.forEach { l -> loanArray.put(JSONObject().put("id", l.id).put("lender", l.lender).put("balance", l.balance)
                 .put("emi", l.emi).put("due", l.due).put("annualRate", l.annualRate).put("originalPrincipal", l.originalPrincipal).put("paymentsMade", l.paymentsMade).put("totalPayments", l.totalPayments)
                 .put("borrowerName", l.borrowerName).put("agreementNumber", l.agreementNumber).put("loanNumber", l.loanNumber).put("startDate", l.startDate)) }
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -998,13 +998,13 @@ private fun FinanceApp() {
                         j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""), j.optString("loanLender", ""), j.optString("emiInstallmentDate", ""), j.optString("transactionKind", ""), j.optLong("loanPrincipalReduction", 0L),
                         j.optLong("loanInterestPortion", 0L), j.optBoolean("loanPaymentCounted", false),
                         j.optBoolean("loanAllocationRecorded", false), j.optLong("loanReceiptPrincipalAdded", 0L),
-                        j.optString("categoryOrigin", CategoryOrigin.UNKNOWN))
+                        j.optString("categoryOrigin", CategoryOrigin.UNKNOWN), j.optString("loanId", ""))
                 } }
             }
             val restoredLoans = root.optJSONArray("loans")?.let { a ->
                 (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
                     Loan(j.getString("lender"), j.getLong("balance"), j.getLong("emi"), j.optString("due", "Not set"), j.optDouble("annualRate", 0.0), j.optLong("originalPrincipal", j.getLong("balance")), j.optLong("paymentsMade", 0L), j.optLong("totalPayments", 0L), j.optString("borrowerName", ""), j.optString("agreementNumber", ""),
-                        j.optString("loanNumber", ""), j.optString("startDate", j.optString("due", "")))
+                        j.optString("loanNumber", ""), j.optString("startDate", j.optString("due", "")), j.optString("id", ""))
                 } }
             } ?: emptyList()
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -1519,7 +1519,8 @@ private fun FinanceApp() {
                                             loanPrincipalReduction = principalReduction,
                                             loanInterestPortion = interestPortion,
                                             loanPaymentCounted = sequentialPayment,
-                                            loanAllocationRecorded = loan != null
+                                            loanAllocationRecorded = loan != null,
+                                            loanId = loan?.id.orEmpty()
                                         )
                                         transactions = listOf(payment) + transactions
                                         saveTransactions(context, transactions)
@@ -1805,7 +1806,8 @@ private fun FinanceApp() {
                                 loanInterestPortion = interestPortionForTransaction,
                                 loanPaymentCounted = paymentCountedForTransaction,
                                 loanAllocationRecorded = isLoanRepayment && loan != null,
-                                loanReceiptPrincipalAdded = loanReceiptPrincipalAddedForTransaction
+                                loanReceiptPrincipalAdded = loanReceiptPrincipalAddedForTransaction,
+                                loanId = loan?.id.orEmpty()
                             )
                         ) + transactions
                         saveTransactions(context, transactions)
