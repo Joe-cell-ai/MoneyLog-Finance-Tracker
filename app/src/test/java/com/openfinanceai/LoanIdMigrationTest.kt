@@ -38,6 +38,24 @@ class LoanIdMigrationTest {
         assertEquals(setOf("hdfc bank"), plan.ambiguousLenders)
     }
 
+    @Test fun existingUniqueLoanIdsArePreserved() {
+        val legacy = LoanIdMigration.parseLegacy("""[
+            {"id":"loan-existing-1","lender":"HDFC Bank","balance":1000,"emi":100,"due":"01"}
+        ]""")!!
+        assertEquals("loan-existing-1", LoanIdMigration.plan(legacy).loans.single().loanId)
+    }
+
+    @Test fun duplicateExistingIdsAreReplacedWithDistinctDeterministicIds() {
+        val legacy = LoanIdMigration.parseLegacy("""[
+            {"id":"duplicate-id","lender":"HDFC Bank","balance":1000,"emi":100,"due":"01"},
+            {"id":"duplicate-id","lender":"HDFC Bank","balance":2000,"emi":200,"due":"02"}
+        ]""")!!
+        val first = LoanIdMigration.plan(legacy)
+        val second = LoanIdMigration.plan(legacy)
+        assertEquals(2, first.loans.map { it.loanId }.toSet().size)
+        assertEquals(first.loans.map { it.loanId }, second.loans.map { it.loanId })
+    }
+
     @Test fun aUniqueLenderKeyCanBeAssignedSafely() {
         val legacy = LoanIdMigration.parseLegacy("""[{"lender":"ICICI Bank","balance":1000,"emi":100,"due":"01"}]""")!!
         val plan = LoanIdMigration.plan(legacy)
