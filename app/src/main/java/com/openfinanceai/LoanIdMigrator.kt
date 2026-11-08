@@ -24,7 +24,7 @@ internal sealed class LoanIdMigrationResult {
  */
 internal object LoanIdMigrator {
     private const val PREFS = "open_finance_data"
-    const val DONE_FLAG = "loan_id_migration_v1_done"
+    const val RECORDS_IMPORTED_FLAG = "loan_identity_records_v1_done"
     const val LENDER_MAP_KEY = "loan_id_by_lender_v1"
     private const val BACKUP_FILE = "moneylog_loan_migration_backup_v1.json"
     private val BACKUP_PREFIXES = listOf(
@@ -33,7 +33,7 @@ internal object LoanIdMigrator {
 
     suspend fun run(context: Context): LoanIdMigrationResult = withContext(Dispatchers.IO) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (prefs.getBoolean(DONE_FLAG, false)) return@withContext LoanIdMigrationResult.AlreadyDone
+        if (prefs.getBoolean(RECORDS_IMPORTED_FLAG, false)) return@withContext LoanIdMigrationResult.AlreadyDone
 
         val raw = prefs.getString("loans", null)
         val legacy = if (raw == null) emptyList()
@@ -41,7 +41,7 @@ internal object LoanIdMigrator {
             ?: return@withContext LoanIdMigrationResult.Failed("Saved loan data could not be read. Nothing was changed.")
 
         if (legacy.isEmpty()) {
-            val saved = prefs.edit().putBoolean(DONE_FLAG, true).commit()
+            val saved = prefs.edit().putBoolean(RECORDS_IMPORTED_FLAG, true).commit()
             return@withContext if (saved) LoanIdMigrationResult.NothingToMigrate
             else LoanIdMigrationResult.Failed("Could not save migration state. Nothing was changed.")
         }
@@ -57,7 +57,6 @@ internal object LoanIdMigrator {
         val dao = db.loanScheduleDao()
         try {
             db.withTransaction {
-                dao.deleteAllLoans()
                 dao.insertLoans(plan.loans.map { it.toRecord() })
 
                 // Ambiguous lender keys are intentionally not re-keyed.
