@@ -60,8 +60,43 @@ internal data class LoanScheduleRecord(
     val sourceText: String?
 )
 
+/** Permanent loan identity. Amounts retain the legacy loan-list unit until loan screens are migrated. */
+@Entity(tableName = "loans")
+internal data class LoanRecord(
+    @PrimaryKey val loanId: String,
+    val sortOrder: Int,
+    val lender: String,
+    val balance: Long,
+    val emi: Long,
+    val due: String,
+    val annualRate: Double,
+    val originalPrincipal: Long,
+    val paymentsMade: Long,
+    val totalPayments: Long,
+    val borrowerName: String,
+    val agreementNumber: String,
+    val loanNumber: String,
+    val startDate: String
+)
+
 @Dao
 internal interface LoanScheduleDao {
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertLoans(rows: List<LoanRecord>)
+
+    @Query("SELECT * FROM loans ORDER BY sortOrder, loanId")
+    suspend fun allLoans(): List<LoanRecord>
+
+    @Query("DELETE FROM loans")
+    suspend fun deleteAllLoans()
+
+    /** lenderKey must already be trimmed and lower-cased; ambiguous lenders must not be passed here. */
+    @Query("UPDATE loan_document_imports SET loanId = :newId WHERE lower(trim(loanId)) = :lenderKey")
+    suspend fun rekeyDocuments(lenderKey: String, newId: String)
+
+    @Query("UPDATE loan_schedule_installments SET loanId = :newId WHERE lower(trim(loanId)) = :lenderKey")
+    suspend fun rekeyInstallments(lenderKey: String, newId: String)
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertDocument(record: LoanDocumentRecord)
 
@@ -94,14 +129,13 @@ internal interface LoanScheduleDao {
     }
 }
 
-@Database(entities = [LoanDocumentRecord::class, LoanScheduleRecord::class], version = 2, exportSchema = false)
+@Database(entities = [LoanDocumentRecord::class, LoanScheduleRecord::class, LoanRecord::class], version = 3, exportSchema = false)
 internal abstract class LoanScheduleDatabase : RoomDatabase() {
     abstract fun loanScheduleDao(): LoanScheduleDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // Version 1 stored whole rupees. Convert existing values exactly once to paise.
                 listOf("principal", "declaredInterest", "declaredRepayment").forEach { column ->
                     db.execSQL("UPDATE loan_document_imports SET $column = $column * 100 WHERE $column IS NOT NULL")
                 }
@@ -111,10 +145,27 @@ internal abstract class LoanScheduleDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `loans` (" +
+                        "`loanId` TEXT NOT NULL, `sortOrder` INTEGER NOT NULL, `lender` TEXT NOT NULL, " +
+                        "`balance` INTEGER NOT NULL, `emi` INTEGER NOT NULL, `due` TEXT NOT NULL, " +
+                        "`annualRate` REAL NOT NULL, `originalPrincipal` INTEGER NOT NULL, " +
+                        "`paymentsMade` INTEGER NOT NULL, `totalPayments` INTEGER NOT NULL, " +
+                        "`borrowerName` TEXT NOT NULL, `agreementNumber` TEXT NOT NULL, " +
+                        "`loanNumber` TEXT NOT NULL, `startDate` TEXT NOT NULL, PRIMARY KEY(`loanId`))"
+                )
+            }
+        }
+
         @Volatile private var instance: LoanScheduleDatabase? = null
         fun get(context: Context): LoanScheduleDatabase = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(context.applicationContext, LoanScheduleDatabase::class.java, "moneylog_loan_schedules.db")
-                .addMigrations(MIGRATION_1_2).build().also { instance = it }
+            instance ?: Room.databaseBuilder(
+                context.applicationContext,
+                LoanScheduleDatabase::class.java,
+                "moneylog_loan_schedules.db"
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
         }
     }
 }
@@ -145,9 +196,11 @@ internal class VerifiedLoanScheduleRepository(private val dao: LoanScheduleDao) 
             extractionEngine = "PDFBOX_MLKIT_VALIDATED", verified = true
         )
         val entities = rows.map { row ->
-            LoanScheduleRecord(id, loanId, row.installmentNumber, row.dueDate, row.openingBalance,
+            LoanScheduleRecord(
+                id, loanId, row.installmentNumber, row.dueDate, row.openingBalance,
                 row.installmentAmount, row.principal, row.interest, row.closingBalance,
-                sourcePageByInstallment[row.installmentNumber], sourceTextByInstallment[row.installmentNumber])
+                sourcePageByInstallment[row.installmentNumber], sourceTextByInstallment[row.installmentNumber]
+            )
         }
         dao.replaceVerifiedSchedule(document, entities)
         id
