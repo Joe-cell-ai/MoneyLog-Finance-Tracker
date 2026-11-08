@@ -555,8 +555,8 @@ private fun loanAccent(lender: String): Color = when {
 private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
 
 
-internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L, val categoryOrigin: String = CategoryOrigin.UNKNOWN)
-private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
+internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L, val categoryOrigin: String = CategoryOrigin.UNKNOWN, val loanId: String = "")
+private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "", val id: String = java.util.UUID.randomUUID().toString())
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
 @Composable
@@ -939,9 +939,9 @@ private fun FinanceApp() {
                 .put("loanPrincipalReduction", t.loanPrincipalReduction).put("loanInterestPortion", t.loanInterestPortion)
                 .put("loanPaymentCounted", t.loanPaymentCounted).put("loanAllocationRecorded", t.loanAllocationRecorded)
                 .put("loanReceiptPrincipalAdded", t.loanReceiptPrincipalAdded)
-                .put("categoryOrigin", t.categoryOrigin)) }
+                .put("categoryOrigin", t.categoryOrigin).put("loanId", t.loanId)) }
             val loanArray = JSONArray()
-            loans.forEach { l -> loanArray.put(JSONObject().put("lender", l.lender).put("balance", l.balance)
+            loans.forEach { l -> loanArray.put(JSONObject().put("id", l.id).put("lender", l.lender).put("balance", l.balance)
                 .put("emi", l.emi).put("due", l.due).put("annualRate", l.annualRate).put("originalPrincipal", l.originalPrincipal).put("paymentsMade", l.paymentsMade).put("totalPayments", l.totalPayments)
                 .put("borrowerName", l.borrowerName).put("agreementNumber", l.agreementNumber).put("loanNumber", l.loanNumber).put("startDate", l.startDate)) }
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -998,13 +998,13 @@ private fun FinanceApp() {
                         j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""), j.optString("loanLender", ""), j.optString("emiInstallmentDate", ""), j.optString("transactionKind", ""), j.optLong("loanPrincipalReduction", 0L),
                         j.optLong("loanInterestPortion", 0L), j.optBoolean("loanPaymentCounted", false),
                         j.optBoolean("loanAllocationRecorded", false), j.optLong("loanReceiptPrincipalAdded", 0L),
-                        j.optString("categoryOrigin", CategoryOrigin.UNKNOWN))
+                        j.optString("categoryOrigin", CategoryOrigin.UNKNOWN), j.optString("loanId", ""))
                 } }
             }
             val restoredLoans = root.optJSONArray("loans")?.let { a ->
                 (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
                     Loan(j.getString("lender"), j.getLong("balance"), j.getLong("emi"), j.optString("due", "Not set"), j.optDouble("annualRate", 0.0), j.optLong("originalPrincipal", j.getLong("balance")), j.optLong("paymentsMade", 0L), j.optLong("totalPayments", 0L), j.optString("borrowerName", ""), j.optString("agreementNumber", ""),
-                        j.optString("loanNumber", ""), j.optString("startDate", j.optString("due", "")))
+                        j.optString("loanNumber", ""), j.optString("startDate", j.optString("due", "")), j.optString("id", ""))
                 } }
             } ?: emptyList()
             val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -1286,7 +1286,7 @@ private fun FinanceApp() {
                         var remainingTransactions = transactions.filterNot { it === transaction }
                         val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
                         if (transaction.transactionKind == "Loan repayment / EMI") {
-                            val loan = loans.firstOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
+                            val loan = if (transaction.loanId.isNotBlank()) loans.firstOrNull { it.id == transaction.loanId } else loans.singleOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
                             if (loan != null) {
                                 val monthlyRate = loan.annualRate.coerceAtLeast(0.0) / 1200.0
                                 val estimatedLegacyReduction = if (monthlyRate <= 0.0) transaction.amount else
@@ -1296,7 +1296,7 @@ private fun FinanceApp() {
                                     .coerceAtMost(loan.originalPrincipal.coerceAtLeast(loan.balance))
                                 val sameInstallment = remainingTransactions.filter {
                                     it.transactionKind == "Loan repayment / EMI" &&
-                                        it.loanLender.equals(transaction.loanLender, ignoreCase = true) &&
+                                        (if (transaction.loanId.isNotBlank()) it.loanId == transaction.loanId else it.loanId.isBlank() && it.loanLender.equals(transaction.loanLender, ignoreCase = true)) &&
                                         it.emiInstallmentDate == transaction.emiInstallmentDate
                                 }
                                 val remainingAmount = sameInstallment.sumOf { it.amount }
@@ -1317,7 +1317,7 @@ private fun FinanceApp() {
                                 val hadCountedPayment = transaction.loanPaymentCounted || sameInstallment.any { it.loanPaymentCounted }
                                 val shouldKeepCountedPayment = installmentStillPaid && hadCountedPayment
                                 loans = loans.map { existing ->
-                                    if (existing.lender.equals(loan.lender, true)) existing.copy(
+                                    if (existing.id == loan.id) existing.copy(
                                         balance = existing.balance + principalReduction,
                                         paymentsMade = if (hadCountedPayment && !shouldKeepCountedPayment) (existing.paymentsMade - 1L).coerceAtLeast(0L) else existing.paymentsMade
                                     ) else existing
@@ -1338,7 +1338,7 @@ private fun FinanceApp() {
                             } else {
                                 val remainingAmount = remainingTransactions.filter {
                                     it.transactionKind == "Loan repayment / EMI" &&
-                                        it.loanLender.equals(transaction.loanLender, ignoreCase = true) &&
+                                        (if (transaction.loanId.isNotBlank()) it.loanId == transaction.loanId else it.loanId.isBlank() && it.loanLender.equals(transaction.loanLender, ignoreCase = true)) &&
                                         it.emiInstallmentDate == transaction.emiInstallmentDate
                                 }.sumOf { it.amount }
                                 val meta = runCatching { JSONObject(prefs.getString("loan_document_metadata_${transaction.loanLender}", "{}") ?: "{}") }.getOrDefault(JSONObject())
@@ -1358,12 +1358,12 @@ private fun FinanceApp() {
                                 else prefs.edit().remove("emi_status_${transaction.loanLender}_${transaction.emiInstallmentDate}").apply()
                             }
                         } else if (transaction.transactionKind == "Loan received") {
-                            val loan = loans.firstOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
+                            val loan = if (transaction.loanId.isNotBlank()) loans.firstOrNull { it.id == transaction.loanId } else loans.singleOrNull { it.lender.equals(transaction.loanLender, ignoreCase = true) }
                             if (loan != null) {
                                 val newBalance = (loan.balance - transaction.amount).coerceAtLeast(0L)
                                 val newPrincipal = (loan.originalPrincipal - transaction.loanReceiptPrincipalAdded).coerceAtLeast(newBalance)
                                 loans = loans.map { existing ->
-                                    if (existing.lender.equals(loan.lender, true)) existing.copy(balance = newBalance, originalPrincipal = newPrincipal) else existing
+                                    if (existing.id == loan.id) existing.copy(balance = newBalance, originalPrincipal = newPrincipal) else existing
                                 }
                                 saveLoans(context, loans)
                             }
@@ -1472,7 +1472,7 @@ private fun FinanceApp() {
                                 }
                                 EmiQuickActionRow(Icons.Default.CheckCircle, "Mark as paid", "Record this installment and update the loan balance", Color(0xFF10B981), Color(0xFF10B981), AppDarkTheme, dialogText, dialogMuted) {
                                     val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
-                                    val loan = loans.firstOrNull { it.lender.equals(action.lender, ignoreCase = true) }
+                                    val loan = loans.singleOrNull { it.lender.equals(action.lender, ignoreCase = true) }
                                     val recorded = transactions.filter {
                                         it.transactionKind == "Loan repayment / EMI" &&
                                             it.loanLender.equals(action.lender, ignoreCase = true) &&
@@ -1519,13 +1519,14 @@ private fun FinanceApp() {
                                             loanPrincipalReduction = principalReduction,
                                             loanInterestPortion = interestPortion,
                                             loanPaymentCounted = sequentialPayment,
-                                            loanAllocationRecorded = loan != null
+                                            loanAllocationRecorded = loan != null,
+                                            loanId = loan?.id.orEmpty()
                                         )
                                         transactions = listOf(payment) + transactions
                                         saveTransactions(context, transactions)
                                         if (loan != null) {
                                             loans = loans.map { existing ->
-                                                if (existing.lender.equals(loan.lender, true)) existing.copy(
+                                                if (existing.id == loan.id) existing.copy(
                                                     balance = (existing.balance - principalReduction).coerceAtLeast(0L),
                                                     paymentsMade = if (sequentialPayment) existing.paymentsMade + 1L else existing.paymentsMade
                                                 ) else existing
@@ -1678,30 +1679,35 @@ private fun FinanceApp() {
                     text = { Text("This permanently removes this loan, its saved EMI schedule and status records, and transactions linked to this loan. This cannot be undone.", color = Color(0xFF536782), fontSize = 13.sp) },
                     confirmButton = {
                         TextButton(onClick = {
-                            EmiReminderReceiver.cancelMonthly(context, loan.lender)
                             val lenderKey = loan.lender.trim()
-                            loans = loans.filterNot { it.lender.equals(lenderKey, ignoreCase = true) }
-                            transactions = transactions.filterNot {
-                                it.loanLender.equals(lenderKey, ignoreCase = true)
+                            val onlyLoanForLender = loans.count { it.lender.equals(lenderKey, ignoreCase = true) } == 1
+                            if (onlyLoanForLender) EmiReminderReceiver.cancelMonthly(context, loan.lender)
+                            loans = loans.filterNot { it.id == loan.id }
+                            transactions = transactions.filterNot { transaction ->
+                                transaction.loanId == loan.id || (onlyLoanForLender && transaction.loanId.isBlank() && transaction.loanLender.equals(lenderKey, ignoreCase = true))
                             }
                             saveLoans(context, loans)
                             saveTransactions(context, transactions)
                             val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
                             val editor = prefs.edit()
-                            prefs.all.keys.filter { key ->
+                            prefs.all.keys.filter { key -> onlyLoanForLender && (
                                 key == "bank_schedule_${lenderKey}" ||
                                     key == "loan_document_metadata_${lenderKey}" ||
                                     key.startsWith("emi_status_${lenderKey}_") ||
                                     key.startsWith("emi_amount_${lenderKey}_") ||
                                     key.startsWith("emi_amount_paise_${lenderKey}_") ||
                                     key.startsWith("emi_rescheduled_${lenderKey}_")
-                            }.forEach(editor::remove)
+                            ) }.forEach(editor::remove)
                             editor.apply()
                             financeScope.launch {
                                 withContext(kotlinx.coroutines.Dispatchers.IO) {
                                     val dao = LoanScheduleDatabase.get(context).loanScheduleDao()
-                                    dao.deleteLoanSchedules(lenderKey)
-                                    dao.deleteLoanDocuments(lenderKey)
+                                    dao.deleteLoanSchedules(loan.id)
+                                    dao.deleteLoanDocuments(loan.id)
+                                    if (onlyLoanForLender) {
+                                        dao.deleteLoanSchedules(lenderKey)
+                                        dao.deleteLoanDocuments(lenderKey)
+                                    }
                                 }
                             }
                             loanPendingDelete = null
@@ -1732,7 +1738,7 @@ private fun FinanceApp() {
                         val isLoanReceipt = kind == "Loan received"
                         val isLoanRepayment = kind == "Loan repayment / EMI"
                         val isIncome = kind == "Income" || isLoanReceipt
-                        val loan = loans.firstOrNull { it.lender.equals(loanLender, ignoreCase = true) }
+                        val loan = loans.singleOrNull { it.lender.equals(loanLender, ignoreCase = true) }
                         var principalReductionForTransaction = 0L
                         var interestPortionForTransaction = 0L
                         var paymentCountedForTransaction = false
@@ -1741,7 +1747,7 @@ private fun FinanceApp() {
                             val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
                             val recorded = transactions.filter {
                                 it.transactionKind == "Loan repayment / EMI" &&
-                                    it.loanLender.equals(loan.lender, ignoreCase = true) &&
+                                    (it.loanId == loan.id || (it.loanId.isBlank() && it.loanLender.equals(loan.lender, ignoreCase = true))) &&
                                     it.emiInstallmentDate == emiDate
                             }
                             val recordedAmount = recorded.sumOf { it.amount }
@@ -1779,7 +1785,7 @@ private fun FinanceApp() {
                             principalReductionForTransaction = (amount - interestPortionForTransaction).coerceAtLeast(0L).coerceAtMost(loan.balance)
                             if (fullPayment) prefs.edit().putString("emi_status_${loan.lender}_${emiDate}", "Paid").apply()
                             loans = loans.map { existing ->
-                                if (existing.lender.equals(loan.lender, true)) existing.copy(
+                                if (existing.id == loan.id) existing.copy(
                                     balance = (existing.balance - principalReductionForTransaction).coerceAtLeast(0L),
                                     paymentsMade = if (paymentCountedForTransaction) existing.paymentsMade + 1L else existing.paymentsMade
                                 ) else existing
@@ -1787,7 +1793,7 @@ private fun FinanceApp() {
                             saveLoans(context, loans)
                         } else if (isLoanReceipt && loan != null) {
                             loans = loans.map { existing ->
-                                if (existing.lender.equals(loan.lender, true)) {
+                                if (existing.id == loan.id) {
                                     val updatedPrincipal = if (existing.balance == 0L) maxOf(existing.originalPrincipal, amount) else existing.originalPrincipal + amount
                                     loanReceiptPrincipalAddedForTransaction = (updatedPrincipal - existing.originalPrincipal).coerceAtLeast(0L)
                                     existing.copy(balance = existing.balance + amount, originalPrincipal = updatedPrincipal)
@@ -1805,7 +1811,8 @@ private fun FinanceApp() {
                                 loanInterestPortion = interestPortionForTransaction,
                                 loanPaymentCounted = paymentCountedForTransaction,
                                 loanAllocationRecorded = isLoanRepayment && loan != null,
-                                loanReceiptPrincipalAdded = loanReceiptPrincipalAddedForTransaction
+                                loanReceiptPrincipalAdded = loanReceiptPrincipalAddedForTransaction,
+                                loanId = loan?.id.orEmpty()
                             )
                         ) + transactions
                         saveTransactions(context, transactions)
@@ -6900,6 +6907,7 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("loanAllocationRecorded", transaction.loanAllocationRecorded)
             put("loanReceiptPrincipalAdded", transaction.loanReceiptPrincipalAdded)
             put("categoryOrigin", transaction.categoryOrigin)
+            put("loanId", transaction.loanId)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -6932,40 +6940,46 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optBoolean("loanPaymentCounted", false),
             item.optBoolean("loanAllocationRecorded", false),
             item.optLong("loanReceiptPrincipalAdded", 0L),
-            item.optString("categoryOrigin", CategoryOrigin.UNKNOWN)
+            item.optString("categoryOrigin", CategoryOrigin.UNKNOWN),
+            item.optString("loanId", "")
         )
     }
 }.getOrNull()
 
 
 private fun loadLoans(context: Context): List<Loan>? = runCatching {
-    val raw = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
-        .getString("loans", null) ?: return null
-    val array = JSONArray(raw)
-    (0 until array.length()).map { index ->
-        val item = array.getJSONObject(index)
-        val balance = item.getLong("balance")
+    val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+    val raw = prefs.getString("loans", null) ?: return null
+    val legacy = LoanIdMigration.parseLegacy(raw) ?: return null
+    val plan = LoanIdMigration.plan(legacy)
+    val loans = plan.loans.map { planned ->
+        val item = planned.legacy
         Loan(
-            lender = item.getString("lender"),
-            balance = balance,
-            emi = item.getLong("emi"),
-            due = item.optString("due", "Not set"),
-            annualRate = item.optDouble("annualRate", 0.0),
-            originalPrincipal = item.optLong("originalPrincipal", balance),
-            paymentsMade = item.optLong("paymentsMade", 0L),
-            totalPayments = item.optLong("totalPayments", 0L),
-            borrowerName = item.optString("borrowerName", ""),
-            agreementNumber = item.optString("agreementNumber", item.optString("loanNumber", "")),
-            loanNumber = item.optString("loanNumber", ""),
-            startDate = item.optString("startDate", item.optString("due", ""))
+            lender = item.lender,
+            balance = item.balance,
+            emi = item.emi,
+            due = item.due,
+            annualRate = item.annualRate,
+            originalPrincipal = item.originalPrincipal,
+            paymentsMade = item.paymentsMade,
+            totalPayments = item.totalPayments,
+            borrowerName = item.borrowerName,
+            agreementNumber = item.agreementNumber,
+            loanNumber = item.loanNumber,
+            startDate = item.startDate,
+            id = planned.loanId
         )
     }
+    // Persist generated IDs immediately so they remain stable even if the user closes the app before editing a loan.
+    if (legacy.indices.any { legacy[it].existingId != loans[it].id }) saveLoans(context, loans)
+    loans
 }.getOrNull()
 
 private fun saveLoans(context: Context, loans: List<Loan>) {
     val array = JSONArray()
     loans.forEach { loan ->
         array.put(JSONObject()
+            .put("id", loan.id)
             .put("lender", loan.lender)
             .put("balance", loan.balance)
             .put("emi", loan.emi)
