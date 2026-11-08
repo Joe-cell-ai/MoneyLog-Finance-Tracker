@@ -77,7 +77,7 @@ internal object LoanIdMigrator {
         }
         val saved = prefs.edit()
             .putString(LENDER_MAP_KEY, lenderMap.toString())
-            .putBoolean(DONE_FLAG, true)
+            .putBoolean(RECORDS_IMPORTED_FLAG, true)
             .commit()
 
         if (!saved) {
