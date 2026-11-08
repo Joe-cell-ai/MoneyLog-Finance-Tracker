@@ -555,8 +555,8 @@ private fun loanAccent(lender: String): Color = when {
 private fun loanTint(lender: String): Color = loanAccent(lender).copy(alpha = if (AppDarkTheme) 0.22f else 0.12f)
 
 
-internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L, val categoryOrigin: String = CategoryOrigin.UNKNOWN)
-private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "")
+internal data class Transaction(val title: String, val category: String, val date: String, val amount: Long, val income: Boolean, val source: String = "", val notificationKey: String = "", val captureStatus: String = "", val paymentMethod: String = "Not set", val notes: String = "", val tag: String = "", val loanLender: String = "", val emiInstallmentDate: String = "", val transactionKind: String = "", val loanPrincipalReduction: Long = 0L, val loanInterestPortion: Long = 0L, val loanPaymentCounted: Boolean = false, val loanAllocationRecorded: Boolean = false, val loanReceiptPrincipalAdded: Long = 0L, val categoryOrigin: String = CategoryOrigin.UNKNOWN, val loanId: String = "")
+private data class Loan(val lender: String, val balance: Long, val emi: Long, val due: String, val annualRate: Double = 0.0, val originalPrincipal: Long = balance, val paymentsMade: Long = 0L, val totalPayments: Long = 0L, val borrowerName: String = "", val agreementNumber: String = "", val loanNumber: String = "", val startDate: String = "", val id: String = "")
 
 private data class EmiQuickAction(val lender: String, val originalDate: String, val amount: Long, val status: String)
 @Composable
@@ -6900,6 +6900,7 @@ private fun saveTransactions(context: android.content.Context, transactions: Lis
             put("loanAllocationRecorded", transaction.loanAllocationRecorded)
             put("loanReceiptPrincipalAdded", transaction.loanReceiptPrincipalAdded)
             put("categoryOrigin", transaction.categoryOrigin)
+            put("loanId", transaction.loanId)
         })
     }
     context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
@@ -6932,40 +6933,46 @@ private fun loadTransactions(context: android.content.Context): List<Transaction
             item.optBoolean("loanPaymentCounted", false),
             item.optBoolean("loanAllocationRecorded", false),
             item.optLong("loanReceiptPrincipalAdded", 0L),
-            item.optString("categoryOrigin", CategoryOrigin.UNKNOWN)
+            item.optString("categoryOrigin", CategoryOrigin.UNKNOWN),
+            item.optString("loanId", "")
         )
     }
 }.getOrNull()
 
 
 private fun loadLoans(context: Context): List<Loan>? = runCatching {
-    val raw = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
-        .getString("loans", null) ?: return null
-    val array = JSONArray(raw)
-    (0 until array.length()).map { index ->
-        val item = array.getJSONObject(index)
-        val balance = item.getLong("balance")
+    val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+    val raw = prefs.getString("loans", null) ?: return null
+    val legacy = LoanIdMigration.parseLegacy(raw) ?: return null
+    val plan = LoanIdMigration.plan(legacy)
+    val loans = plan.loans.map { planned ->
+        val item = planned.legacy
         Loan(
-            lender = item.getString("lender"),
-            balance = balance,
-            emi = item.getLong("emi"),
-            due = item.optString("due", "Not set"),
-            annualRate = item.optDouble("annualRate", 0.0),
-            originalPrincipal = item.optLong("originalPrincipal", balance),
-            paymentsMade = item.optLong("paymentsMade", 0L),
-            totalPayments = item.optLong("totalPayments", 0L),
-            borrowerName = item.optString("borrowerName", ""),
-            agreementNumber = item.optString("agreementNumber", item.optString("loanNumber", "")),
-            loanNumber = item.optString("loanNumber", ""),
-            startDate = item.optString("startDate", item.optString("due", ""))
+            lender = item.lender,
+            balance = item.balance,
+            emi = item.emi,
+            due = item.due,
+            annualRate = item.annualRate,
+            originalPrincipal = item.originalPrincipal,
+            paymentsMade = item.paymentsMade,
+            totalPayments = item.totalPayments,
+            borrowerName = item.borrowerName,
+            agreementNumber = item.agreementNumber,
+            loanNumber = item.loanNumber,
+            startDate = item.startDate,
+            id = planned.loanId
         )
     }
+    // Persist generated IDs immediately so they remain stable even if the user closes the app before editing a loan.
+    if (legacy.indices.any { legacy[it].existingId != loans[it].id }) saveLoans(context, loans)
+    loans
 }.getOrNull()
 
 private fun saveLoans(context: Context, loans: List<Loan>) {
     val array = JSONArray()
     loans.forEach { loan ->
         array.put(JSONObject()
+            .put("id", loan.id)
             .put("lender", loan.lender)
             .put("balance", loan.balance)
             .put("emi", loan.emi)
