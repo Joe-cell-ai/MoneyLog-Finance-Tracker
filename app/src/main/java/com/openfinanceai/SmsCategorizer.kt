@@ -30,6 +30,7 @@ internal object SmsCategories {
     const val BANK_TRANSFER = "Bank transfer"
     const val OWN_ACCOUNT_TRANSFER = "Own account transfer"
     const val PERSON_TO_PERSON = "Person-to-person"
+    const val INCOME = "Income"
     const val SALARY = "Salary"
     const val OTHER_INCOME = "Other income"
     const val OTHER = "Other"
@@ -43,7 +44,7 @@ internal object SmsCategories {
     val ALL: List<String> = listOf(
         SHOPPING, FOOD, FOOD_DINING_OUT, FOOD_COFFEE, FOOD_TAKEOUT, TAXI, FUEL, PUBLIC_TRANSIT, TRAVEL, LEISURE,
         HEALTHCARE, ELECTRICITY, PHONE, INTERNET, WATER, GAS, EDUCATION, INSURANCE, CREDIT_CARD_BILL,
-        BANK_TRANSFER, OWN_ACCOUNT_TRANSFER, PERSON_TO_PERSON, SALARY, OTHER_INCOME, OTHER
+        BANK_TRANSFER, OWN_ACCOUNT_TRANSFER, PERSON_TO_PERSON, INCOME, SALARY, OTHER_INCOME, OTHER
     )
 }
 
@@ -156,9 +157,18 @@ internal object SmsCategorizer {
 
     /** Every rule id [categorize] can report; tests assert each one has a covering case. */
     val ruleIds: Set<String> = (merchantRules + keywordRules).map { it.id }.toSet() +
-        setOf("own-account", "salary", "credit-card-bill", "bank-transfer", "person-to-person")
+        setOf("own-account", "salary", "loan-receipt", "credit-card-bill", "bank-transfer", "person-to-person")
 
     private val salaryWords = Regex("""(?i)\b(?:salary|payroll|wages)\b""")
+    // Count borrowing as received money only when the credit explicitly identifies a loan
+    // or comes from a recognised loan provider. Generic incoming transfers remain Other income.
+    private val loanReceiptWords = Regex(
+        """(?i)\b(?:loan(?:\s+(?:amount|proceeds))?\s+(?:credited|received|disbursed|paid\s+out|transferred|payout)|(?:credited|received|disbursed)\s+(?:your\s+)?loan(?:\s+amount)?|loan\s+disbursement|loan\s+from|borrowed\s+from)\b"""
+    )
+    private val loanProviderNames = Regex(
+        """(?i)\b(?:fibe|kreditbee|navi|moneyview|earlysalary|paysense|cashe|mpokket|bajaj\s+finserv|kissht|truebalance|lazypay)\b"""
+    )
+    private val creditEventWords = Regex("""(?i)\b(?:credited|received|deposited|disbursed)\b""")
 
     // ---- transfers --------------------------------------------------------------------------
 
@@ -263,6 +273,10 @@ internal object SmsCategorizer {
         }
 
         if (input.income) {
+            val incomeText = "$sender $payee $body"
+            val loanReceipt = loanReceiptWords.containsMatchIn(incomeText) ||
+                (loanProviderNames.containsMatchIn("$sender $payee") && creditEventWords.containsMatchIn(body))
+            if (loanReceipt) return done(SmsCategories.INCOME, SmsPaymentKind.INCOME, "loan-receipt")
             val salary = salaryWords.containsMatchIn("$payee $body")
             return if (salary) done(SmsCategories.SALARY, SmsPaymentKind.INCOME, "salary")
             else done(SmsCategories.OTHER_INCOME, SmsPaymentKind.INCOME, null)
