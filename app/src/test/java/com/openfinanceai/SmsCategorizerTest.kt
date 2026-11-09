@@ -227,6 +227,8 @@ class SmsCategorizerTest {
     @Test
     fun incomeKeepsSalaryAndOtherIncomeCategories() {
         assertEquals(SmsCategories.SALARY, income(payee = "ACME Payroll", body = "Salary credited").category)
+        assertEquals(SmsCategories.INCOME, income(payee = "Fibe", body = "Rs 25,000 credited to your account").category)
+        assertEquals(SmsCategories.INCOME, income(payee = "Rahul Kumar", body = "Loan amount received from Rahul Kumar").category)
         assertEquals(SmsCategories.OTHER_INCOME, income(payee = "Someone", body = "Rs 100 credited").category)
     }
 
@@ -293,6 +295,7 @@ class SmsCategorizerTest {
             "kw-shopping" to SmsCategoryInput(payee = "Unknown Merchant", body = "purchase", income = false),
             "own-account" to SmsCategoryInput(payee = "your account", income = false),
             "salary" to SmsCategoryInput(body = "Salary credited", income = true),
+            "loan-receipt" to SmsCategoryInput(payee = "Fibe", body = "Rs 25000 credited", income = true),
             "credit-card-bill" to SmsCategoryInput(body = "Credit card bill payment", income = false),
             "bank-transfer" to SmsCategoryInput(body = "IMPS transfer", income = false),
             "person-to-person" to SmsCategoryInput(payee = "AKASH S", body = upi, income = false)
