@@ -6296,6 +6296,14 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
     var title by remember(transaction) { mutableStateOf(transaction.title) }
     var amount by remember(transaction) { mutableStateOf(transaction.amount.toString()) }
     var category by remember(transaction) { mutableStateOf(transaction.category) }
+    val savedCategories = remember(context) {
+        val preferences = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
+        FinanceManagementStore(preferences, DEFAULT_MONEY_CATEGORIES, DEFAULT_MONEY_TAGS).loadCategories()
+    }
+    val categoryOptions = (savedCategories + listOf(transaction.category, "Salary", "Other income", "Other", "Income"))
+        .filter { it.isNotBlank() }
+        .distinctBy { it.trim().lowercase(Locale.ROOT) }
+    var showCategoryMenu by remember { mutableStateOf(false) }
     var tag by remember(transaction) { mutableStateOf(transaction.tag) }
     var date by remember(transaction) { mutableStateOf(transaction.date) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -6341,7 +6349,44 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
                 }
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Description") }, leadingIcon = { Icon(Icons.Default.ReceiptLong, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
                 OutlinedTextField(value = amount, onValueChange = { amount = it.filter(Char::isDigit) }, label = { Text("Amount (₹)") }, leadingIcon = { Icon(Icons.Default.CurrencyRupee, null, tint = accent) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
-                OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, leadingIcon = { FinanceIconDisplay(savedFinanceIconKey(context, "category", category), categoryColor(category), Modifier.size(20.dp)) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent, cursorColor = accent))
+                Box(Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = category,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Category") },
+                        leadingIcon = { FinanceIconDisplay(savedFinanceIconKey(context, "category", category), categoryColor(category), Modifier.size(20.dp)) },
+                        trailingIcon = {
+                            IconButton(onClick = { showCategoryMenu = true }) {
+                                Icon(Icons.Default.ExpandMore, contentDescription = "Choose category", tint = accent)
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().clickable { showCategoryMenu = true },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, focusedLabelColor = accent)
+                    )
+                    DropdownMenu(
+                        expanded = showCategoryMenu,
+                        onDismissRequest = { showCategoryMenu = false },
+                        modifier = Modifier.heightIn(max = 320.dp)
+                    ) {
+                        categoryOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                leadingIcon = {
+                                    if (category.equals(option, ignoreCase = true)) {
+                                        Icon(Icons.Default.Check, contentDescription = null, tint = accent)
+                                    }
+                                },
+                                onClick = {
+                                    category = option
+                                    showCategoryMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(value = tag, onValueChange = { tag = it.removePrefix("#") }, label = { Text("Tag (optional)") }, leadingIcon = {
                     val primaryTag = tag.substringBefore(",").trim()
                     if (primaryTag.isBlank()) Icon(Icons.Default.LocalOffer, null, tint = accent, modifier = Modifier.size(20.dp))
