@@ -6296,14 +6296,20 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
     var title by remember(transaction) { mutableStateOf(transaction.title) }
     var amount by remember(transaction) { mutableStateOf(transaction.amount.toString()) }
     var category by remember(transaction) { mutableStateOf(transaction.category) }
-    val savedCategories = remember(context) {
+    val categoryStore = remember(context) {
         val preferences = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
-        FinanceManagementStore(preferences, DEFAULT_MONEY_CATEGORIES, DEFAULT_MONEY_TAGS).loadCategories()
+        FinanceManagementStore(preferences, DEFAULT_MONEY_CATEGORIES, DEFAULT_MONEY_TAGS)
     }
-    val categoryOptions = (savedCategories + listOf(transaction.category, "Salary", "Other income", "Other", "Income"))
-        .filter { it.isNotBlank() }
-        .distinctBy { it.trim().lowercase(Locale.ROOT) }
+    val categoryOptions = remember(transaction.category) {
+        mutableStateListOf<String>().apply {
+            addAll((categoryStore.loadCategories() + listOf(transaction.category, "Salary", "Other income", "Other", "Income"))
+                .filter { it.isNotBlank() }
+                .distinctBy { it.trim().lowercase(Locale.ROOT) })
+        }
+    }
     var showCategoryMenu by remember { mutableStateOf(false) }
+    var showCreateCategoryDialog by remember { mutableStateOf(false) }
+    var newCategoryName by remember { mutableStateOf("") }
     var tag by remember(transaction) { mutableStateOf(transaction.tag) }
     var date by remember(transaction) { mutableStateOf(transaction.date) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -6371,6 +6377,16 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
                         onDismissRequest = { showCategoryMenu = false },
                         modifier = Modifier.heightIn(max = 320.dp)
                     ) {
+                        DropdownMenuItem(
+                            text = { Text("+ Create category", color = accent, fontWeight = FontWeight.SemiBold) },
+                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, tint = accent) },
+                            onClick = {
+                                newCategoryName = ""
+                                showCategoryMenu = false
+                                showCreateCategoryDialog = true
+                            }
+                        )
+                        HorizontalDivider()
                         categoryOptions.forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(option) },
@@ -6415,6 +6431,43 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
             OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(16.dp), modifier = Modifier.height(50.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF252C50))) { Text("Cancel", fontWeight = FontWeight.SemiBold) }
         }
     )
+    if (showCreateCategoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateCategoryDialog = false },
+            title = { Text("Create category") },
+            text = {
+                OutlinedTextField(
+                    value = newCategoryName,
+                    onValueChange = { newCategoryName = it },
+                    label = { Text("Category name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val name = newCategoryName.trim()
+                    if (name.isNotBlank()) {
+                        val existing = categoryOptions.firstOrNull { it.equals(name, ignoreCase = true) }
+                        if (existing != null) {
+                            category = existing
+                        } else {
+                            val updated = (categoryOptions.toList() + name)
+                                .distinctBy { it.trim().lowercase(Locale.ROOT) }
+                            categoryStore.saveCategories(updated)
+                            categoryOptions.clear()
+                            categoryOptions.addAll(updated)
+                            category = name
+                        }
+                        showCreateCategoryDialog = false
+                    }
+                }) { Text("Create", color = accent) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateCategoryDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @Composable
