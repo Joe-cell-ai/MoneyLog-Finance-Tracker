@@ -55,7 +55,14 @@ internal object SmsTransactionImporter {
         val rows = runCatching { JSONArray(prefs.getString("transactions", "[]") ?: "[]") }
             .getOrElse { JSONArray() }
         for (i in 0 until rows.length()) {
-            if (rows.optJSONObject(i)?.optString("notificationKey") == key) return false
+            val existing = rows.optJSONObject(i) ?: continue
+            val existingKey = existing.optString("notificationKey")
+            if (existingKey == key) return false
+
+            // Inbox sync and the SMS receiver can see the same message at different
+            // times. The received timestamp therefore cannot be part of duplicate
+            // identity; sender + original message hash remains stable across replays.
+            if (isSameSmsMessage(existingKey, sender, body.hashCode())) return false
         }
 
         val title = parsed.merchant?.let { (if (parsed.income) "From " else "To ") + it }
@@ -100,6 +107,14 @@ internal object SmsTransactionImporter {
             .forEach(reordered::put)
         otherRows.forEach(reordered::put)
         prefs.edit().putString("transactions", reordered.toString()).commit()
+    }
+
+    /** True when an existing import key represents the same sender and SMS body. */
+    internal fun isSameSmsMessage(existingKey: String, senderRaw: String, bodyHash: Int): Boolean {
+        if (!existingKey.startsWith("sms-import:")) return false
+        val keySender = existingKey.removePrefix("sms-import:").substringBefore(':')
+        val keyBodyHash = existingKey.substringAfterLast(':', "").toIntOrNull() ?: return false
+        return keySender.equals(senderRaw.trim(), ignoreCase = true) && keyBodyHash == bodyHash
     }
 
     private fun timestampFromKey(key: String): Long {
