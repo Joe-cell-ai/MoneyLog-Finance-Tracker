@@ -81,24 +81,24 @@ internal object SmsTransactionImporter {
             .put("tag", "")
             .put("categoryOrigin", CategoryOrigin.AUTO)
 
-        // Keep automatically imported SMS transactions together at the top, newest first.
-        // The hourly inbox scan is DESC, so inserting every row at index 0 would reverse
-        // the batch. Compare the SMS timestamp embedded in notificationKey instead.
-        val smsTimestamp = timestampFromKey(key)
-        var insertAt = 0
-        while (insertAt < rows.length()) {
-            val existing = rows.optJSONObject(insertAt) ?: break
-            if (!existing.optString("source").equals("SMS auto import", ignoreCase = true)) break
-            val existingTimestamp = timestampFromKey(existing.optString("notificationKey"))
-            if (existingTimestamp <= smsTimestamp) break
-            insertAt++
-        }
-        val reordered = JSONArray()
+        // Keep all automatically imported SMS transactions together at the top,
+        // sorted by the original SMS timestamp (newest first). This also repairs
+        // older mixed ordering as the hourly inbox sync encounters existing rows.
+        val smsRows = mutableListOf<JSONObject>()
+        val otherRows = mutableListOf<JSONObject>()
         for (index in 0 until rows.length()) {
-            if (index == insertAt) reordered.put(newRow)
-            reordered.put(rows.get(index))
+            val existing = rows.optJSONObject(index) ?: continue
+            if (existing.optString("source").equals("SMS auto import", ignoreCase = true)) {
+                smsRows.add(existing)
+            } else {
+                otherRows.add(existing)
+            }
         }
-        if (insertAt == rows.length()) reordered.put(newRow)
+        smsRows.add(newRow)
+        val reordered = JSONArray()
+        smsRows.sortedByDescending { timestampFromKey(it.optString("notificationKey")) }
+            .forEach(reordered::put)
+        otherRows.forEach(reordered::put)
         prefs.edit().putString("transactions", reordered.toString()).commit()
     }
 
