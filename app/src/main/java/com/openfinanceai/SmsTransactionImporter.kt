@@ -67,7 +67,7 @@ internal object SmsTransactionImporter {
                 append(". Stored amount is rounded to the nearest rupee.")
             }
         }
-        rows.put(JSONObject()
+        val newRow = JSONObject()
             .put("title", title)
             .put("category", categorize(context, sender, body, parsed).category)
             .put("date", parsed.date)
@@ -79,8 +79,35 @@ internal object SmsTransactionImporter {
             .put("paymentMethod", "Not set")
             .put("notes", notes)
             .put("tag", "")
-            .put("categoryOrigin", CategoryOrigin.AUTO))
+            .put("categoryOrigin", CategoryOrigin.AUTO)
+
+        // Keep automatically imported SMS transactions together at the top, newest first.
+        // The hourly inbox scan is DESC, so inserting every row at index 0 would reverse
+        // the batch. Compare the SMS timestamp embedded in notificationKey instead.
+        val smsTimestamp = timestampFromKey(key)
+        var insertAt = 0
+        while (insertAt < rows.length()) {
+            val existing = rows.optJSONObject(insertAt) ?: break
+            if (!existing.optString("source").equals("SMS auto import", ignoreCase = true)) break
+            val existingTimestamp = timestampFromKey(existing.optString("notificationKey"))
+            if (existingTimestamp <= smsTimestamp) break
+            insertAt++
+        }
+        rows.put(newRow)
+        for (index in rows.length() - 1 downTo insertAt + 1) {
+            rows.put(index, rows.opt(index - 1))
+        }
+        rows.put(insertAt, newRow)
+        // Remove the extra copy appended above after shifting.
+        rows.remove(rows.length() - 1)
         prefs.edit().putString("transactions", rows.toString()).commit()
+    }
+
+    private fun timestampFromKey(key: String): Long {
+        if (!key.startsWith("sms-import:")) return Long.MIN_VALUE
+        val withoutPrefix = key.removePrefix("sms-import:")
+        val timestampPart = withoutPrefix.substringAfter(':', "").substringBeforeLast(':', "")
+        return timestampPart.toLongOrNull() ?: Long.MIN_VALUE
     }
 }
 
