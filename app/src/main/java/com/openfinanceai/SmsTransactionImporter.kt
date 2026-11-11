@@ -67,7 +67,7 @@ internal object SmsTransactionImporter {
                 append(". Stored amount is rounded to the nearest rupee.")
             }
         }
-        rows.put(JSONObject()
+        val newRow = JSONObject()
             .put("title", title)
             .put("category", categorize(context, sender, body, parsed).category)
             .put("date", parsed.date)
@@ -79,8 +79,34 @@ internal object SmsTransactionImporter {
             .put("paymentMethod", "Not set")
             .put("notes", notes)
             .put("tag", "")
-            .put("categoryOrigin", CategoryOrigin.AUTO))
-        prefs.edit().putString("transactions", rows.toString()).commit()
+            .put("categoryOrigin", CategoryOrigin.AUTO)
+
+        // Keep all automatically imported SMS transactions together at the top,
+        // sorted by the original SMS timestamp (newest first). This also repairs
+        // older mixed ordering as the hourly inbox sync encounters existing rows.
+        val smsRows = mutableListOf<JSONObject>()
+        val otherRows = mutableListOf<JSONObject>()
+        for (index in 0 until rows.length()) {
+            val existing = rows.optJSONObject(index) ?: continue
+            if (existing.optString("source").equals("SMS auto import", ignoreCase = true)) {
+                smsRows.add(existing)
+            } else {
+                otherRows.add(existing)
+            }
+        }
+        smsRows.add(newRow)
+        val reordered = JSONArray()
+        smsRows.sortedByDescending { timestampFromKey(it.optString("notificationKey")) }
+            .forEach(reordered::put)
+        otherRows.forEach(reordered::put)
+        prefs.edit().putString("transactions", reordered.toString()).commit()
+    }
+
+    private fun timestampFromKey(key: String): Long {
+        if (!key.startsWith("sms-import:")) return Long.MIN_VALUE
+        val withoutPrefix = key.removePrefix("sms-import:")
+        val timestampPart = withoutPrefix.substringAfter(':', "").substringBeforeLast(':', "")
+        return timestampPart.toLongOrNull() ?: Long.MIN_VALUE
     }
 }
 
