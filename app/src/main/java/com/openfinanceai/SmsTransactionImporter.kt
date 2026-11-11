@@ -93,14 +93,13 @@ internal object SmsTransactionImporter {
             if (existingTimestamp <= smsTimestamp) break
             insertAt++
         }
-        rows.put(newRow)
-        for (index in rows.length() - 1 downTo insertAt + 1) {
-            rows.put(index, rows.opt(index - 1))
+        val reordered = JSONArray()
+        for (index in 0 until rows.length()) {
+            if (index == insertAt) reordered.put(newRow)
+            reordered.put(rows.get(index))
         }
-        rows.put(insertAt, newRow)
-        // Remove the extra copy appended above after shifting.
-        rows.remove(rows.length() - 1)
-        prefs.edit().putString("transactions", rows.toString()).commit()
+        if (insertAt == rows.length()) reordered.put(newRow)
+        prefs.edit().putString("transactions", reordered.toString()).commit()
     }
 
     private fun timestampFromKey(key: String): Long {
