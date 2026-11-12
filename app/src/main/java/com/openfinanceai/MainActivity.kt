@@ -190,7 +190,6 @@ private fun applyAppearance(
         "Emerald Glass" -> Color(0xC9F3FFF8)
         "Amber Glass" -> Color(0xD9FFFCF0)
         "Midnight Glass" -> Color(0xD9E6E9FF)
-        "Blue Cyan Purple Glass" -> Color(0xA65ADFFF)
         else -> Color(0xD9FFFFFF)
     } else Color(0xFFE1E7F0)
     val accentColor = when {
@@ -4644,9 +4643,9 @@ private fun AppearanceScreen() {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Choose your theme", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text("Your choice updates the app immediately", color = Muted, fontSize = 11.sp)
-                    listOf("Blue Glass", "Purple Glass", "Blue Cyan Glass", "Classic", "Dark Mode", "Custom Colors").forEach { value ->
+                    listOf("Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Classic", "Dark Mode", "Custom Colors").forEach { value ->
                         val selected = when (value) {
-                            "Blue Glass", "Purple Glass", "Blue Cyan Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass" -> theme == value
+                            "Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass" -> theme == value
                             "Classic" -> theme == "Light" || theme == "System"
                             "Dark Mode" -> theme == "Dark"
                             else -> theme == "Custom Colors"
@@ -4669,12 +4668,12 @@ private fun AppearanceScreen() {
                             }) else Modifier)
                             .clickable {
                                 theme = when (value) {
-                                    "Blue Glass", "Purple Glass", "Blue Cyan Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass" -> value
+                                    "Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass" -> value
                                     "Classic" -> "Light"
                                     "Dark Mode" -> "Dark"
                                     else -> "Custom Colors"
                                 }
-                                if (value in setOf("Blue Glass", "Purple Glass", "Blue Cyan Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass")) {
+                                if (value in setOf("Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass")) {
                                     accent = when (value) {
                                         "Purple Glass" -> "Purple"
                                         "Blue Cyan Glass" -> "Blue"
@@ -4692,6 +4691,7 @@ private fun AppearanceScreen() {
                             Box(Modifier.size(38.dp).clip(when (value) { "Purple Glass" -> RoundedCornerShape(18.dp); "Emerald Glass" -> RoundedCornerShape(8.dp); "Rose Glass" -> RoundedCornerShape(20.dp); "Amber Glass" -> RoundedCornerShape(11.dp); "Midnight Glass" -> RoundedCornerShape(7.dp); else -> RoundedCornerShape(14.dp) }).background(when(value) {
                                 "Blue Glass" -> Brush.linearGradient(listOf(Color(0xFF168BFF), Color(0xFF8B5CF6), Color(0xFFEC4899)))
                                 "Blue Cyan Glass" -> Brush.linearGradient(listOf(Color(0xFF0284C7), Color(0xFF06B6D4)))
+                                "Blue Cyan Purple Glass" -> Brush.linearGradient(listOf(Color(0xFF06D9F2), Color(0xFF267BFF), Color(0xFFB13CFF)))
                                 "Blue Cyan Purple Glass" -> Brush.linearGradient(listOf(Color(0xFF06D9F2), Color(0xFF267BFF), Color(0xFFB13CFF)))
                                 "Purple Glass" -> Brush.linearGradient(listOf(Color(0xFFE2D4FF), Color(0xFF7547D8)))
                                 "Emerald Glass" -> Brush.linearGradient(listOf(Color(0xFFB6F5D8), Color(0xFF078A78)))
