@@ -2997,6 +2997,9 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
 
 @Composable
 private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: YearMonth, showMonthLabels: Boolean = false) {
+    val chartContext = LocalContext.current
+    val chartPreferences = remember { chartContext.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
+    var chartStyle by remember { mutableStateOf(chartPreferences.getString("appearance_monthly_chart", "Bars") ?: "Bars") }
     val months = (5 downTo 0).map { selectedMonth.minusMonths(it.toLong()) }
     val monthlyIncome = months.map { month ->
         allTransactions.filter { transaction -> parseScheduleDate(transaction.date)?.let { YearMonth.from(it) == month } == true && transaction.income }.sumOf { it.amount }
@@ -3050,6 +3053,82 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
                     Text("Net cash flow · " + Money.format(selectedIncome - selectedExpenses), color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
                 }
             }
+            if (chartStyle == "Area") {
+                androidx.compose.foundation.Canvas(
+                    Modifier.fillMaxWidth().height(190.dp).pointerInput(months) {
+                        detectTapGestures { tap ->
+                            val left = 8f
+                            val right = size.width - 8f
+                            val fraction = ((tap.x - left) / (right - left)).coerceIn(0f, 1f)
+                            selectedIndex = (fraction * (months.size - 1) + 0.5f).toInt().coerceIn(months.indices)
+                        }
+                    }
+                ) {
+                    val left = 8f
+                    val right = size.width - 8f
+                    val top = 22.dp.toPx()
+                    val bottom = size.height - 14.dp.toPx()
+                    val chartHeight = bottom - top
+                    repeat(4) { row ->
+                        val y = top + chartHeight * row / 3f
+                        drawLine(
+                            color = (if (AppDarkTheme) Color.White else Color(0xFF7893B8)).copy(alpha = if (AppDarkTheme) .13f else .20f),
+                            start = androidx.compose.ui.geometry.Offset(left, y),
+                            end = androidx.compose.ui.geometry.Offset(right, y),
+                            strokeWidth = 1.dp.toPx()
+                        )
+                    }
+                    val step = (right - left) / (months.size - 1).coerceAtLeast(1)
+                    val pointsIncome = monthlyIncome.mapIndexed { index, value ->
+                        androidx.compose.ui.geometry.Offset(left + step * index, bottom - (value.toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * chartHeight)
+                    }
+                    val pointsExpenses = monthlyExpenses.mapIndexed { index, value ->
+                        androidx.compose.ui.geometry.Offset(left + step * index, bottom - (value.toFloat() / maxValue.toFloat()).coerceIn(0f, 1f) * chartHeight)
+                    }
+                    fun smoothLine(points: List<androidx.compose.ui.geometry.Offset>): androidx.compose.ui.graphics.Path {
+                        val path = androidx.compose.ui.graphics.Path()
+                        if (points.isEmpty()) return path
+                        path.moveTo(points.first().x, points.first().y)
+                        for (index in 0 until points.lastIndex) {
+                            val first = points[index]
+                            val second = points[index + 1]
+                            val middleX = (first.x + second.x) / 2f
+                            path.cubicTo(middleX, first.y, middleX, second.y, second.x, second.y)
+                        }
+                        return path
+                    }
+                    fun areaPath(points: List<androidx.compose.ui.geometry.Offset>): androidx.compose.ui.graphics.Path {
+                        val path = smoothLine(points)
+                        if (points.isNotEmpty()) {
+                            path.lineTo(points.last().x, bottom)
+                            path.lineTo(points.first().x, bottom)
+                            path.close()
+                        }
+                        return path
+                    }
+                    drawPath(
+                        path = areaPath(pointsIncome),
+                        brush = Brush.verticalGradient(listOf(Color(0xFF22C9B0).copy(alpha = if (AppDarkTheme) .36f else .30f), Color(0xFF22C9B0).copy(alpha = .015f)), top, bottom)
+                    )
+                    drawPath(
+                        path = areaPath(pointsExpenses),
+                        brush = Brush.verticalGradient(listOf(Color(0xFF278BFA).copy(alpha = if (AppDarkTheme) .34f else .28f), Color(0xFF9A55F5).copy(alpha = .025f)), top, bottom)
+                    )
+                    drawPath(path = smoothLine(pointsIncome), color = Color(0xFF17BFA6), style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
+                    drawPath(path = smoothLine(pointsExpenses), brush = Brush.horizontalGradient(listOf(Color(0xFF25B8F4), Color(0xFF2867EA), Color(0xFF9B55E8))), style = Stroke(width = 2.8.dp.toPx(), cap = StrokeCap.Round))
+                    val selectedX = pointsIncome[selectedIndex].x
+                    drawLine(
+                        color = Color(0xFF8B5CF6).copy(alpha = .85f),
+                        start = androidx.compose.ui.geometry.Offset(selectedX, top),
+                        end = androidx.compose.ui.geometry.Offset(selectedX, bottom),
+                        strokeWidth = 1.4.dp.toPx(),
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))
+                    )
+                    drawCircle(Color(0xFF17BFA6), radius = 4.dp.toPx(), center = pointsIncome[selectedIndex])
+                    drawCircle(Color(0xFF2867EA), radius = 4.dp.toPx(), center = pointsExpenses[selectedIndex])
+                    drawCircle(Color(0xFF8B5CF6), radius = 3.dp.toPx(), center = androidx.compose.ui.geometry.Offset(selectedX, top))
+                }
+            } else {
             androidx.compose.foundation.Canvas(
                 Modifier.fillMaxWidth().height(190.dp).pointerInput(months) {
                     detectTapGestures { tap ->
@@ -3110,6 +3189,7 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
                     }
                 }
                 drawCircle(Green, radius = 4.dp.toPx(), center = androidx.compose.ui.geometry.Offset(selectedX, top - 5.dp.toPx()))
+            }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 months.forEachIndexed { index, month ->
@@ -4578,6 +4658,7 @@ private fun AppearanceScreen() {
     var currency by remember { mutableStateOf(preferences.getString("appearance_currency", "INR (₹)") ?: "INR (₹)") }
     var accent by remember { mutableStateOf(preferences.getString("appearance_accent", "Blue") ?: "Blue") }
     var layout by remember { mutableStateOf(preferences.getString("appearance_layout", "Comfortable") ?: "Comfortable") }
+    var monthlyChartStyle by remember { mutableStateOf(preferences.getString("appearance_monthly_chart", "Bars") ?: "Bars") }
     var fontSize by remember { mutableStateOf(preferences.getString("appearance_font_size", "Medium") ?: "Medium") }
     var customAccentHex by remember { mutableStateOf(preferences.getString("appearance_custom_accent", "#9333EA") ?: "#9333EA") }
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -4783,6 +4864,41 @@ private fun AppearanceScreen() {
                             }
                         }
                     }
+                }
+            }
+        }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = appCardSurface(softSurface)), shape = cardShape) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                    Text("Monthly Overview chart", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Choose how the last six months of live income and expenses are displayed.", color = Muted, fontSize = 11.sp)
+                    listOf("Bars" to "Classic monthly bars", "Area" to "Smooth cyan, blue and purple gradient").forEach { (value, label) ->
+                        val selected = monthlyChartStyle == value
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                                .background(if (selected) SolidColor(selectedAccent.copy(alpha = .10f)) else appPageBrush())
+                                .then(if (selected) Modifier.border(1.dp, selectedAccent, RoundedCornerShape(14.dp)) else Modifier)
+                                .clickable {
+                                    monthlyChartStyle = value
+                                    save("appearance_monthly_chart", value)
+                                }.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(
+                                if (value == "Area") Brush.horizontalGradient(listOf(Color(0xFF22C9B0), Color(0xFF2878F0), Color(0xFF9B55E8)))
+                                else Brush.verticalGradient(listOf(Color(0xFF22B8F0), Color(0xFF2867EA)))
+                            ), contentAlignment = Alignment.Center) {
+                                Icon(if (value == "Area") Icons.Default.ShowChart else Icons.Default.BarChart, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(Modifier.width(11.dp))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(if (value == "Area") "Gradient area chart" else "Bar chart", color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Text(label, color = Muted, fontSize = 10.sp)
+                            }
+                            if (selected) Icon(Icons.Default.CheckCircle, null, tint = selectedAccent)
+                        }
+                    }
+                    Text("Works with Light and Dark appearance themes. Your transaction data and totals are unchanged.", color = Muted, fontSize = 10.sp)
                 }
             }
         }
