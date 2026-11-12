@@ -108,6 +108,7 @@ internal fun appGlassBorder(): Color = if (!AppBlueGlass) GlassBorder else when 
 internal fun appPageBrush(): Brush = if (AppBlueGlass) when (AppGlassTheme) {
     "Purple Glass" -> Brush.linearGradient(listOf(Color(0xFFF1E7FF), Color(0xFFAA83F5), Color(0xFF6254D9), Color(0xFFE9DFFF)))
     "Blue Cyan Glass" -> Brush.linearGradient(listOf(Color(0xFFE0F7FF), Color(0xFF38BDF8), Color(0xFF0284C7), Color(0xFFDDF7FF)))
+    "Blue Cyan Purple Glass" -> Brush.linearGradient(listOf(Color(0xFF071638), Color(0xFF0B2B67), Color(0xFF123C78), Color(0xFF24124F)))
     "Emerald Glass" -> Brush.linearGradient(listOf(Color(0xFFD8FFF0), Color(0xFF35C9A1), Color(0xFF087E9B), Color(0xFFDDFBF1)))
     "Rose Glass" -> Brush.linearGradient(listOf(Color(0xFFFFE0F0), Color(0xFFF58AB8), Color(0xFF9270E8), Color(0xFFFFEAF5)))
     "Amber Glass" -> Brush.linearGradient(listOf(Color(0xFFFFE9C7), Color(0xFFFFB56B), Color(0xFFEF7D79), Color(0xFFFFF1D8)))
@@ -118,6 +119,7 @@ internal fun appPageBrush(): Brush = if (AppBlueGlass) when (AppGlassTheme) {
 internal fun appGlassAccentBrush(): Brush = when (AppGlassTheme) {
     "Purple Glass" -> Brush.horizontalGradient(listOf(Color(0xFF7048E8), Color(0xFFB14EFF)))
     "Blue Cyan Glass" -> Brush.horizontalGradient(listOf(Color(0xFF0284C7), Color(0xFF06B6D4)))
+    "Blue Cyan Purple Glass" -> Brush.horizontalGradient(listOf(Color(0xFF06D9F2), Color(0xFF267BFF), Color(0xFFB13CFF)))
     "Blue Glass" -> Brush.horizontalGradient(listOf(Color(0xFF168BFF), Color(0xFF8B5CF6), Color(0xFFEC4899)))
     "Emerald Glass" -> Brush.horizontalGradient(listOf(Color(0xFF00A982), Color(0xFF087E9B)))
     "Rose Glass" -> Brush.horizontalGradient(listOf(Color(0xFFEF4C9B), Color(0xFF9657E8)))
@@ -155,6 +157,7 @@ private fun appCardSurface(original: Color): Color = if (AppBlueGlass) when (App
     "Rose Glass" -> Color(0xE8FFF7FB)
     "Amber Glass" -> Color(0xE8FFFCF4)
     "Midnight Glass" -> Color(0xDDEEF0FF)
+    "Blue Cyan Purple Glass" -> Color(0xE8102450)
     else -> Color(0xDDFBFEFF)
 } else original
 private fun parseThemeAccentHex(raw: String, fallback: Color = Color(0xFF9333EA)): Color =
@@ -170,10 +173,11 @@ private fun applyAppearance(
     systemDark: Boolean = false,
     customAccentHex: String = "#9333EA"
 ) {
-    val glassThemes = setOf("Blue Glass", "Purple Glass", "Blue Cyan Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass")
+    val glassThemes = setOf("Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass")
     AppBlueGlass = theme in glassThemes
     AppGlassTheme = if (AppBlueGlass) theme else "Blue Glass"
     GlassSurface = if (AppBlueGlass) when (theme) {
+        "Blue Cyan Purple Glass" -> Color(0xE8102450)
         "Purple Glass" -> Color(0xE8FBF8FF)
         "Emerald Glass" -> Color(0xDDF5FFF9)
         "Rose Glass" -> Color(0xE8FFF7FB)
@@ -182,9 +186,11 @@ private fun applyAppearance(
         else -> Color(0xDFFFFFFF)
     } else if (theme == "Dark" || (theme == "System" && systemDark)) Color(0xFF1B2430) else Color.White
     GlassBorder = if (AppBlueGlass) when (theme) {
+        "Blue Cyan Purple Glass" -> Color(0xA65ADFFF)
         "Emerald Glass" -> Color(0xC9F3FFF8)
         "Amber Glass" -> Color(0xD9FFFCF0)
         "Midnight Glass" -> Color(0xD9E6E9FF)
+        "Blue Cyan Purple Glass" -> Color(0xA65ADFFF)
         else -> Color(0xD9FFFFFF)
     } else Color(0xFFE1E7F0)
     val accentColor = when {
@@ -195,6 +201,7 @@ private fun applyAppearance(
             "Amber Glass" -> Color(0xFFD97732)
             "Midnight Glass" -> Color(0xFF9D8CFF)
             "Blue Cyan Glass" -> Color(0xFF0284C7)
+            "Blue Cyan Purple Glass" -> Color(0xFF267BFF)
             else -> Color(0xFF168BFF)
         }
         theme == "Custom Colors" -> parseThemeAccentHex(customAccentHex)
@@ -208,14 +215,14 @@ private fun applyAppearance(
         else -> Color(0xFF1D4ED8)
         }
     }
-    AppDarkTheme = theme == "Dark" || (theme == "System" && systemDark)
+    AppDarkTheme = theme == "Dark" || theme == "Blue Cyan Purple Glass" || (theme == "System" && systemDark)
     AppCompactLayout = layout == "Compact"
     AppFontScale = when (fontSize) { "Small" -> 0.90f; "Large" -> 1.12f; else -> 1f }
     Green = accentColor
     Mint = accentColor.copy(alpha = if (AppDarkTheme) 0.24f else 0.12f)
     IncomeTint = Mint
     LavenderTint = Mint
-    Page = if (AppDarkTheme) Color(0xFF10182D) else if (AppBlueGlass) Color(0xFFEAF6FF) else Color(0xFFF7F7FB)
+    Page = if (AppDarkTheme) Color(0xFF07132D) else if (AppBlueGlass) Color(0xFFEAF6FF) else Color(0xFFF7F7FB)
     Ink = if (AppDarkTheme) Color(0xFFF1F5F2) else Color(0xFF172554)
     Muted = if (AppDarkTheme) Color(0xFFB0BBD0) else Color(0xFF78849A)
 }
@@ -4671,6 +4678,7 @@ private fun AppearanceScreen() {
                                     accent = when (value) {
                                         "Purple Glass" -> "Purple"
                                         "Blue Cyan Glass" -> "Blue"
+                                        "Blue Cyan Purple Glass" -> "Blue"
                                         "Emerald Glass" -> "Green"
                                         "Rose Glass" -> "Pink"
                                         "Amber Glass" -> "Orange"
@@ -4684,6 +4692,7 @@ private fun AppearanceScreen() {
                             Box(Modifier.size(38.dp).clip(when (value) { "Purple Glass" -> RoundedCornerShape(18.dp); "Emerald Glass" -> RoundedCornerShape(8.dp); "Rose Glass" -> RoundedCornerShape(20.dp); "Amber Glass" -> RoundedCornerShape(11.dp); "Midnight Glass" -> RoundedCornerShape(7.dp); else -> RoundedCornerShape(14.dp) }).background(when(value) {
                                 "Blue Glass" -> Brush.linearGradient(listOf(Color(0xFF168BFF), Color(0xFF8B5CF6), Color(0xFFEC4899)))
                                 "Blue Cyan Glass" -> Brush.linearGradient(listOf(Color(0xFF0284C7), Color(0xFF06B6D4)))
+                                "Blue Cyan Purple Glass" -> Brush.linearGradient(listOf(Color(0xFF06D9F2), Color(0xFF267BFF), Color(0xFFB13CFF)))
                                 "Purple Glass" -> Brush.linearGradient(listOf(Color(0xFFE2D4FF), Color(0xFF7547D8)))
                                 "Emerald Glass" -> Brush.linearGradient(listOf(Color(0xFFB6F5D8), Color(0xFF078A78)))
                                 "Rose Glass" -> Brush.linearGradient(listOf(Color(0xFFFFC5DF), Color(0xFFD94691)))
@@ -4701,6 +4710,7 @@ private fun AppearanceScreen() {
                                 Text(when(value) {
                                     "Blue Glass" -> "Blue-to-pink gradient · luminous glass · rounded cards"
                                     "Blue Cyan Glass" -> "Fresh blue and cyan · clean glass · crisp cards"
+                                    "Blue Cyan Purple Glass" -> "Deep navy glass · cyan-to-purple gradients · luminous accents"
                                     "Purple Glass" -> "Soft floating cards · extra-rounded corners · violet glow"
                                     "Emerald Glass" -> "Crisp compact cards · teal accents · subtle elevation"
                                     "Rose Glass" -> "Soft pill controls · blush panels · vivid rose gradients"
