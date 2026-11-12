@@ -3059,8 +3059,8 @@ private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: 
                         detectTapGestures { tap ->
                             val left = 8f
                             val right = size.width - 8f
-                            val fraction = ((tap.x - left) / (right - left)).coerceIn(0f, .999999f)
-                            selectedIndex = (fraction * months.size).toInt().coerceIn(months.indices)
+                            val fraction = ((tap.x - left) / (right - left)).coerceIn(0f, 1f)
+                            selectedIndex = (fraction * (months.size - 1) + 0.5f).toInt().coerceIn(months.indices)
                         }
                     }
                 ) {
@@ -4876,7 +4876,7 @@ private fun AppearanceScreen() {
                         val selected = monthlyChartStyle == value
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                                .background(if (selected) selectedAccent.copy(alpha = .10f) else appPageBrush())
+                                .background(if (selected) SolidColor(selectedAccent.copy(alpha = .10f)) else appPageBrush())
                                 .then(if (selected) Modifier.border(1.dp, selectedAccent, RoundedCornerShape(14.dp)) else Modifier)
                                 .clickable {
                                     monthlyChartStyle = value
