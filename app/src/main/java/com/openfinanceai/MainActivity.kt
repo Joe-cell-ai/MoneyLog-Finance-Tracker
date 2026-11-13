@@ -6582,11 +6582,9 @@ private fun EditTransactionDialog(transaction: Transaction, onDismiss: () -> Uni
                         if (existing != null) {
                             category = existing
                         } else {
-                            val updated = (categoryOptions.toList() + name)
-                                .distinctBy { it.trim().lowercase(Locale.ROOT) }
-                            categoryStore.saveCategories(updated)
-                            categoryOptions.clear()
-                            categoryOptions.addAll(updated)
+                            // One-time category: keep it in this transaction editor only.
+                            // Do not write it to Category Management preferences.
+                            categoryOptions.add(name)
                             category = name
                         }
                         showCreateCategoryDialog = false
@@ -6976,11 +6974,10 @@ private fun AddTransactionDialog(
                         val existing = tags.firstOrNull { it.equals(name, ignoreCase = true) }
                         if (existing != null) selectedTags = (selectedTags + existing).distinct()
                         else {
-                            tags = tags + name
-                            if (store.addTag(name)) {
-                                tags = store.loadTags()
-                                selectedTags = (selectedTags + name).distinct()
-                            }
+                            // One-time tag: available only in this transaction form.
+                            // The selected tag is saved with the transaction, not Tag Management.
+                            tags = (tags + name).distinctBy { it.trim().lowercase(Locale.ROOT) }
+                            selectedTags = (selectedTags + name).distinct()
                         }
                         showCreateTag = false
                     }
