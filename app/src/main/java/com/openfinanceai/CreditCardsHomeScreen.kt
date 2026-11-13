@@ -4,6 +4,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.provider.Telephony
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -58,7 +62,17 @@ internal object CreditCardBills {
   if(amount<=0||runCatching{LocalDate.parse(date)}.isFailure)return false
   val d=read(c);val bill=d.bills.firstOrNull{it.id==billId}?:return false
   if(amount>bill.total-bill.paid)return false
+  if(source=="SMS"&&d.payments.any{it.statementId==billId&&it.amount==amount&&it.date==date&&it.source=="SMS"})return false
   save(c,d.copy(bills=d.bills.map{if(it.id==billId)it.copy(paid=it.paid+amount)else it},payments=d.payments+CCPayment(UUID.randomUUID().toString(),billId,amount,date,method,source,ref)));return true
+ }
+ fun scanInbox(c:Context):Int {
+  if(c.checkSelfPermission(android.Manifest.permission.READ_SMS)!=PackageManager.PERMISSION_GRANTED)return -1
+  var count=0
+  c.contentResolver.query(Telephony.Sms.CONTENT_URI,arrayOf(Telephony.Sms.BODY),null,null,Telephony.Sms.DATE+" DESC")?.use{cursor->
+   val index=cursor.getColumnIndexOrThrow(Telephony.Sms.BODY);var scanned=0
+   while(cursor.moveToNext()&&scanned<1000){scanned++;if(ingestSms(c,cursor.getString(index).orEmpty()))count++}
+  }
+  return count
  }
  fun ingestSms(c:Context,body:String):Boolean{
   val d=read(c)
@@ -98,6 +112,8 @@ fun CreditCardsHomeScreen(onBack:()->Unit){
  var bank by remember{mutableStateOf("")};var nick by remember{mutableStateOf("")};var last by remember{mutableStateOf("")};var network by remember{mutableStateOf("Visa")}
  var total by remember{mutableStateOf("")};var minimum by remember{mutableStateOf("")};var due by remember{mutableStateOf(LocalDate.now().plusDays(20).toString())}
  var amount by remember{mutableStateOf("")};var method by remember{mutableStateOf("UPI")};var reference by remember{mutableStateOf("")}
+ var smsMessage by remember{mutableStateOf("")}
+ val smsPermission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){granted->if(granted){val n=CreditCardBills.scanInbox(ctx);smsMessage=if(n>=0)"Imported "+n+" credit-card message(s)." else "SMS scan unavailable.";refresh()}else smsMessage="SMS permission was not granted."}
  var r7 by remember{mutableStateOf(true)};var r3 by remember{mutableStateOf(true)};var r1 by remember{mutableStateOf(true)}
  fun refresh(){data=CreditCardBills.read(ctx)}
  DisposableEffect(ctx){val r=object:BroadcastReceiver(){override fun onReceive(c:Context?,i:Intent?){refresh()}};ContextCompat.registerReceiver(ctx,r,IntentFilter(SmsAutoImportReceiver.ACTION_IMPORTED),ContextCompat.RECEIVER_NOT_EXPORTED);onDispose{runCatching{ctx.unregisterReceiver(r)}}}
@@ -109,6 +125,8 @@ fun CreditCardsHomeScreen(onBack:()->Unit){
   Spacer(Modifier.height(8.dp))
   when(page){
    0->{
+    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("SMS statement sync",fontWeight=FontWeight.SemiBold);Spacer(Modifier.weight(1f));TextButton(onClick={smsPermission.launch(android.Manifest.permission.READ_SMS)}){Text("Scan inbox")}}
+    if(smsMessage.isNotBlank())Text(smsMessage,fontSize=12.sp,color=MaterialTheme.colorScheme.primary)
     if(data.cards.isEmpty())Text("Add your credit card to start tracking statements and payments.",Modifier.padding(16.dp))
     LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){items(data.cards,key={it.id}){card->
      val bill=data.bills.filter{it.cardId==card.id}.maxByOrNull{it.due}
