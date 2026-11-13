@@ -52,7 +52,7 @@ internal object CreditCardBills {
  fun addBill(c:Context,card:String,date:String,due:String,total:Long,min:Long):Boolean{
   if(runCatching{LocalDate.parse(date);LocalDate.parse(due)}.isFailure||total<=0||min<0||min>total)return false
   val d=read(c);if(d.bills.any{it.cardId==card&&it.due==due&&it.total==total})return false
-  save(c,d.copy(bills=d.bills+CCStatement(UUID.randomUUID().toString(),card,date,due,total,min,0)));return true
+  save(c,d.copy(bills=d.bills+CCStatement(UUID.randomUUID().toString(),card,date,due,total,min,0)));CreditCardReminderScheduler.schedule(c);return true
  }
  fun addPayment(c:Context,billId:String,amount:Long,date:String,method:String,source:String,ref:String):Boolean{
   if(amount<=0||runCatching{LocalDate.parse(date)}.isFailure)return false
@@ -135,7 +135,7 @@ fun CreditCardsHomeScreen(onBack:()->Unit){
    3->{
     Text("Due Date Reminder",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
     listOf("7 days before" to r7,"3 days before" to r3,"1 day before" to r1).forEachIndexed{i,p->Row(Modifier.fillMaxWidth().clickable{when(i){0->r7=!r7;1->r3=!r3;else->r1=!r1}}.padding(10.dp),verticalAlignment=Alignment.CenterVertically){Checkbox(p.second,{v->when(i){0->r7=v;1->r3=v;else->r1=v}});Text(p.first)}}
-    Button(onClick={ctx.getSharedPreferences("open_finance_data",0).edit().putBoolean("cc_reminder_7",r7).putBoolean("cc_reminder_3",r3).putBoolean("cc_reminder_1",r1).apply()}){Text("Save reminder settings")}
+    Button(onClick={ctx.getSharedPreferences("open_finance_data",0).edit().putBoolean("cc_reminder_7",r7).putBoolean("cc_reminder_3",r3).putBoolean("cc_reminder_1",r1).apply();CreditCardReminderScheduler.schedule(ctx)}){Text("Save reminder settings")}
     Text("Reminder preferences saved. Notifications require scheduling and notification permission.",fontSize=12.sp)
    }
    else->{
