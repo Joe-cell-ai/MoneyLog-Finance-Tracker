@@ -121,7 +121,7 @@ internal object SmsCategorizer {
         rule("online-shopping", SmsCategories.SHOPPING,
             """\b(?:myntra|ajio|meesho|nykaa|tata\s*cliq|jiomart|croma|reliance\s+digital|decathlon|shoppers\s+stop|lifestyle|westside|ikea|zara|h\s*&\s*m)\b"""),
         rule("taxi", SmsCategories.TAXI, """\b(?:ola|uber|rapido)\b"""),
-        rule("public-transit", SmsCategories.PUBLIC_TRANSIT, """\b(?:namma\s+metro|metro\s+rail|bmtc|irctc|redbus)\b"""),
+        rule("public-transit", SmsCategories.PUBLIC_TRANSIT, """\b(?:apsrtc|andhra\s+pradesh\s+state\s+road\s+transport|namma\s+metro|metro\s+rail|bmtc|irctc|redbus)\b"""),
         rule("travel-booking", SmsCategories.TRAVEL, """\b(?:makemytrip|goibibo|cleartrip|ixigo)\b"""),
         rule("fuel", SmsCategories.FUEL,
             """\b(?:indian\s+oil|bharat\s+petroleum|hpcl|hindustan\s+petroleum|iocl|shell|essar\s+oil|nayara\s+energy)\b"""),
