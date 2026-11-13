@@ -3014,7 +3014,7 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
 private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: YearMonth, showMonthLabels: Boolean = false) {
     val chartContext = LocalContext.current
     val chartPreferences = remember { chartContext.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
-    var chartStyle by remember { mutableStateOf(chartPreferences.getString("appearance_monthly_chart", "Bars") ?: "Bars") }
+    var chartStyle by remember { mutableStateOf("Area") }
     val months = (5 downTo 0).map { selectedMonth.minusMonths(it.toLong()) }
     val monthlyIncome = months.map { month ->
         allTransactions.filter { transaction -> parseScheduleDate(transaction.date)?.let { YearMonth.from(it) == month } == true && transaction.income }.sumOf { it.amount }
@@ -4660,7 +4660,7 @@ private fun AppearanceScreen() {
     var currency by remember { mutableStateOf(preferences.getString("appearance_currency", "INR (₹)") ?: "INR (₹)") }
     var accent by remember { mutableStateOf(preferences.getString("appearance_accent", "Blue") ?: "Blue") }
     var layout by remember { mutableStateOf(preferences.getString("appearance_layout", "Comfortable") ?: "Comfortable") }
-    var monthlyChartStyle by remember { mutableStateOf(preferences.getString("appearance_monthly_chart", "Bars") ?: "Bars") }
+    var monthlyChartStyle by remember { mutableStateOf("Area") }
     var fontSize by remember { mutableStateOf(preferences.getString("appearance_font_size", "Medium") ?: "Medium") }
     var customAccentHex by remember { mutableStateOf(preferences.getString("appearance_custom_accent", "#9333EA") ?: "#9333EA") }
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -4876,7 +4876,7 @@ private fun AppearanceScreen() {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                     Text("Monthly Overview chart", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text("Choose how the last six months of live income and expenses are displayed.", color = Muted, fontSize = 11.sp)
-                    listOf("Bars" to "Classic monthly bars", "Area" to "Smooth cyan, blue and purple gradient").forEach { (value, label) ->
+                    listOf("Area" to "Smooth cyan, blue and purple gradient").forEach { (value, label) ->
                         val selected = monthlyChartStyle == value
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))

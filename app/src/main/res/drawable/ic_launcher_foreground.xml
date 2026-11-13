@@ -6,8 +6,8 @@
 
     <!-- Compact adaptive-icon artwork: keep the full mark within the launcher safe area. -->
     <group
-        android:scaleX="0.78"
-        android:scaleY="0.78"
+        android:scaleX="0.86"
+        android:scaleY="0.86"
         android:pivotX="54"
         android:pivotY="54">
 
