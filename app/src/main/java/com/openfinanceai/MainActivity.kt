@@ -3014,7 +3014,7 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
 private fun ReportsTrendCard(allTransactions: List<Transaction>, selectedMonth: YearMonth, showMonthLabels: Boolean = false) {
     val chartContext = LocalContext.current
     val chartPreferences = remember { chartContext.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
-    var chartStyle by remember { mutableStateOf(chartPreferences.getString("appearance_monthly_chart", "Bars") ?: "Bars") }
+    var chartStyle by remember { mutableStateOf("Area") }
     val months = (5 downTo 0).map { selectedMonth.minusMonths(it.toLong()) }
     val monthlyIncome = months.map { month ->
         allTransactions.filter { transaction -> parseScheduleDate(transaction.date)?.let { YearMonth.from(it) == month } == true && transaction.income }.sumOf { it.amount }
