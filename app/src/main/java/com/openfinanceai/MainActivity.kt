@@ -1199,6 +1199,7 @@ private fun FinanceApp() {
                     "Settings" -> SettingsScreen { navigateTo(it) }
                     "Calendar" -> CalendarScreen(loans, transactions)
                     "Insights" -> InsightsScreen(income, expenses, loans.sumOf { it.balance }, transactions)
+                    "Credit Cards" -> CreditCardsHomeScreen(onBack = { navigateBack() })
                     "Budgets" -> BudgetsScreen(transactions)
                     "Credit health" -> CreditHealthScreen()
                     "Categories" -> CategoriesScreen(transactions = transactions, onCategoriesChanged = { categoryRefreshToken++ })
@@ -1987,7 +1988,7 @@ private fun HomeScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                         QuickAction("Reports", Icons.Default.BarChart, Modifier.weight(1f)) { onOpen("Reports") }
                         QuickAction("Loans", Icons.Default.AccountBalance, Modifier.weight(1f)) { onOpen("Loans") }
-                        QuickAction("Insights", Icons.Default.Insights, Modifier.weight(1f)) { onOpen("Insights") }
+                        QuickAction("Credit Cards", Icons.Default.CreditCard, Modifier.weight(1f)) { onOpen("Credit Cards") }
                     }
                 }
             }
@@ -2012,7 +2013,6 @@ private fun HomeScreen(
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = { onOpen("Budgets") }) { Icon(Icons.Default.PieChart, null, modifier = Modifier.size(16.dp)); Text("Budgets") }
-                TextButton(onClick = { onOpen("Insights") }) { Icon(Icons.Default.Insights, null, modifier = Modifier.size(16.dp)); Text("Insights") }
                 TextButton(onClick = { onOpen("Loans") }) { Icon(Icons.Default.AccountBalance, null, modifier = Modifier.size(16.dp)); Text("Loans") }
             }
         }
