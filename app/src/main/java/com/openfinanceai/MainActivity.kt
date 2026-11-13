@@ -109,6 +109,8 @@ internal fun appPageBrush(): Brush = if (AppBlueGlass) when (AppGlassTheme) {
     "Purple Glass" -> Brush.linearGradient(listOf(Color(0xFFF1E7FF), Color(0xFFAA83F5), Color(0xFF6254D9), Color(0xFFE9DFFF)))
     "Blue Cyan Glass" -> Brush.linearGradient(listOf(Color(0xFFE0F7FF), Color(0xFF38BDF8), Color(0xFF0284C7), Color(0xFFDDF7FF)))
     "Blue Cyan Purple Glass" -> Brush.linearGradient(listOf(Color(0xFF071638), Color(0xFF0B2B67), Color(0xFF123C78), Color(0xFF24124F)))
+    "Light Glass" -> Brush.linearGradient(listOf(Color(0xFFF8FBFF), Color(0xFFDCEBFF), Color(0xFFBDEBFF), Color(0xFFE9DFFF)))
+    "Ocean" -> Brush.linearGradient(listOf(Color(0xFFE5FBFF), Color(0xFF9BE8F2), Color(0xFF38A8D5), Color(0xFFD9F5FF)))
     "Emerald Glass" -> Brush.linearGradient(listOf(Color(0xFFD8FFF0), Color(0xFF35C9A1), Color(0xFF087E9B), Color(0xFFDDFBF1)))
     "Rose Glass" -> Brush.linearGradient(listOf(Color(0xFFFFE0F0), Color(0xFFF58AB8), Color(0xFF9270E8), Color(0xFFFFEAF5)))
     "Amber Glass" -> Brush.linearGradient(listOf(Color(0xFFFFE9C7), Color(0xFFFFB56B), Color(0xFFEF7D79), Color(0xFFFFF1D8)))
@@ -120,6 +122,8 @@ internal fun appGlassAccentBrush(): Brush = when (AppGlassTheme) {
     "Purple Glass" -> Brush.horizontalGradient(listOf(Color(0xFF7048E8), Color(0xFFB14EFF)))
     "Blue Cyan Glass" -> Brush.horizontalGradient(listOf(Color(0xFF0284C7), Color(0xFF06B6D4)))
     "Blue Cyan Purple Glass" -> Brush.horizontalGradient(listOf(Color(0xFF06D9F2), Color(0xFF267BFF), Color(0xFFB13CFF)))
+    "Light Glass" -> Brush.horizontalGradient(listOf(Color(0xFF168BFF), Color(0xFF06C6D8), Color(0xFF9B59E8)))
+    "Ocean" -> Brush.horizontalGradient(listOf(Color(0xFF06B6D4), Color(0xFF0284C7)))
     "Blue Glass" -> Brush.horizontalGradient(listOf(Color(0xFF168BFF), Color(0xFF8B5CF6), Color(0xFFEC4899)))
     "Emerald Glass" -> Brush.horizontalGradient(listOf(Color(0xFF00A982), Color(0xFF087E9B)))
     "Rose Glass" -> Brush.horizontalGradient(listOf(Color(0xFFEF4C9B), Color(0xFF9657E8)))
@@ -158,6 +162,8 @@ private fun appCardSurface(original: Color): Color = if (AppBlueGlass) when (App
     "Amber Glass" -> Color(0xE8FFFCF4)
     "Midnight Glass" -> Color(0xDDEEF0FF)
     "Blue Cyan Purple Glass" -> Color(0xE8102450)
+    "Light Glass" -> Color(0xEFFFFFFF)
+    "Ocean" -> Color(0xE8F2FDFF)
     else -> Color(0xDDFBFEFF)
 } else original
 private fun parseThemeAccentHex(raw: String, fallback: Color = Color(0xFF9333EA)): Color =
@@ -173,11 +179,13 @@ private fun applyAppearance(
     systemDark: Boolean = false,
     customAccentHex: String = "#9333EA"
 ) {
-    val glassThemes = setOf("Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass")
+    val glassThemes = setOf("Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Light Glass", "Ocean", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass")
     AppBlueGlass = theme in glassThemes
     AppGlassTheme = if (AppBlueGlass) theme else "Blue Glass"
     GlassSurface = if (AppBlueGlass) when (theme) {
         "Blue Cyan Purple Glass" -> Color(0xE8102450)
+        "Light Glass" -> Color(0xEFFFFFFF)
+        "Ocean" -> Color(0xE8F2FDFF)
         "Purple Glass" -> Color(0xE8FBF8FF)
         "Emerald Glass" -> Color(0xDDF5FFF9)
         "Rose Glass" -> Color(0xE8FFF7FB)
@@ -839,7 +847,7 @@ private fun FinanceApp() {
                 val unique = parsed.distinctBy { transactionKey(it) }
                     .filter { existingKeys.add(transactionKey(it)) }
                 if (unique.isNotEmpty()) {
-                    transactions = unique + transactions
+                    transactions = TransactionCategoryLearning.apply(context, unique) + transactions
                     saveTransactions(context, transactions)
                 }
                 importedPreview = emptyList()
@@ -1242,7 +1250,8 @@ private fun FinanceApp() {
                         },
                         onImport = {
                             val count = importedPreview.size
-                            transactions = (importedPreview + transactions).distinctBy { transactionKey(it) }
+                            val learnedPreview = TransactionCategoryLearning.apply(context, importedPreview)
+                            transactions = (learnedPreview + transactions).distinctBy { transactionKey(it) }
                             saveTransactions(context, transactions)
                             importMessage = "Imported " + count + " transaction(s). Saved on this device."
                             importedPreview = emptyList()
@@ -1413,7 +1422,13 @@ private fun FinanceApp() {
             transactionToEdit?.let { transaction ->
                 EditTransactionDialog(transaction, onDismiss = { transactionToEdit = null }) { edited ->
                     val index = transactions.indexOf(transaction)
-                    if (index >= 0) { transactions = transactions.toMutableList().also { it[index] = edited }; saveTransactions(context, transactions) }
+                    if (index >= 0) {
+                        val editedRows = transactions.toMutableList().also { it[index] = edited }
+                        transactions = if (!edited.income && edited.category != transaction.category) {
+                            TransactionCategoryLearning.learn(context, edited.title, edited.category, editedRows)
+                        } else editedRows
+                        saveTransactions(context, transactions)
+                    }
                     transactionToEdit = null
                 }
             }
@@ -1813,7 +1828,7 @@ private fun FinanceApp() {
                             saveLoans(context, loans)
                         }
                         val displayCategory = when (kind) { "Loan received" -> "Loan received"; "Loan repayment / EMI" -> "Loan repayment"; else -> category }
-                        transactions = listOf(
+                        transactions = TransactionCategoryLearning.apply(context, listOf(
                             Transaction(
                                 title, displayCategory, date, amount, isIncome,
                                 paymentMethod = paymentMethod, notes = notes, tag = tag,
@@ -1825,7 +1840,7 @@ private fun FinanceApp() {
                                 loanReceiptPrincipalAdded = loanReceiptPrincipalAddedForTransaction,
                                 loanId = loan?.id.orEmpty()
                             )
-                        ) + transactions
+                        )) + transactions
                         saveTransactions(context, transactions)
                         showAdd = false
                     }
@@ -4484,7 +4499,6 @@ private fun BackupSecurityScreen(
     var automaticBackup by remember { mutableStateOf(backupPreferences.getBoolean("automatic_backup_enabled", false)) }
     var backupFrequency by remember { mutableStateOf(backupPreferences.getString("automatic_backup_frequency", "daily") ?: "daily") }
     var backupDestination by remember { mutableStateOf(backupPreferences.getString("automatic_backup_destination", "device") ?: "device") }
-    var backupRetention by remember { mutableIntStateOf(backupPreferences.getInt("automatic_backup_retention", 30)) }
     var backupScheduleMessage by remember { mutableStateOf("") }
     LaunchedEffect(Unit) {
         if (automaticBackup) backupScheduleMessage = scheduleAutomaticBackup(backupContext)
@@ -4538,19 +4552,7 @@ private fun BackupSecurityScreen(
                             }
                         }
                     }
-                    Text("Keep recent backups", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(7, 30, 90).forEach { count ->
-                            val selected = backupRetention == count
-                            Surface(onClick = { backupRetention = count; backupPreferences.edit().putInt("automatic_backup_retention", count).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext) },
-                                color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
-                                border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
-                                Text("$count files", modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    color = if (selected) Color.White else Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    }
-                    Text(if (!automaticBackup) "Automatic backup is off." else "Enabled: ${backupFrequency} · ${if (backupDestination == "device") "Local device" else "Google Drive"} · Keep ${backupRetention} backups",
+                    Text(if (!automaticBackup) "Automatic backup is off." else "Enabled: ${backupFrequency} · ${if (backupDestination == "device") "Local device" else "Google Drive"}",
                         color = Muted, fontSize = 11.sp)
                     Text(backupScheduleMessage.ifBlank { if (automaticBackup) "Automatic backup schedule is active." else "Enable automatic backup to create recurring backups." }, color = Muted, fontSize = 11.sp)
                 }
@@ -4724,9 +4726,9 @@ private fun AppearanceScreen() {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Choose your theme", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text("Your choice updates the app immediately", color = Muted, fontSize = 11.sp)
-                    listOf("Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Classic", "Dark Mode", "Custom Colors").forEach { value ->
+                    listOf("Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Light Glass", "Ocean", "Classic", "Dark Mode", "Custom Colors").forEach { value ->
                         val selected = when (value) {
-                            "Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass" -> theme == value
+                            "Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Light Glass", "Ocean", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass" -> theme == value
                             "Classic" -> theme == "Light" || theme == "System"
                             "Dark Mode" -> theme == "Dark"
                             else -> theme == "Custom Colors"
@@ -4749,16 +4751,18 @@ private fun AppearanceScreen() {
                             }) else Modifier)
                             .clickable {
                                 theme = when (value) {
-                                    "Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass" -> value
+                                    "Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Light Glass", "Ocean", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass" -> value
                                     "Classic" -> "Light"
                                     "Dark Mode" -> "Dark"
                                     else -> "Custom Colors"
                                 }
-                                if (value in setOf("Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass")) {
+                                if (value in setOf("Blue Glass", "Purple Glass", "Blue Cyan Glass", "Blue Cyan Purple Glass", "Light Glass", "Ocean", "Emerald Glass", "Rose Glass", "Amber Glass", "Midnight Glass")) {
                                     accent = when (value) {
                                         "Purple Glass" -> "Purple"
                                         "Blue Cyan Glass" -> "Blue"
                                         "Blue Cyan Purple Glass" -> "Blue"
+                                        "Light Glass" -> "Blue"
+                                        "Ocean" -> "Cyan"
                                         "Emerald Glass" -> "Green"
                                         "Rose Glass" -> "Pink"
                                         "Amber Glass" -> "Orange"
