@@ -28,10 +28,10 @@ import java.time.LocalDate
 import java.util.Locale
 import java.util.UUID
 
-private data class CCAccount(val id:String,val bank:String,val nickname:String,val last4:String,val network:String)
-private data class CCStatement(val id:String,val cardId:String,val date:String,val due:String,val total:Long,val minimum:Long,val paid:Long)
-private data class CCPayment(val id:String,val statementId:String,val amount:Long,val date:String,val method:String,val source:String,val reference:String)
-private data class CCData(val cards:List<CCAccount>,val bills:List<CCStatement>,val payments:List<CCPayment>)
+internal data class CCAccount(val id:String,val bank:String,val nickname:String,val last4:String,val network:String)
+internal data class CCStatement(val id:String,val cardId:String,val date:String,val due:String,val total:Long,val minimum:Long,val paid:Long)
+internal data class CCPayment(val id:String,val statementId:String,val amount:Long,val date:String,val method:String,val source:String,val reference:String)
+internal data class CCData(val cards:List<CCAccount>,val bills:List<CCStatement>,val payments:List<CCPayment>)
 internal object CreditCardBills {
  private const val P="open_finance_data"
  private fun array(c:Context,k:String)=runCatching{JSONArray(c.getSharedPreferences(P,0).getString(k,"[]")?:"[]")}.getOrElse{JSONArray()}
@@ -62,23 +62,23 @@ internal object CreditCardBills {
  }
  fun ingestSms(c:Context,body:String):Boolean{
   val d=read(c)
-  val last=Regex("""(?i)(?:xx|\\*{2,}|x{2,})(\\d{4})""").find(body)?.groupValues?.get(1)
-    ?:Regex("""(?i)(?:card|account|a/c)[^0-9]{0,12}(\\d{4})""").find(body)?.groupValues?.get(1)
+  val last=Regex("""(?i)(?:xx|\*{2,}|x{2,})(\d{4})""").find(body)?.groupValues?.get(1)
+    ?:Regex("""(?i)(?:card|account|a/c)[^0-9]{0,12}(\d{4})""").find(body)?.groupValues?.get(1)
     ?:return false
   val card=d.cards.firstOrNull{it.last4==last}?:return false
-  if(Regex("""(?i)(statement|total\\s+amt|amount\\s+due)""").containsMatchIn(body)){
-   val dueText=Regex("""(?i)due\\s+on\\s*:?\\s*(\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4})""").find(body)?.groupValues?.get(1)?:return false
+  if(Regex("""(?i)(statement|total\s+amt|amount\s+due)""").containsMatchIn(body)){
+   val dueText=Regex("""(?i)due\s+on\s*:?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})""").find(body)?.groupValues?.get(1)?:return false
    val parts=dueText.split('-','/');if(parts.size!=3)return false
    val year=(parts[2].toIntOrNull()?:return false).let{if(it<100)2000+it else it}
    val due=runCatching{LocalDate.of(year,parts[1].toInt(),parts[0].toInt())}.getOrNull()?:return false
-   val totalText=Regex("""(?i)(?:total\\s+amt|total\\s+amount|amount\\s+due)\\s*:?\\s*(?:inr|rs\\.?|₹)?\\s*(?:dr\\.?\\s*)?([0-9,]+(?:\\.[0-9]{1,2})?)""").find(body)?.groupValues?.get(1)?:return false
-   val minText=Regex("""(?i)min(?:imum)?\\s+amt(?:ount)?\\s+due\\s*:?\\s*(?:inr|rs\\.?|₹)?\\s*(?:dr\\.?\\s*)?([0-9,]+(?:\\.[0-9]{1,2})?)""").find(body)?.groupValues?.get(1)?:totalText
+   val totalText=Regex("""(?i)(?:total\s+amt|total\s+amount|amount\s+due)\s*:?\s*(?:inr|rs\.?|₹)?\s*(?:dr\.?\s*)?([0-9,]+(?:\.[0-9]{1,2})?)""").find(body)?.groupValues?.get(1)?:return false
+   val minText=Regex("""(?i)min(?:imum)?\s+amt(?:ount)?\s+due\s*:?\s*(?:inr|rs\.?|₹)?\s*(?:dr\.?\s*)?([0-9,]+(?:\.[0-9]{1,2})?)""").find(body)?.groupValues?.get(1)?:totalText
    val amount=totalText.replace(",","").toDoubleOrNull()?.toLong()?:return false
    val minimum=minText.replace(",","").toDoubleOrNull()?.toLong()?:return false
    return addBill(c,card.id,LocalDate.now().toString(),due.toString(),amount,minimum)
   }
   if(Regex("""(?i)(payment|bill).{0,35}(successful|received|credited|paid)""").containsMatchIn(body)&&!Regex("""(?i)(failed|declined|unsuccessful)""").containsMatchIn(body)){
-   val amt=Regex("""(?i)(?:inr|rs\\.?|₹)\\s*([0-9,]+)""").find(body)?.groupValues?.get(1)?.replace(",","")?.toLongOrNull()?:return false
+   val amt=Regex("""(?i)(?:inr|rs\.?|₹)\s*([0-9,]+)""").find(body)?.groupValues?.get(1)?.replace(",","")?.toLongOrNull()?:return false
    val open=d.bills.filter{it.cardId==card.id&&it.total>it.paid}
    if(open.size!=1)return false
    return addPayment(c,open[0].id,amt,LocalDate.now().toString(),"Bank SMS","SMS","")
