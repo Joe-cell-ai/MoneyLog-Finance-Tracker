@@ -113,7 +113,7 @@ fun CreditCardsHomeScreen(onBack:()->Unit){
  var total by remember{mutableStateOf("")};var minimum by remember{mutableStateOf("")};var due by remember{mutableStateOf(LocalDate.now().plusDays(20).toString())}
  var amount by remember{mutableStateOf("")};var method by remember{mutableStateOf("UPI")};var reference by remember{mutableStateOf("")}
  var smsMessage by remember{mutableStateOf("")}
- val smsPermission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){granted->if(granted){val n=CreditCardBills.scanInbox(ctx);smsMessage=if(n>=0)"Imported "+n+" credit-card message(s)." else "SMS scan unavailable.";refresh()}else smsMessage="SMS permission was not granted."}
+ val smsPermission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){granted->if(granted){val n=CreditCardBills.scanInbox(ctx);smsMessage=if(n>=0)"Imported "+n+" credit-card message(s)." else "SMS scan unavailable.";data=CreditCardBills.read(ctx)}else smsMessage="SMS permission was not granted."}
  var r7 by remember{mutableStateOf(true)};var r3 by remember{mutableStateOf(true)};var r1 by remember{mutableStateOf(true)}
  fun refresh(){data=CreditCardBills.read(ctx)}
  DisposableEffect(ctx){val r=object:BroadcastReceiver(){override fun onReceive(c:Context?,i:Intent?){refresh()}};ContextCompat.registerReceiver(ctx,r,IntentFilter(SmsAutoImportReceiver.ACTION_IMPORTED),ContextCompat.RECEIVER_NOT_EXPORTED);onDispose{runCatching{ctx.unregisterReceiver(r)}}}
