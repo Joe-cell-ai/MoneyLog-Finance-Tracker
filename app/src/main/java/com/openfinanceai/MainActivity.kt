@@ -847,7 +847,7 @@ private fun FinanceApp() {
                 val unique = parsed.distinctBy { transactionKey(it) }
                     .filter { existingKeys.add(transactionKey(it)) }
                 if (unique.isNotEmpty()) {
-                    transactions = unique + transactions
+                    transactions = TransactionCategoryLearning.apply(context, unique) + transactions
                     saveTransactions(context, transactions)
                 }
                 importedPreview = emptyList()
@@ -1250,7 +1250,8 @@ private fun FinanceApp() {
                         },
                         onImport = {
                             val count = importedPreview.size
-                            transactions = (importedPreview + transactions).distinctBy { transactionKey(it) }
+                            val learnedPreview = TransactionCategoryLearning.apply(context, importedPreview)
+                            transactions = (learnedPreview + transactions).distinctBy { transactionKey(it) }
                             saveTransactions(context, transactions)
                             importMessage = "Imported " + count + " transaction(s). Saved on this device."
                             importedPreview = emptyList()
@@ -1421,7 +1422,13 @@ private fun FinanceApp() {
             transactionToEdit?.let { transaction ->
                 EditTransactionDialog(transaction, onDismiss = { transactionToEdit = null }) { edited ->
                     val index = transactions.indexOf(transaction)
-                    if (index >= 0) { transactions = transactions.toMutableList().also { it[index] = edited }; saveTransactions(context, transactions) }
+                    if (index >= 0) {
+                        val editedRows = transactions.toMutableList().also { it[index] = edited }
+                        transactions = if (!edited.income && edited.category != transaction.category) {
+                            TransactionCategoryLearning.learn(context, edited.title, edited.category, editedRows)
+                        } else editedRows
+                        saveTransactions(context, transactions)
+                    }
                     transactionToEdit = null
                 }
             }
@@ -1821,7 +1828,7 @@ private fun FinanceApp() {
                             saveLoans(context, loans)
                         }
                         val displayCategory = when (kind) { "Loan received" -> "Loan received"; "Loan repayment / EMI" -> "Loan repayment"; else -> category }
-                        transactions = listOf(
+                        transactions = TransactionCategoryLearning.apply(context, listOf(
                             Transaction(
                                 title, displayCategory, date, amount, isIncome,
                                 paymentMethod = paymentMethod, notes = notes, tag = tag,
@@ -1833,7 +1840,7 @@ private fun FinanceApp() {
                                 loanReceiptPrincipalAdded = loanReceiptPrincipalAddedForTransaction,
                                 loanId = loan?.id.orEmpty()
                             )
-                        ) + transactions
+                        )) + transactions
                         saveTransactions(context, transactions)
                         showAdd = false
                     }
