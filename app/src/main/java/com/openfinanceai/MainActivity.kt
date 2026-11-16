@@ -1958,13 +1958,11 @@ private fun HomeScreen(
                                 Text("Add expenses to see your category breakdown.", color = Muted, fontSize = 11.sp)
                             } else {
                                 homeExpenseCategories.take(5).forEach { (name, amount) ->
-                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                                        Box(Modifier.size(8.dp).clip(CircleShape).background(categoryColor(name)))
-                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                            Text(name, color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                                            Text(Money.format(amount), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                                        }
-                                        Text("${if (homeExpenseTotal > 0L) amount * 100 / homeExpenseTotal else 0}%", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                        Box(Modifier.size(7.dp).clip(CircleShape).background(categoryColor(name)))
+                                        Text(name, modifier = Modifier.weight(1f), color = Ink, fontSize = 9.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
+                                        Text(Money.format(amount), color = Ink, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
+                                        Text("${if (homeExpenseTotal > 0L) amount * 100 / homeExpenseTotal else 0}%", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                                     }
                                 }
                             }
