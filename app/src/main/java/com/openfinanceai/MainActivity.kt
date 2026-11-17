@@ -737,6 +737,8 @@ private fun FinanceApp() {
     var transactionForActions by remember { mutableStateOf<Transaction?>(null) }
     var transactionToEdit by remember { mutableStateOf<Transaction?>(null) }
     var transactionTips by remember { mutableStateOf<Transaction?>(null) }
+    var transactionNoteEditor by remember { mutableStateOf<Transaction?>(null) }
+    var transactionTagEditor by remember { mutableStateOf<Transaction?>(null) }
     var loanForActions by remember { mutableStateOf<Loan?>(null) }
     var loanPendingDelete by remember { mutableStateOf<Loan?>(null) }
     var loanToEdit by remember { mutableStateOf<Loan?>(null) }
@@ -899,8 +901,8 @@ private fun FinanceApp() {
     }
     BackHandler(
         enabled = tab != "Home" || showAdd || showAddAsIncome || transactionForActions != null ||
-            transactionToEdit != null || transactionTips != null || loanForActions != null || loanToEdit != null || emiAmountEdit != null ||
-            showEmiReschedule != null || emiQuickAction != null
+            transactionToEdit != null || transactionTips != null || transactionNoteEditor != null || transactionTagEditor != null ||
+            loanForActions != null || loanToEdit != null || emiAmountEdit != null || showEmiReschedule != null || emiQuickAction != null
     ) {
         when {
             loanToEdit != null -> loanToEdit = null
@@ -908,6 +910,8 @@ private fun FinanceApp() {
             showEmiReschedule != null -> showEmiReschedule = null
             emiQuickAction != null -> emiQuickAction = null
             loanForActions != null -> loanForActions = null
+            transactionNoteEditor != null -> transactionNoteEditor = null
+            transactionTagEditor != null -> transactionTagEditor = null
             transactionToEdit != null -> transactionToEdit = null
             transactionTips != null -> transactionTips = null
             transactionForActions != null -> transactionForActions = null
@@ -989,6 +993,13 @@ private fun FinanceApp() {
                 .put("emiPreferences", emiPreferences)
                 .put("categories", savedCategories)
                 .put("tags", savedTags)
+                .put("creditCards", runCatching { JSONArray(prefs.getString("cc_cards_v2", "[]") ?: "[]") }.getOrDefault(JSONArray()))
+                .put("creditCardBills", runCatching { JSONArray(prefs.getString("cc_bills_v2", "[]") ?: "[]") }.getOrDefault(JSONArray()))
+                .put("creditCardPayments", runCatching { JSONArray(prefs.getString("cc_payments_v2", "[]") ?: "[]") }.getOrDefault(JSONArray()))
+                .put("creditCardReminders", JSONObject()
+                    .put("7Days", prefs.getBoolean("cc_reminder_7", true))
+                    .put("3Days", prefs.getBoolean("cc_reminder_3", true))
+                    .put("1Day", prefs.getBoolean("cc_reminder_1", true)))
                 .put("appearanceTheme", prefs.getString("appearance_theme", "Light"))
                 .put("appearanceCurrency", prefs.getString("appearance_currency", "INR (₹)"))
                 .put("appearanceAccent", prefs.getString("appearance_accent", "Green"))
@@ -1031,6 +1042,14 @@ private fun FinanceApp() {
             root.optJSONArray("moneyNotes")?.let { editor.putString("money_notes", it.toString()) }
             root.optJSONArray("categories")?.let { editor.putString("custom_categories", it.toString()) }
             root.optJSONArray("tags")?.let { editor.putString("custom_tags", it.toString()) }
+            root.optJSONArray("creditCards")?.let { editor.putString("cc_cards_v2", it.toString()) }
+            root.optJSONArray("creditCardBills")?.let { editor.putString("cc_bills_v2", it.toString()) }
+            root.optJSONArray("creditCardPayments")?.let { editor.putString("cc_payments_v2", it.toString()) }
+            root.optJSONObject("creditCardReminders")?.let { reminders ->
+                if (reminders.has("7Days")) editor.putBoolean("cc_reminder_7", reminders.optBoolean("7Days", true))
+                if (reminders.has("3Days")) editor.putBoolean("cc_reminder_3", reminders.optBoolean("3Days", true))
+                if (reminders.has("1Day")) editor.putBoolean("cc_reminder_1", reminders.optBoolean("1Day", true))
+            }
             if (root.has("appearanceTheme")) editor.putString("appearance_theme", root.optString("appearanceTheme", "Light"))
             if (root.has("appearanceCurrency")) editor.putString("appearance_currency", root.optString("appearanceCurrency", "INR (₹)"))
             if (root.has("appearanceAccent")) editor.putString("appearance_accent", root.optString("appearanceAccent", "Green"))
@@ -1303,6 +1322,8 @@ private fun FinanceApp() {
                             else -> { transactionToEdit = transaction; transactionForActions = null }
                         }
                     },
+                    onAddNote = { transactionNoteEditor = transaction; transactionForActions = null },
+                    onAddTag = { transactionTagEditor = transaction; transactionForActions = null },
                     onDelete = {
                         var remainingTransactions = transactions.filterNot { it === transaction }
                         val prefs = context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
@@ -1412,6 +1433,40 @@ private fun FinanceApp() {
                     onTips = { transactionTips = transaction; transactionForActions = null }
                 )
             }
+
+            transactionNoteEditor?.let { transaction ->
+                TransactionNoteDialog(
+                    initialNote = transaction.notes,
+                    onDismiss = { transactionNoteEditor = null },
+                    onSave = { note ->
+                        val index = transactions.indexOf(transaction)
+                        if (index >= 0) {
+                            val updatedRows = transactions.toMutableList().also { it[index] = transaction.copy(notes = note) }
+                            transactions = updatedRows
+                            saveTransactions(context, updatedRows)
+                            transactionForActions = updatedRows[index]
+                        }
+                        transactionNoteEditor = null
+                    }
+                )
+            }
+            transactionTagEditor?.let { transaction ->
+                TransactionTagDialog(
+                    initialTags = transaction.tag,
+                    onDismiss = { transactionTagEditor = null },
+                    onSave = { tagValue ->
+                        val index = transactions.indexOf(transaction)
+                        if (index >= 0) {
+                            val updatedRows = transactions.toMutableList().also { it[index] = transaction.copy(tag = tagValue) }
+                            transactions = updatedRows
+                            saveTransactions(context, updatedRows)
+                            transactionForActions = updatedRows[index]
+                        }
+                        transactionTagEditor = null
+                    }
+                )
+            }
+
             transactionTips?.let { transaction ->
                 AlertDialog(
                     onDismissRequest = { transactionTips = null },
@@ -6288,6 +6343,8 @@ private fun TransactionDetailsDialog(
     allTransactions: List<Transaction>,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
+    onAddNote: () -> Unit,
+    onAddTag: () -> Unit,
     onDelete: () -> Unit,
     onDuplicate: () -> Unit,
     onTips: () -> Unit
@@ -6345,8 +6402,8 @@ private fun TransactionDetailsDialog(
                         DetailQuickAction("Delete", Icons.Default.Delete, ExpenseTint, ExpenseRed) { showDeleteConfirm = true }
                         DetailQuickAction("Duplicate", Icons.Default.ContentCopy, SkyTint, Blue, onDuplicate)
                         if (!isLinkedLoanTransaction) {
-                            DetailQuickAction("Add Note", Icons.Default.Notes, SkyTint, Blue, onEdit)
-                            DetailQuickAction("Add Tag", Icons.Default.LocalOffer, LavenderTint, Purple, onEdit)
+                            DetailQuickAction("Add Note", Icons.Default.Notes, SkyTint, Blue, onAddNote)
+                            DetailQuickAction("Add Tag", Icons.Default.LocalOffer, LavenderTint, Purple, onAddTag)
                         }
                     }
                     if (isLinkedLoanTransaction) {
@@ -6398,6 +6455,131 @@ private fun TransactionDetailsDialog(
             dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
         )
     }
+}
+
+
+@Composable
+private fun TransactionNoteDialog(
+    initialNote: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var note by remember(initialNote) { mutableStateOf(initialNote) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add note") },
+        text = {
+            OutlinedTextField(
+                value = note,
+                onValueChange = { note = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Enter a note for this transaction") },
+                minLines = 3,
+                maxLines = 5
+            )
+        },
+        confirmButton = { TextButton(onClick = { onSave(note.trim()) }) { Text("Save note") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun TransactionTagDialog(
+    initialTags: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val store = remember(context) {
+        FinanceManagementStore(
+            context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE),
+            DEFAULT_MONEY_CATEGORIES,
+            DEFAULT_MONEY_TAGS
+        )
+    }
+    val initialSelected = remember(initialTags) {
+        initialTags.split(Regex("[,;]"))
+            .map { it.trim().removePrefix("#").trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.ROOT) }
+    }
+    var options by remember(initialTags) {
+        mutableStateOf(
+            (store.loadTags() + initialSelected)
+                .filter { it.isNotBlank() }
+                .distinctBy { it.trim().lowercase(Locale.ROOT) }
+        )
+    }
+    var selected by remember(initialTags) { mutableStateOf(initialSelected) }
+    var temporaryTag by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select tags") },
+        text = {
+            Column(
+                Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                Text("Choose existing tags", color = Muted, fontSize = 12.sp)
+                Column(
+                    Modifier.fillMaxWidth().heightIn(max = 230.dp).verticalScroll(rememberScrollState())
+                ) {
+                    options.forEach { option ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                selected = if (option in selected) selected - option else selected + option
+                            }.padding(vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = option in selected,
+                                onCheckedChange = { checked ->
+                                    selected = if (checked) (selected + option).distinct() else selected - option
+                                }
+                            )
+                            Text(option, color = Ink, fontSize = 14.sp)
+                        }
+                    }
+                    if (options.isEmpty()) Text("No saved tags yet. Create a temporary tag below.", color = Muted, fontSize = 12.sp)
+                }
+                OutlinedTextField(
+                    value = temporaryTag,
+                    onValueChange = { temporaryTag = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Temporary tag name") },
+                    singleLine = true
+                )
+                TextButton(
+                    onClick = {
+                        val name = temporaryTag.trim().removePrefix("#").trim()
+                        if (name.isBlank()) {
+                            error = "Enter a tag name."
+                        } else {
+                            val existing = options.firstOrNull { it.equals(name, ignoreCase = true) }
+                            if (existing != null) {
+                                selected = (selected + existing).distinct()
+                            } else {
+                                options = options + name
+                                selected = (selected + name).distinct()
+                            }
+                            temporaryTag = ""
+                            error = ""
+                        }
+                    }
+                ) { Text("+ Add temporary tag") }
+                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                Text(
+                    "Temporary tags are saved only on this transaction. They are not added to Tag Management.",
+                    color = Muted,
+                    fontSize = 11.sp
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(selected.joinToString(", ")) }) { Text("Apply tags") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable
