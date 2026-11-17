@@ -109,7 +109,7 @@ internal object CreditCardBills {
    while(cursor.moveToNext()&&scanned<1000){
     scanned++
     val body=cursor.getString(bodyIndex).orEmpty()
-    val key=cursor.getString(idIndex)+"|"+cursor.getLong(dateIndex)+"|"+cursor.getString(addressIndex).orEmpty()+"|"+body.hashCode()
+    val key=cursor.getString(addressIndex).orEmpty().trim()+"|"+cursor.getLong(dateIndex)+"|"+body.hashCode()
     if(ingestSms(c,body,key))count++
    }
   }

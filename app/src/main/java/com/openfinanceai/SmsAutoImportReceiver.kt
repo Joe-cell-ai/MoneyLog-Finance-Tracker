@@ -15,7 +15,10 @@ class SmsAutoImportReceiver : BroadcastReceiver() {
   groups.forEach{(key,parts)->
    val body=parts.sortedBy{it.indexOnIcc}.joinToString(""){it.messageBody.orEmpty()}
    val isCreditCardMessage =
-    CreditCardSmsParser.parseStatement(body)!=null || CreditCardSmsParser.parsePayment(body)!=null
+    CreditCardSmsParser.parseStatement(body)!=null ||
+     CreditCardSmsParser.parsePayment(body)!=null ||
+     (Regex("""(?i)(?:xx|x{2,}|\*{2,})\d{4}""").containsMatchIn(body) &&
+      Regex("""(?i)(credit\s*card|statement|amount\s+due|minimum\s+due)""").containsMatchIn(body))
    if(isCreditCardMessage){
     val messageKey=key.first+"|"+key.second+"|"+body.hashCode()
     if(CreditCardBills.ingestSms(context,body,messageKey))changed=true
