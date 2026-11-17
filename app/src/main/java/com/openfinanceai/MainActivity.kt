@@ -1087,8 +1087,8 @@ private fun FinanceApp() {
                 ?: error("Could not write the backup file.")
         }.onFailure { importMessage = it.message ?: "Backup export failed." }
     }
-    fun restoreBackupJson(raw: String) {
-        runCatching {
+    fun restoreBackupJson(raw: String): Boolean {
+        val result = runCatching {
         val root = JSONObject(raw)
         require(root.optString("format") == "open-finance-backup") { "This file is not an Open Finance backup." }
         val restoredTransactions = root.getJSONArray("transactions").let { a ->
@@ -1192,7 +1192,9 @@ private fun FinanceApp() {
         saveLoans(context, loans)
         importMessage = "Backup restored: ${transactions.size} transactions, ${loans.size} loans, ${moneyNotes.size} money notes, categories, tags and supported settings."
 
-        }.onFailure { importMessage = it.message ?: "Backup restore failed." }
+        }
+        result.onFailure { importMessage = it.message ?: "Backup restore failed." }
+        return result.isSuccess
     }
     val backupRestoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) runCatching {
@@ -1341,9 +1343,12 @@ private fun FinanceApp() {
                                     val raw = withContext(kotlinx.coroutines.Dispatchers.IO) {
                                         OneDriveGraph.downloadBackup(context, item.id)
                                     }
-                                    restoreBackupJson(raw)
-                                    driveStatus = "OneDrive backup restored: " + item.name
-                                    drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
+                                    if (restoreBackupJson(raw)) {
+                                        driveStatus = "OneDrive backup restored: " + item.name
+                                        drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
+                                    } else {
+                                        driveStatus = "The OneDrive file was downloaded, but MoneyLog could not restore it. Check the restore message."
+                                    }
                                 } catch (error: Exception) {
                                     driveStatus = "OneDrive restore failed: " + (error.message ?: "unknown error")
                                 }
