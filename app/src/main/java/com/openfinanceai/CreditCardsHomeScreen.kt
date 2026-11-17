@@ -119,7 +119,13 @@ internal object CreditCardBills {
   val d=read(c)
   val statement=CreditCardSmsParser.parseStatement(body)
   if(statement!=null){
-   val card=d.cards.firstOrNull{it.last4==statement.last4}?:return false
+   val exact=d.cards.firstOrNull{it.last4==statement.last4&&it.bank.equals(statement.bankName,true)}
+   val unique=d.cards.filter{it.last4==statement.last4}.singleOrNull()
+   val card=exact?:unique?:if(statement.bankName.isNotBlank()){
+    addCard(c,statement.bankName,"Credit Card",statement.last4,"Unknown")
+    read(c).cards.firstOrNull{it.last4==statement.last4&&it.bank.equals(statement.bankName,true)}
+   }else null
+   ?:return false
    return addBill(c,card.id,LocalDate.now().toString(),statement.dueDate,statement.totalPaise,statement.minimumPaise)
   }
   val payment=CreditCardSmsParser.parsePayment(body)?:return false

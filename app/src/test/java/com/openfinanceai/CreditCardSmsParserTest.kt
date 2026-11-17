@@ -13,6 +13,7 @@ class CreditCardSmsParserTest {
         val statement = CreditCardSmsParser.parseStatement(sms)
 
         assertEquals("3810", statement?.last4)
+        assertEquals("Axis Bank", statement?.bankName)
         assertEquals("2026-11-30", statement?.dueDate)
         assertEquals(764148L, statement?.totalPaise)
         assertEquals(764148L, statement?.minimumPaise)

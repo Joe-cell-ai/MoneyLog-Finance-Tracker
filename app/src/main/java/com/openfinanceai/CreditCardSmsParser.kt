@@ -4,6 +4,7 @@ import java.time.LocalDate
 
 internal data class ParsedCreditCardStatement(
     val last4: String,
+    val bankName: String,
     val dueDate: String,
     val totalPaise: Long,
     val minimumPaise: Long
@@ -26,6 +27,8 @@ internal object CreditCardSmsParser {
     fun parseStatement(body: String): ParsedCreditCardStatement? {
         val last4 = findLastFour(body) ?: return null
         if (!Regex("""(?i)(statement|total\s+amt|amount\s+due)""").containsMatchIn(body)) return null
+        val bankName = Regex("""(?i)statement\s+for\s+(.+?)\s+credit\s+card(?:\s+no\.?)?""")
+            .find(body)?.groupValues?.get(1)?.trim().orEmpty()
         val dueText = Regex("""(?i)due\s+on\s*:?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})""")
             .find(body)?.groupValues?.get(1) ?: return null
         val parts = dueText.split('-', '/')
@@ -45,7 +48,7 @@ internal object CreditCardSmsParser {
         val totalPaise = moneyToPaise(totalText) ?: return null
         val minimumPaise = moneyToPaise(minimumText) ?: return null
         if (totalPaise <= 0L || minimumPaise < 0L || minimumPaise > totalPaise) return null
-        return ParsedCreditCardStatement(last4, dueDate, totalPaise, minimumPaise)
+        return ParsedCreditCardStatement(last4, bankName, dueDate, totalPaise, minimumPaise)
     }
 
     fun parsePayment(body: String): ParsedCreditCardPayment? {
