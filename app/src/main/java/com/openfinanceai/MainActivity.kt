@@ -755,6 +755,7 @@ private fun FinanceApp() {
         }
         SalaryAutoWorker.schedule(context)
         SalaryAutoWorker.runNow(context)
+        CreditCardReminderScheduler.schedule(context)
     }
     LaunchedEffect(Unit) {
         androidx.work.WorkManager.getInstance(context).cancelUniqueWork("moneylog_drive_backup_daily")
@@ -1233,8 +1234,23 @@ private fun FinanceApp() {
                             if (drivePrefs.getString(folderKey, null).isNullOrBlank()) {
                                 driveStatus = if (destination == "drive") "Connect a Google Drive folder first." else "Choose a device backup folder first."
                             } else {
-                                androidx.work.WorkManager.getInstance(context).enqueue(androidx.work.OneTimeWorkRequestBuilder<GoogleDriveBackupWorker>().build())
+                                val workManager = androidx.work.WorkManager.getInstance(context)
+                                val request = androidx.work.OneTimeWorkRequestBuilder<GoogleDriveBackupWorker>().build()
+                                workManager.enqueueUniqueWork(
+                                    "moneylog_manual_backup",
+                                    androidx.work.ExistingWorkPolicy.REPLACE,
+                                    request
+                                )
                                 driveStatus = "Backup queued. Check status again shortly."
+                                financeScope.launch {
+                                    val workInfo = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        workManager.getWorkInfoById(request.id).get()
+                                    }
+                                    driveStatus = drivePrefs.getString(
+                                        "drive_backup_status",
+                                        "Backup finished with status: " + (workInfo?.state?.name ?: "unknown")
+                                    ) ?: "Backup finished with status: " + (workInfo?.state?.name ?: "unknown")
+                                }
                             }
                         },
                         driveStatus = driveStatus,
@@ -4320,7 +4336,7 @@ private fun PrivacySecurityScreen(onOpenPaymentSettings: () -> Unit) {
                 }
             }
         }
-        item { InfoCard("Backups contain sensitive information", "Local JSON/CSV exports stay on your device until you share them. If you connect a Google Drive folder in Backup & Export, MoneyLog can write dated backups there. Store exported files in a trusted private location.", Icons.Default.PrivacyTip) }
+        item { InfoCard("Backups contain sensitive information", "Automatic backups are JSON files and are not encrypted by the current backup worker. Local exports stay on your device until you share them; Google Drive backups are written to the folder you connect. Keep that folder private.", Icons.Default.PrivacyTip) }
         item { InfoCard("Clear app data", "Clearing Android app storage or uninstalling may remove locally saved records. Export a backup first if you need to keep them.", Icons.Default.DeleteOutline) }
     }
     if (showClearDataConfirm) {
@@ -4556,7 +4572,10 @@ private fun BackupSecurityScreen(
     var backupFrequency by remember { mutableStateOf(backupPreferences.getString("automatic_backup_frequency", "daily") ?: "daily") }
     var backupDestination by remember { mutableStateOf(backupPreferences.getString("automatic_backup_destination", "device") ?: "device") }
     var backupScheduleMessage by remember { mutableStateOf("") }
+    var backupDisplayStatus by remember { mutableStateOf(driveStatus) }
+    LaunchedEffect(driveStatus) { backupDisplayStatus = driveStatus }
     LaunchedEffect(Unit) {
+        backupDisplayStatus = backupPreferences.getString("drive_backup_status", driveStatus) ?: driveStatus
         if (automaticBackup) backupScheduleMessage = scheduleAutomaticBackup(backupContext)
     }
     LazyColumn(
@@ -4622,10 +4641,10 @@ private fun BackupSecurityScreen(
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(if (backupDestination == "drive") "Google Drive automatic backup" else "Device automatic backup", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text(driveStatus, color = Muted, fontSize = 12.sp)
+                            Text(backupDisplayStatus, color = Muted, fontSize = 12.sp)
                         }
                     }
-                    Text(if (backupDestination == "drive") "Choose a private Google Drive folder for cloud backups. The frequency selected above controls the schedule; retention keeps only the selected number of recent files." else "Choose a folder on this device. MoneyLog creates dated JSON backups there using your selected schedule and retention limit.", color = Muted, fontSize = 12.sp)
+                    Text(if (backupDestination == "drive") "Choose a private Google Drive folder for cloud backups. The frequency selected above controls the schedule; MoneyLog keeps up to 30 recent backup files in that folder." else "Choose a folder on this device. MoneyLog creates dated JSON backups there using your selected schedule and keeps up to 30 recent files.", color = Muted, fontSize = 12.sp)
                     if (backupDestination == "device") {
                         OutlinedButton(onClick = onChooseDeviceFolder, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Choose device backup folder") }
                     } else {

@@ -22,7 +22,7 @@ internal object CreditCardReminderScheduler {
  fun schedule(context:Context) {
   val request=PeriodicWorkRequestBuilder<CreditCardReminderWorker>(24,TimeUnit.HOURS)
    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.NOT_REQUIRED).build()).build()
-  WorkManager.getInstance(context).enqueueUniquePeriodicWork("moneylog-credit-card-due-reminders",ExistingPeriodicWorkPolicy.UPDATE,request)
+  WorkManager.getInstance(context).enqueueUniquePeriodicWork("moneylog-credit-card-due-reminders",ExistingPeriodicWorkPolicy.KEEP,request)
  }
 }
 class CreditCardReminderWorker(context:Context,params:WorkerParameters):Worker(context,params) {

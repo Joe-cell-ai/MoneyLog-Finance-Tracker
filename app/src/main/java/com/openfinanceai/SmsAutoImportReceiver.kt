@@ -17,7 +17,8 @@ class SmsAutoImportReceiver : BroadcastReceiver() {
    val isCreditCardMessage =
     CreditCardSmsParser.parseStatement(body)!=null || CreditCardSmsParser.parsePayment(body)!=null
    if(isCreditCardMessage){
-    if(CreditCardBills.ingestSms(context,body))changed=true
+    val messageKey=key.first+"|"+key.second+"|"+body.hashCode()
+    if(CreditCardBills.ingestSms(context,body,messageKey))changed=true
    }else if(SmsTransactionImporter.import(context,key.first,key.second,body))changed=true
   }
   if(changed)context.sendBroadcast(Intent(ACTION_IMPORTED).setPackage(context.packageName))

@@ -69,19 +69,28 @@ internal object CreditCardBills {
   if(amount<=0||runCatching{LocalDate.parse(date)}.isFailure)return false
   val d=read(c);val bill=d.bills.firstOrNull{it.id==billId}?:return false
   if(amount>bill.total-bill.paid)return false
-  if(source=="SMS"&&d.payments.any{it.statementId==billId&&it.amount==amount&&it.date==date&&it.source=="SMS"})return false
+  if(source=="SMS"&&d.payments.any{it.source=="SMS"&&(if(ref.isNotBlank())it.reference==ref else it.statementId==billId&&it.amount==amount&&it.date==date)})return false
   save(c,d.copy(bills=d.bills.map{if(it.id==billId)it.copy(paid=it.paid+amount)else it},payments=d.payments+CCPayment(UUID.randomUUID().toString(),billId,amount,date,method,source,ref)));return true
  }
  fun scanInbox(c:Context):Int {
   if(c.checkSelfPermission(android.Manifest.permission.READ_SMS)!=PackageManager.PERMISSION_GRANTED)return -1
   var count=0
-  c.contentResolver.query(Telephony.Sms.CONTENT_URI,arrayOf(Telephony.Sms.BODY),null,null,Telephony.Sms.DATE+" DESC")?.use{cursor->
-   val index=cursor.getColumnIndexOrThrow(Telephony.Sms.BODY);var scanned=0
-   while(cursor.moveToNext()&&scanned<1000){scanned++;if(ingestSms(c,cursor.getString(index).orEmpty()))count++}
+  c.contentResolver.query(Telephony.Sms.CONTENT_URI,arrayOf("_id",Telephony.Sms.BODY,Telephony.Sms.DATE,Telephony.Sms.ADDRESS),null,null,Telephony.Sms.DATE+" DESC")?.use{cursor->
+   val idIndex=cursor.getColumnIndexOrThrow("_id")
+   val bodyIndex=cursor.getColumnIndexOrThrow(Telephony.Sms.BODY)
+   val dateIndex=cursor.getColumnIndexOrThrow(Telephony.Sms.DATE)
+   val addressIndex=cursor.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
+   var scanned=0
+   while(cursor.moveToNext()&&scanned<1000){
+    scanned++
+    val body=cursor.getString(bodyIndex).orEmpty()
+    val key=cursor.getString(idIndex)+"|"+cursor.getLong(dateIndex)+"|"+cursor.getString(addressIndex).orEmpty()+"|"+body.hashCode()
+    if(ingestSms(c,body,key))count++
+   }
   }
   return count
  }
- fun ingestSms(c:Context,body:String):Boolean{
+ fun ingestSms(c:Context,body:String,messageKey:String=""):Boolean{
   val d=read(c)
   val statement=CreditCardSmsParser.parseStatement(body)
   if(statement!=null){
@@ -92,7 +101,7 @@ internal object CreditCardBills {
   val card=d.cards.firstOrNull{it.last4==payment.last4}?:return false
   val open=d.bills.filter{it.cardId==card.id&&it.total>it.paid}
   if(open.size!=1)return false
-  return addPayment(c,open[0].id,payment.amountPaise,LocalDate.now().toString(),"Bank SMS","SMS","")
+  return addPayment(c,open[0].id,payment.amountPaise,LocalDate.now().toString(),"Bank SMS","SMS",messageKey)
  }
 }
 internal fun ccFormat(paise:Long):String = NumberFormat.getCurrencyInstance(Locale("en","IN")).apply {
