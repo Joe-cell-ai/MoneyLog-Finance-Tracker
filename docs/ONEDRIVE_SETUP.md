@@ -18,4 +18,4 @@ The app uses Microsoft's device authorization flow for personal Microsoft accoun
 
 ## Graph operations
 
-Backups are written to a private `MoneyLog Backups` folder in the signed-in user's OneDrive. The app uploads JSON backup files, lists them for restore, and retains the newest 30 files. Graph access is limited to the delegated `Files.ReadWrite` permission.
+Backups are written to a private `MoneyLog Backups` folder in the signed-in user's OneDrive. The app uploads JSON backup files, lets the user browse and restore a selected cloud backup, and retains the newest 30 files. Graph access is limited to the delegated `Files.ReadWrite` permission.

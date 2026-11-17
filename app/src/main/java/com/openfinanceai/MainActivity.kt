@@ -776,6 +776,8 @@ private fun FinanceApp() {
     var driveStatus by remember { mutableStateOf(drivePrefs.getString("drive_backup_status", "No cloud backup connected yet.") ?: "No cloud backup connected yet.") }
     var oneDriveConnected by remember { mutableStateOf(OneDriveAuth.hasRefreshToken(context)) }
     var oneDriveDeviceCode by remember { mutableStateOf<OneDriveDeviceCode?>(null) }
+    var oneDriveBackupItems by remember { mutableStateOf<List<OneDriveBackupItem>>(emptyList()) }
+    var isLoadingOneDriveBackups by remember { mutableStateOf(false) }
     val driveFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) runCatching {
             val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -1085,112 +1087,118 @@ private fun FinanceApp() {
                 ?: error("Could not write the backup file.")
         }.onFailure { importMessage = it.message ?: "Backup export failed." }
     }
+    fun restoreBackupJson(raw: String) {
+        runCatching {
+        val root = JSONObject(raw)
+        require(root.optString("format") == "open-finance-backup") { "This file is not an Open Finance backup." }
+        val restoredTransactions = root.getJSONArray("transactions").let { a ->
+            (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
+                Transaction(j.getString("title"), j.optString("category", "Other"), j.optString("date", "Today"),
+                    j.getLong("amount"), j.optBoolean("income"), j.optString("source"), j.optString("notificationKey"),
+                    j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""), j.optString("loanLender", ""), j.optString("emiInstallmentDate", ""), j.optString("transactionKind", ""), j.optLong("loanPrincipalReduction", 0L),
+                    j.optLong("loanInterestPortion", 0L), j.optBoolean("loanPaymentCounted", false),
+                    j.optBoolean("loanAllocationRecorded", false), j.optLong("loanReceiptPrincipalAdded", 0L),
+                    j.optString("categoryOrigin", CategoryOrigin.UNKNOWN), j.optString("loanId", ""))
+            } }
+        }
+        val restoredLoans = root.optJSONArray("loans")?.let { a ->
+            (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
+                Loan(j.getString("lender"), j.getLong("balance"), j.getLong("emi"), j.optString("due", "Not set"), j.optDouble("annualRate", 0.0), j.optLong("originalPrincipal", j.getLong("balance")), j.optLong("paymentsMade", 0L), j.optLong("totalPayments", 0L), j.optString("borrowerName", ""), j.optString("agreementNumber", ""),
+                    j.optString("loanNumber", ""), j.optString("startDate", j.optString("due", "")), j.optString("id", ""))
+            } }
+        } ?: emptyList()
+        val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+        root.optJSONArray("moneyNotes")?.let { editor.putString("money_notes", it.toString()) }
+        root.optJSONArray("categories")?.let { editor.putString("custom_categories", it.toString()) }
+        root.optJSONArray("tags")?.let { editor.putString("custom_tags", it.toString()) }
+        root.optJSONArray("creditCards")?.let { editor.putString("cc_cards_v2", it.toString()) }
+        root.optJSONArray("creditCardBills")?.let { editor.putString("cc_bills_v2", it.toString()) }
+        root.optJSONArray("creditCardPayments")?.let { editor.putString("cc_payments_v2", it.toString()) }
+        if (root.has("creditCards") || root.has("creditCardBills") || root.has("creditCardPayments")) {
+            editor.putBoolean("cc_amounts_are_paise", root.optString("creditCardAmountUnit", "RUPEES") == "PAISE")
+        }
+        root.optJSONObject("creditCardReminders")?.let { reminders ->
+            if (reminders.has("7Days")) editor.putBoolean("cc_reminder_7", reminders.optBoolean("7Days", true))
+            if (reminders.has("3Days")) editor.putBoolean("cc_reminder_3", reminders.optBoolean("3Days", true))
+            if (reminders.has("1Day")) editor.putBoolean("cc_reminder_1", reminders.optBoolean("1Day", true))
+        }
+        if (root.has("appearanceTheme")) editor.putString("appearance_theme", root.optString("appearanceTheme", "Light"))
+        if (root.has("appearanceCurrency")) editor.putString("appearance_currency", root.optString("appearanceCurrency", "INR (₹)"))
+        if (root.has("appearanceAccent")) editor.putString("appearance_accent", root.optString("appearanceAccent", "Green"))
+        if (root.has("appearanceLayout")) editor.putString("appearance_layout", root.optString("appearanceLayout", "Comfortable"))
+        if (root.has("appearanceFontSize")) editor.putString("appearance_font_size", root.optString("appearanceFontSize", "Medium"))
+        if (root.has("appearanceCustomAccent")) editor.putString("appearance_custom_accent", root.optString("appearanceCustomAccent", "#9333EA"))
+        if (root.has("settingsBudgetAlerts")) editor.putBoolean("settings_budget_alerts", root.optBoolean("settingsBudgetAlerts", true))
+        if (root.has("settingsEmiReminders")) editor.putBoolean("settings_emi_reminders", root.optBoolean("settingsEmiReminders", true))
+        if (root.has("settingsMonthlySummary")) editor.putBoolean("settings_monthly_summary", root.optBoolean("settingsMonthlySummary", false))
+        if (root.has("userReportedCreditScore")) {
+            val restoredScore = root.optInt("userReportedCreditScore", 0)
+            if (restoredScore in 300..900) editor.putInt("user_reported_credit_score", restoredScore)
+            else editor.remove("user_reported_credit_score")
+        }
+        root.optJSONObject("monthlyCategoryBudgets")?.let { editor.putString("monthly_category_budgets", it.toString()) }
+        prefs.all.keys.filter { key -> key.startsWith("bank_schedule_") || key.startsWith("loan_document_metadata_") || key.startsWith("emi_status_") || key.startsWith("emi_amount_") || key.startsWith("emi_rescheduled_") }.forEach { editor.remove(it) }
+        root.optJSONObject("bankSchedules")?.let { schedules ->
+            val keys = schedules.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                if (key.startsWith("bank_schedule_")) editor.putString(key, schedules.optJSONArray(key)?.toString() ?: "[]")
+            }
+        }
+        root.optJSONObject("loanDocumentMetadata")?.let { metadata ->
+            val keys = metadata.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                if (key.startsWith("loan_document_metadata_")) editor.putString(key, metadata.optString(key, "{}"))
+            }
+        }
+        root.optJSONObject("emiPreferences")?.let { saved ->
+            val keys = saved.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val value = saved.opt(key)
+                when {
+                    key.startsWith("emi_amount_") && value is Number -> editor.putLong(key, value.toLong())
+                    (key.startsWith("emi_status_") || key.startsWith("emi_rescheduled_")) && value is String -> editor.putString(key, value)
+                }
+            }
+        }
+        editor.apply()
+        // The restored SharedPreferences schedule is the compatibility source of truth.
+        // Remove old Room rows so a pre-restore schedule cannot override restored loan data.
+        financeScope.launch {
+            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val dao = LoanScheduleDatabase.get(context).loanScheduleDao()
+                (loans.map { it.lender } + restoredLoans.map { it.lender }).distinctBy { it.lowercase(Locale.ROOT) }.forEach { lender ->
+                    dao.deleteLoanSchedules(lender)
+                    dao.deleteLoanDocuments(lender)
+                }
+            }
+        }
+        transactions = restoredTransactions
+        loans = restoredLoans
+        moneyNotes = loadMoneyNotes(context)
+        categoryRefreshToken++
+        applyAppearance(
+            prefs.getString("appearance_theme", "Light") ?: "Light",
+            prefs.getString("appearance_accent", "Green") ?: "Green",
+            prefs.getString("appearance_layout", "Comfortable") ?: "Comfortable",
+            prefs.getString("appearance_font_size", "Medium") ?: "Medium",
+            systemDark,
+            prefs.getString("appearance_custom_accent", "#9333EA") ?: "#9333EA"
+        )
+        saveTransactions(context, transactions)
+        saveLoans(context, loans)
+        importMessage = "Backup restored: ${transactions.size} transactions, ${loans.size} loans, ${moneyNotes.size} money notes, categories, tags and supported settings."
+
+        }.onFailure { importMessage = it.message ?: "Backup restore failed." }
+    }
     val backupRestoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) runCatching {
             val raw = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                 ?: error("Could not read the selected backup.")
-            val root = JSONObject(raw)
-            require(root.optString("format") == "open-finance-backup") { "This file is not an Open Finance backup." }
-            val restoredTransactions = root.getJSONArray("transactions").let { a ->
-                (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
-                    Transaction(j.getString("title"), j.optString("category", "Other"), j.optString("date", "Today"),
-                        j.getLong("amount"), j.optBoolean("income"), j.optString("source"), j.optString("notificationKey"),
-                        j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""), j.optString("loanLender", ""), j.optString("emiInstallmentDate", ""), j.optString("transactionKind", ""), j.optLong("loanPrincipalReduction", 0L),
-                        j.optLong("loanInterestPortion", 0L), j.optBoolean("loanPaymentCounted", false),
-                        j.optBoolean("loanAllocationRecorded", false), j.optLong("loanReceiptPrincipalAdded", 0L),
-                        j.optString("categoryOrigin", CategoryOrigin.UNKNOWN), j.optString("loanId", ""))
-                } }
-            }
-            val restoredLoans = root.optJSONArray("loans")?.let { a ->
-                (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
-                    Loan(j.getString("lender"), j.getLong("balance"), j.getLong("emi"), j.optString("due", "Not set"), j.optDouble("annualRate", 0.0), j.optLong("originalPrincipal", j.getLong("balance")), j.optLong("paymentsMade", 0L), j.optLong("totalPayments", 0L), j.optString("borrowerName", ""), j.optString("agreementNumber", ""),
-                        j.optString("loanNumber", ""), j.optString("startDate", j.optString("due", "")), j.optString("id", ""))
-                } }
-            } ?: emptyList()
-            val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
-            val editor = prefs.edit()
-            root.optJSONArray("moneyNotes")?.let { editor.putString("money_notes", it.toString()) }
-            root.optJSONArray("categories")?.let { editor.putString("custom_categories", it.toString()) }
-            root.optJSONArray("tags")?.let { editor.putString("custom_tags", it.toString()) }
-            root.optJSONArray("creditCards")?.let { editor.putString("cc_cards_v2", it.toString()) }
-            root.optJSONArray("creditCardBills")?.let { editor.putString("cc_bills_v2", it.toString()) }
-            root.optJSONArray("creditCardPayments")?.let { editor.putString("cc_payments_v2", it.toString()) }
-            if (root.has("creditCards") || root.has("creditCardBills") || root.has("creditCardPayments")) {
-                editor.putBoolean("cc_amounts_are_paise", root.optString("creditCardAmountUnit", "RUPEES") == "PAISE")
-            }
-            root.optJSONObject("creditCardReminders")?.let { reminders ->
-                if (reminders.has("7Days")) editor.putBoolean("cc_reminder_7", reminders.optBoolean("7Days", true))
-                if (reminders.has("3Days")) editor.putBoolean("cc_reminder_3", reminders.optBoolean("3Days", true))
-                if (reminders.has("1Day")) editor.putBoolean("cc_reminder_1", reminders.optBoolean("1Day", true))
-            }
-            if (root.has("appearanceTheme")) editor.putString("appearance_theme", root.optString("appearanceTheme", "Light"))
-            if (root.has("appearanceCurrency")) editor.putString("appearance_currency", root.optString("appearanceCurrency", "INR (₹)"))
-            if (root.has("appearanceAccent")) editor.putString("appearance_accent", root.optString("appearanceAccent", "Green"))
-            if (root.has("appearanceLayout")) editor.putString("appearance_layout", root.optString("appearanceLayout", "Comfortable"))
-            if (root.has("appearanceFontSize")) editor.putString("appearance_font_size", root.optString("appearanceFontSize", "Medium"))
-            if (root.has("appearanceCustomAccent")) editor.putString("appearance_custom_accent", root.optString("appearanceCustomAccent", "#9333EA"))
-            if (root.has("settingsBudgetAlerts")) editor.putBoolean("settings_budget_alerts", root.optBoolean("settingsBudgetAlerts", true))
-            if (root.has("settingsEmiReminders")) editor.putBoolean("settings_emi_reminders", root.optBoolean("settingsEmiReminders", true))
-            if (root.has("settingsMonthlySummary")) editor.putBoolean("settings_monthly_summary", root.optBoolean("settingsMonthlySummary", false))
-            if (root.has("userReportedCreditScore")) {
-                val restoredScore = root.optInt("userReportedCreditScore", 0)
-                if (restoredScore in 300..900) editor.putInt("user_reported_credit_score", restoredScore)
-                else editor.remove("user_reported_credit_score")
-            }
-            root.optJSONObject("monthlyCategoryBudgets")?.let { editor.putString("monthly_category_budgets", it.toString()) }
-            prefs.all.keys.filter { key -> key.startsWith("bank_schedule_") || key.startsWith("loan_document_metadata_") || key.startsWith("emi_status_") || key.startsWith("emi_amount_") || key.startsWith("emi_rescheduled_") }.forEach { editor.remove(it) }
-            root.optJSONObject("bankSchedules")?.let { schedules ->
-                val keys = schedules.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    if (key.startsWith("bank_schedule_")) editor.putString(key, schedules.optJSONArray(key)?.toString() ?: "[]")
-                }
-            }
-            root.optJSONObject("loanDocumentMetadata")?.let { metadata ->
-                val keys = metadata.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    if (key.startsWith("loan_document_metadata_")) editor.putString(key, metadata.optString(key, "{}"))
-                }
-            }
-            root.optJSONObject("emiPreferences")?.let { saved ->
-                val keys = saved.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    val value = saved.opt(key)
-                    when {
-                        key.startsWith("emi_amount_") && value is Number -> editor.putLong(key, value.toLong())
-                        (key.startsWith("emi_status_") || key.startsWith("emi_rescheduled_")) && value is String -> editor.putString(key, value)
-                    }
-                }
-            }
-            editor.apply()
-            // The restored SharedPreferences schedule is the compatibility source of truth.
-            // Remove old Room rows so a pre-restore schedule cannot override restored loan data.
-            financeScope.launch {
-                withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val dao = LoanScheduleDatabase.get(context).loanScheduleDao()
-                    (loans.map { it.lender } + restoredLoans.map { it.lender }).distinctBy { it.lowercase(Locale.ROOT) }.forEach { lender ->
-                        dao.deleteLoanSchedules(lender)
-                        dao.deleteLoanDocuments(lender)
-                    }
-                }
-            }
-            transactions = restoredTransactions
-            loans = restoredLoans
-            moneyNotes = loadMoneyNotes(context)
-            categoryRefreshToken++
-            applyAppearance(
-                prefs.getString("appearance_theme", "Light") ?: "Light",
-                prefs.getString("appearance_accent", "Green") ?: "Green",
-                prefs.getString("appearance_layout", "Comfortable") ?: "Comfortable",
-                prefs.getString("appearance_font_size", "Medium") ?: "Medium",
-                systemDark,
-                prefs.getString("appearance_custom_accent", "#9333EA") ?: "#9333EA"
-            )
-            saveTransactions(context, transactions)
-            saveLoans(context, loans)
-            importMessage = "Backup restored: ${transactions.size} transactions, ${loans.size} loans, ${moneyNotes.size} money notes, categories, tags and supported settings."
+            restoreBackupJson(raw)
         }.onFailure { importMessage = it.message ?: "Backup restore failed." }
     }
     val income = transactions.filter { it.income }.sumOf { it.amount }
@@ -1309,6 +1317,38 @@ private fun FinanceApp() {
                         },
                         oneDriveConnected = oneDriveConnected,
                         oneDriveDeviceCode = oneDriveDeviceCode,
+                        oneDriveBackupItems = oneDriveBackupItems,
+                        isLoadingOneDriveBackups = isLoadingOneDriveBackups,
+                        onLoadOneDriveBackups = {
+                            financeScope.launch {
+                                isLoadingOneDriveBackups = true
+                                try {
+                                    oneDriveBackupItems = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        OneDriveGraph.listBackups(context)
+                                    }
+                                    if (oneDriveBackupItems.isEmpty()) driveStatus = "No OneDrive backups found yet."
+                                } catch (error: Exception) {
+                                    driveStatus = "Could not load OneDrive backups: " + (error.message ?: "unknown error")
+                                } finally {
+                                    isLoadingOneDriveBackups = false
+                                }
+                            }
+                        },
+                        onRestoreOneDriveBackup = { item ->
+                            financeScope.launch {
+                                driveStatus = "Downloading " + item.name + " from OneDrive..."
+                                try {
+                                    val raw = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        OneDriveGraph.downloadBackup(context, item.id)
+                                    }
+                                    restoreBackupJson(raw)
+                                    driveStatus = "OneDrive backup restored: " + item.name
+                                    drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
+                                } catch (error: Exception) {
+                                    driveStatus = "OneDrive restore failed: " + (error.message ?: "unknown error")
+                                }
+                            }
+                        },
                         onOpenOneDriveSignIn = {
                             oneDriveDeviceCode?.let { code ->
                                 context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(code.verificationUri)))
@@ -4661,6 +4701,10 @@ private fun BackupSecurityScreen(
     onDisconnectOneDrive: () -> Unit,
     oneDriveConnected: Boolean,
     oneDriveDeviceCode: OneDriveDeviceCode?,
+    oneDriveBackupItems: List<OneDriveBackupItem>,
+    isLoadingOneDriveBackups: Boolean,
+    onLoadOneDriveBackups: () -> Unit,
+    onRestoreOneDriveBackup: (OneDriveBackupItem) -> Unit,
     onOpenOneDriveSignIn: () -> Unit,
     onCancelOneDriveSignIn: () -> Unit,
     onChooseDeviceFolder: () -> Unit,
@@ -4677,6 +4721,7 @@ private fun BackupSecurityScreen(
     var backupDestination by remember { mutableStateOf(backupPreferences.getString("automatic_backup_destination", "device") ?: "device") }
     var backupScheduleMessage by remember { mutableStateOf("") }
     var backupDisplayStatus by remember { mutableStateOf(driveStatus) }
+    var showOneDriveRestoreDialog by remember { mutableStateOf(false) }
     LaunchedEffect(driveStatus) { backupDisplayStatus = driveStatus }
     LaunchedEffect(Unit) {
         backupDisplayStatus = backupPreferences.getString("drive_backup_status", driveStatus) ?: driveStatus
@@ -4762,6 +4807,7 @@ private fun BackupSecurityScreen(
                         else -> {
                             if (oneDriveConnected) {
                                 OutlinedButton(onClick = onDisconnectOneDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.CloudDone, null); Spacer(Modifier.width(8.dp)); Text("Disconnect OneDrive") }
+                                OutlinedButton(onClick = { showOneDriveRestoreDialog = true; onLoadOneDriveBackups() }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Restore, null); Spacer(Modifier.width(8.dp)); Text("Restore from OneDrive") }
                             } else {
                                 OutlinedButton(onClick = onConnectOneDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Cloud, null); Spacer(Modifier.width(8.dp)); Text("Connect OneDrive") }
                             }
@@ -4845,6 +4891,42 @@ private fun BackupSecurityScreen(
                 }
             }
         }
+    }
+    if (showOneDriveRestoreDialog) {
+        AlertDialog(
+            onDismissRequest = { showOneDriveRestoreDialog = false },
+            title = { Text("Restore from OneDrive") },
+            text = {
+                Column(
+                    modifier = Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (isLoadingOneDriveBackups) {
+                        CircularProgressIndicator()
+                        Text("Loading your OneDrive backups...")
+                    } else if (oneDriveBackupItems.isEmpty()) {
+                        Text("No MoneyLog backups were found in your OneDrive backup folder.")
+                    } else {
+                        oneDriveBackupItems.forEach { item ->
+                            TextButton(
+                                onClick = {
+                                    showOneDriveRestoreDialog = false
+                                    onRestoreOneDriveBackup(item)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(Modifier.fillMaxWidth()) {
+                                    Text(item.name, color = Ink, fontWeight = FontWeight.SemiBold)
+                                    Text(item.modified, color = Muted, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { onLoadOneDriveBackups() }) { Text("Refresh") } },
+            dismissButton = { TextButton(onClick = { showOneDriveRestoreDialog = false }) { Text("Close") } }
+        )
     }
     if (oneDriveDeviceCode != null) {
         AlertDialog(
