@@ -5,6 +5,9 @@ plugins {
     id("org.jetbrains.kotlin.kapt")
 }
 
+val microsoftClientId = providers.gradleProperty("MICROSOFT_CLIENT_ID").orElse("").get()
+val escapedMicrosoftClientId = microsoftClientId.replace("\\", "\\\\").replace("\"", "\\\"")
+
 val moneyLogKeystorePath = System.getenv("MONEYLOG_KEYSTORE_PATH")
 val moneyLogKeystorePassword = System.getenv("MONEYLOG_KEYSTORE_PASSWORD")
 val moneyLogKeyAlias = System.getenv("MONEYLOG_KEY_ALIAS")
@@ -23,6 +26,7 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "1.0.1"
+        buildConfigField("String", "MICROSOFT_CLIENT_ID", "\"$escapedMicrosoftClientId\"")
     }
     signingConfigs {
         if (hasMoneyLogSigning) {
@@ -41,7 +45,7 @@ android {
             }
         }
     }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

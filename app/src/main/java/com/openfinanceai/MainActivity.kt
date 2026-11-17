@@ -620,18 +620,30 @@ private fun scheduleAutomaticBackup(context: Context, updateExisting: Boolean = 
         return "Automatic backup is off."
     }
     val destination = prefs.getString("automatic_backup_destination", "device") ?: "device"
-    val folderKey = if (destination == "drive") "drive_backup_tree_uri" else "device_backup_tree_uri"
-    if (prefs.getString(folderKey, null).isNullOrBlank()) {
+    val connected = when (destination) {
+        "drive" -> !prefs.getString("drive_backup_tree_uri", null).isNullOrBlank()
+        "onedrive" -> OneDriveAuth.hasRefreshToken(context) && BuildConfig.MICROSOFT_CLIENT_ID.isNotBlank()
+        else -> !prefs.getString("device_backup_tree_uri", null).isNullOrBlank()
+    }
+    if (!connected) {
         workManager.cancelUniqueWork(workName)
-        return if (destination == "drive") "Connect a Google Drive folder to start automatic backup."
-            else "Choose a device backup folder to start automatic backup."
+        return when (destination) {
+            "drive" -> "Connect a Google Drive folder to start automatic backup."
+            "onedrive" -> "Connect OneDrive to start automatic backup."
+            else -> "Choose a device backup folder to start automatic backup."
+        }
     }
     val frequency = prefs.getString("automatic_backup_frequency", "daily") ?: "daily"
     val interval = when (frequency) { "weekly" -> 7L; "monthly" -> 30L; else -> 1L }
-    val request = androidx.work.PeriodicWorkRequestBuilder<GoogleDriveBackupWorker>(interval, java.util.concurrent.TimeUnit.DAYS).build()
+    val workerClass = if (destination == "onedrive") OneDriveBackupWorker::class.java else GoogleDriveBackupWorker::class.java
+    val request = androidx.work.PeriodicWorkRequest.Builder(workerClass, interval, java.util.concurrent.TimeUnit.DAYS).build()
     val policy = if (updateExisting) androidx.work.ExistingPeriodicWorkPolicy.UPDATE else androidx.work.ExistingPeriodicWorkPolicy.KEEP
     workManager.enqueueUniquePeriodicWork(workName, policy, request)
-    val destinationLabel = if (destination == "drive") "Google Drive" else "private device storage"
+    val destinationLabel = when (destination) {
+        "drive" -> "Google Drive"
+        "onedrive" -> "OneDrive"
+        else -> "private device storage"
+    }
     return "Automatic backup scheduled ${frequency} to $destinationLabel."
 }
 
@@ -761,7 +773,9 @@ private fun FinanceApp() {
         androidx.work.WorkManager.getInstance(context).cancelUniqueWork("moneylog_drive_backup_daily")
     }
     val drivePrefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
-    var driveStatus by remember { mutableStateOf(drivePrefs.getString("drive_backup_status", "Google Drive backup is not connected") ?: "Google Drive backup is not connected") }
+    var driveStatus by remember { mutableStateOf(drivePrefs.getString("drive_backup_status", "No cloud backup connected yet.") ?: "No cloud backup connected yet.") }
+    var oneDriveConnected by remember { mutableStateOf(OneDriveAuth.hasRefreshToken(context)) }
+    var oneDriveDeviceCode by remember { mutableStateOf<OneDriveDeviceCode?>(null) }
     val driveFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) runCatching {
             val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -795,6 +809,59 @@ private fun FinanceApp() {
         } else {
             driveStatus = "Google Drive app is not installed. Choose a cloud folder using the available document picker."
             driveFolderPicker.launch(null)
+        }
+    }
+    fun beginOneDriveConnection() {
+        if (BuildConfig.MICROSOFT_CLIENT_ID.isBlank()) {
+            driveStatus = "OneDrive sign-in is ready, but this build still needs the Microsoft application Client ID."
+            return
+        }
+        financeScope.launch {
+            try {
+                val code = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    OneDriveAuth.requestDeviceCode(BuildConfig.MICROSOFT_CLIENT_ID)
+                }
+                oneDriveDeviceCode = code
+                driveStatus = "Enter the displayed code on Microsoft's sign-in page to connect OneDrive."
+            } catch (error: Exception) {
+                driveStatus = "Could not start OneDrive sign-in: " + (error.message ?: "unknown error")
+            }
+        }
+    }
+    LaunchedEffect(oneDriveDeviceCode) {
+        val pending = oneDriveDeviceCode ?: return@LaunchedEffect
+        var interval = pending.intervalSeconds.coerceAtLeast(5L)
+        val expiresAt = System.currentTimeMillis() + pending.expiresInSeconds * 1000L
+        while (System.currentTimeMillis() < expiresAt && oneDriveDeviceCode?.deviceCode == pending.deviceCode) {
+            kotlinx.coroutines.delay(interval * 1000L)
+            try {
+                val token = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    OneDriveAuth.pollForToken(BuildConfig.MICROSOFT_CLIENT_ID, pending.deviceCode)
+                }
+                if (token != null) {
+                    withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        OneDriveAuth.saveRefreshToken(context, token.refreshToken)
+                    }
+                    oneDriveConnected = true
+                    oneDriveDeviceCode = null
+                    driveStatus = "OneDrive connected. Your backup folder will be created automatically."
+                    drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
+                    scheduleAutomaticBackup(context, updateExisting = true)
+                    return@LaunchedEffect
+                }
+            } catch (error: Exception) {
+                if (error.message == "slow_down") {
+                    interval += 5L
+                } else {
+                    oneDriveDeviceCode = null
+                    driveStatus = "OneDrive sign-in failed: " + (error.message ?: "unknown error")
+                    return@LaunchedEffect
+                }
+            }
+        }
+        if (oneDriveDeviceCode?.deviceCode == pending.deviceCode) {
+            oneDriveDeviceCode = null
+            driveStatus = "The Microsoft sign-in code expired. Please connect OneDrive again."
         }
     }
     var transactions by remember {
@@ -1232,15 +1299,41 @@ private fun FinanceApp() {
                     "Backup & Export" -> BackupSecurityScreen(
                         onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
                         onConnectDrive = { openGoogleDriveForConnection() },
+                        onConnectOneDrive = { beginOneDriveConnection() },
+                        onDisconnectOneDrive = {
+                            OneDriveAuth.disconnect(context)
+                            oneDriveConnected = false
+                            driveStatus = "OneDrive disconnected."
+                            drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
+                            scheduleAutomaticBackup(context, updateExisting = true)
+                        },
+                        oneDriveConnected = oneDriveConnected,
+                        oneDriveDeviceCode = oneDriveDeviceCode,
+                        onOpenOneDriveSignIn = {
+                            oneDriveDeviceCode?.let { code ->
+                                context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(code.verificationUri)))
+                            }
+                        },
+                        onCancelOneDriveSignIn = { oneDriveDeviceCode = null },
                         onChooseDeviceFolder = { deviceFolderPicker.launch(null) },
                         onBackupNow = {
                             val destination = drivePrefs.getString("automatic_backup_destination", "device") ?: "device"
                             val folderKey = if (destination == "drive") "drive_backup_tree_uri" else "device_backup_tree_uri"
-                            if (drivePrefs.getString(folderKey, null).isNullOrBlank()) {
-                                driveStatus = if (destination == "drive") "Connect a Google Drive folder first." else "Choose a device backup folder first."
+                            val connected = when (destination) {
+                                "drive" -> !drivePrefs.getString(folderKey, null).isNullOrBlank()
+                                "onedrive" -> oneDriveConnected && BuildConfig.MICROSOFT_CLIENT_ID.isNotBlank()
+                                else -> !drivePrefs.getString(folderKey, null).isNullOrBlank()
+                            }
+                            if (!connected) {
+                                driveStatus = when (destination) {
+                                    "drive" -> "Connect a Google Drive folder first."
+                                    "onedrive" -> "Connect OneDrive first."
+                                    else -> "Choose a device backup folder first."
+                                }
                             } else {
                                 val workManager = androidx.work.WorkManager.getInstance(context)
-                                val request = androidx.work.OneTimeWorkRequestBuilder<GoogleDriveBackupWorker>().build()
+                                val workerClass = if (destination == "onedrive") OneDriveBackupWorker::class.java else GoogleDriveBackupWorker::class.java
+                                val request = androidx.work.OneTimeWorkRequest.Builder(workerClass).build()
                                 workManager.enqueueUniqueWork(
                                     "moneylog_manual_backup",
                                     androidx.work.ExistingWorkPolicy.REPLACE,
@@ -4564,6 +4657,12 @@ private fun CreditHealthScreen() {
 private fun BackupSecurityScreen(
     onExportBackup: () -> Unit,
     onConnectDrive: () -> Unit,
+    onConnectOneDrive: () -> Unit,
+    onDisconnectOneDrive: () -> Unit,
+    oneDriveConnected: Boolean,
+    oneDriveDeviceCode: OneDriveDeviceCode?,
+    onOpenOneDriveSignIn: () -> Unit,
+    onCancelOneDriveSignIn: () -> Unit,
     onChooseDeviceFolder: () -> Unit,
     onBackupNow: () -> Unit,
     driveStatus: String,
@@ -4622,17 +4721,20 @@ private fun BackupSecurityScreen(
                     }
                     Text("Destination", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("device" to "Device", "drive" to "Google Drive").forEach { (value, label) ->
+                        listOf("device" to "Device", "drive" to "Google Drive", "onedrive" to "OneDrive").forEach { (value, label) ->
                             val selected = backupDestination == value
-                            Surface(onClick = { backupDestination = value; backupPreferences.edit().putString("automatic_backup_destination", value).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext, updateExisting = true) },
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                onClick = { backupDestination = value; backupPreferences.edit().putString("automatic_backup_destination", value).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext, updateExisting = true) },
                                 color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
                                 border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
-                                Text(label, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
-                                    color = if (selected) Color.White else Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(label, modifier = Modifier.padding(horizontal = 5.dp, vertical = 10.dp),
+                                    color = if (selected) Color.White else Ink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
                             }
                         }
                     }
-                    Text(if (!automaticBackup) "Automatic backup is off." else "Enabled: ${backupFrequency} · ${if (backupDestination == "device") "Local device" else "Google Drive"}",
+                    val destinationLabel = when (backupDestination) { "drive" -> "Google Drive"; "onedrive" -> "OneDrive"; else -> "Local device" }
+                    Text(if (!automaticBackup) "Automatic backup is off." else "Enabled: ${backupFrequency} · $destinationLabel",
                         color = Muted, fontSize = 11.sp)
                     Text(backupScheduleMessage.ifBlank { if (automaticBackup) "Automatic backup schedule is active." else "Enable automatic backup to create recurring backups." }, color = Muted, fontSize = 11.sp)
                 }
@@ -4645,15 +4747,28 @@ private fun BackupSecurityScreen(
                         Icon(Icons.Default.CloudSync, null, tint = IncomeGreen, modifier = Modifier.size(26.dp))
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(if (backupDestination == "drive") "Google Drive automatic backup" else "Device automatic backup", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(when (backupDestination) { "drive" -> "Google Drive automatic backup"; "onedrive" -> "OneDrive automatic backup"; else -> "Device automatic backup" }, color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             Text(backupDisplayStatus, color = Muted, fontSize = 12.sp)
                         }
                     }
-                    Text(if (backupDestination == "drive") "Choose a private Google Drive folder for cloud backups. The frequency selected above controls the schedule; MoneyLog keeps up to 30 recent backup files in that folder." else "Choose a folder on this device. MoneyLog creates dated JSON backups there using your selected schedule and keeps up to 30 recent files.", color = Muted, fontSize = 12.sp)
-                    if (backupDestination == "device") {
-                        OutlinedButton(onClick = onChooseDeviceFolder, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Choose device backup folder") }
-                    } else {
-                        OutlinedButton(onClick = onConnectDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Connect Google Drive folder") }
+                    Text(when (backupDestination) {
+                        "drive" -> "Google Drive backups use the folder you select. MoneyLog keeps the latest 30 backup files."
+                        "onedrive" -> "OneDrive backups are saved in a private MoneyLog Backups folder. MoneyLog keeps the latest 30 backup files."
+                        else -> "Choose a folder on this device. MoneyLog creates dated JSON backups there and keeps the latest 30 files."
+                    }, color = Muted, fontSize = 12.sp)
+                    when (backupDestination) {
+                        "device" -> OutlinedButton(onClick = onChooseDeviceFolder, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Choose device backup folder") }
+                        "drive" -> OutlinedButton(onClick = onConnectDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Connect Google Drive folder") }
+                        else -> {
+                            if (oneDriveConnected) {
+                                OutlinedButton(onClick = onDisconnectOneDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.CloudDone, null); Spacer(Modifier.width(8.dp)); Text("Disconnect OneDrive") }
+                            } else {
+                                OutlinedButton(onClick = onConnectOneDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Cloud, null); Spacer(Modifier.width(8.dp)); Text("Connect OneDrive") }
+                            }
+                            if (BuildConfig.MICROSOFT_CLIENT_ID.isBlank()) {
+                                Text("OneDrive sign-in requires the Microsoft application Client ID to be added to the build configuration.", color = Muted, fontSize = 11.sp)
+                            }
+                        }
                     }
                     Button(onClick = onBackupNow, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Icon(Icons.Default.CloudUpload, null); Spacer(Modifier.width(8.dp)); Text("Back up now") }
                 }
@@ -4725,11 +4840,26 @@ private fun BackupSecurityScreen(
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text("Your data stays on your device", color = Teal, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text("Google Drive backups are saved only after you connect a folder and grant access. Exported files contain sensitive financial information—store them somewhere private.", color = Ink, fontSize = 12.sp)
+                        Text("Cloud backups are uploaded only after you connect the selected account. Backup files contain sensitive financial information and are not encrypted by MoneyLog; keep your cloud account protected.", color = Ink, fontSize = 12.sp)
                     }
                 }
             }
         }
+    }
+    if (oneDriveDeviceCode != null) {
+        AlertDialog(
+            onDismissRequest = onCancelOneDriveSignIn,
+            title = { Text("Connect OneDrive") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Open Microsoft's sign-in page and enter this one-time code:")
+                    Text(oneDriveDeviceCode.userCode, color = Green, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text(oneDriveDeviceCode.message, color = Muted, fontSize = 12.sp)
+                }
+            },
+            confirmButton = { TextButton(onClick = onOpenOneDriveSignIn) { Text("Open Microsoft sign-in") } },
+            dismissButton = { TextButton(onClick = onCancelOneDriveSignIn) { Text("Cancel") } }
+        )
     }
 }
 @Composable

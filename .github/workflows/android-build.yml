@@ -17,6 +17,7 @@ jobs:
       MONEYLOG_KEYSTORE_PASSWORD: ${{ secrets.MONEYLOG_KEYSTORE_PASSWORD }}
       MONEYLOG_KEY_ALIAS: ${{ secrets.MONEYLOG_KEY_ALIAS }}
       MONEYLOG_KEY_PASSWORD: ${{ secrets.MONEYLOG_KEY_PASSWORD }}
+      MICROSOFT_CLIENT_ID: ${{ vars.MICROSOFT_CLIENT_ID }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -32,7 +33,7 @@ jobs:
       - name: Verify Gradle installation
         run: gradle --version
       - name: Run category and tag persistence tests
-        run: gradle --no-daemon --stacktrace --warning-mode all testDebugUnitTest
+        run: gradle --no-daemon --stacktrace --warning-mode all -PMICROSOFT_CLIENT_ID="$MICROSOFT_CLIENT_ID" testDebugUnitTest
       - name: Prepare persistent signing key
         if: env.MONEYLOG_KEYSTORE_BASE64 != '' && env.MONEYLOG_KEYSTORE_PASSWORD != '' && env.MONEYLOG_KEY_ALIAS != '' && env.MONEYLOG_KEY_PASSWORD != ''
         shell: bash
@@ -44,10 +45,10 @@ jobs:
           echo "MONEYLOG_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
       - name: Build persistently signed release APK
         if: env.MONEYLOG_KEYSTORE_BASE64 != '' && env.MONEYLOG_KEYSTORE_PASSWORD != '' && env.MONEYLOG_KEY_ALIAS != '' && env.MONEYLOG_KEY_PASSWORD != ''
-        run: gradle --no-daemon --stacktrace --warning-mode all assembleRelease
+        run: gradle --no-daemon --stacktrace --warning-mode all -PMICROSOFT_CLIENT_ID="$MICROSOFT_CLIENT_ID" assembleRelease
       - name: Build debug APK (fallback when signing secrets are not configured)
         if: env.MONEYLOG_KEYSTORE_BASE64 == '' || env.MONEYLOG_KEYSTORE_PASSWORD == '' || env.MONEYLOG_KEY_ALIAS == '' || env.MONEYLOG_KEY_PASSWORD == ''
-        run: gradle --no-daemon --stacktrace --warning-mode all assembleDebug
+        run: gradle --no-daemon --stacktrace --warning-mode all -PMICROSOFT_CLIENT_ID="$MICROSOFT_CLIENT_ID" assembleDebug
       - name: Report release APK
         if: success() && env.MONEYLOG_KEYSTORE_BASE64 != '' && env.MONEYLOG_KEYSTORE_PASSWORD != '' && env.MONEYLOG_KEY_ALIAS != '' && env.MONEYLOG_KEY_PASSWORD != ''
         run: |
