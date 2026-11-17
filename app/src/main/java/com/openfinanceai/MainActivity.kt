@@ -952,6 +952,7 @@ private fun FinanceApp() {
     }
     val backupExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) runCatching {
+            CreditCardBills.read(context)
             val root = JSONObject().put("format", "open-finance-backup").put("version", 1)
             val transactionArray = JSONArray()
             transactions.forEach { t -> transactionArray.put(JSONObject()
@@ -997,6 +998,7 @@ private fun FinanceApp() {
                 .put("creditCards", runCatching { JSONArray(prefs.getString("cc_cards_v2", "[]") ?: "[]") }.getOrDefault(JSONArray()))
                 .put("creditCardBills", runCatching { JSONArray(prefs.getString("cc_bills_v2", "[]") ?: "[]") }.getOrDefault(JSONArray()))
                 .put("creditCardPayments", runCatching { JSONArray(prefs.getString("cc_payments_v2", "[]") ?: "[]") }.getOrDefault(JSONArray()))
+                .put("creditCardAmountUnit", "PAISE")
                 .put("creditCardReminders", JSONObject()
                     .put("7Days", prefs.getBoolean("cc_reminder_7", true))
                     .put("3Days", prefs.getBoolean("cc_reminder_3", true))
@@ -1046,6 +1048,9 @@ private fun FinanceApp() {
             root.optJSONArray("creditCards")?.let { editor.putString("cc_cards_v2", it.toString()) }
             root.optJSONArray("creditCardBills")?.let { editor.putString("cc_bills_v2", it.toString()) }
             root.optJSONArray("creditCardPayments")?.let { editor.putString("cc_payments_v2", it.toString()) }
+            if (root.has("creditCards") || root.has("creditCardBills") || root.has("creditCardPayments")) {
+                editor.putBoolean("cc_amounts_are_paise", root.optString("creditCardAmountUnit", "RUPEES") == "PAISE")
+            }
             root.optJSONObject("creditCardReminders")?.let { reminders ->
                 if (reminders.has("7Days")) editor.putBoolean("cc_reminder_7", reminders.optBoolean("7Days", true))
                 if (reminders.has("3Days")) editor.putBoolean("cc_reminder_3", reminders.optBoolean("3Days", true))

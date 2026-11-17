@@ -17,6 +17,7 @@ import java.util.Locale
  */
 class GoogleDriveBackupWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): Result {
+        CreditCardBills.read(applicationContext)
         val prefs = applicationContext.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE)
         val destination = prefs.getString("automatic_backup_destination", "device") ?: "device"
         val folderKey = if (destination == "drive") "drive_backup_tree_uri" else "device_backup_tree_uri"
@@ -41,6 +42,7 @@ class GoogleDriveBackupWorker(context: Context, params: WorkerParameters) : Work
                 .put("creditCards", JSONArray(prefs.getString("cc_cards_v2", "[]") ?: "[]"))
                 .put("creditCardBills", JSONArray(prefs.getString("cc_bills_v2", "[]") ?: "[]"))
                 .put("creditCardPayments", JSONArray(prefs.getString("cc_payments_v2", "[]") ?: "[]"))
+                .put("creditCardAmountUnit", "PAISE")
                 .put("creditCardReminders", JSONObject()
                     .put("7Days", prefs.getBoolean("cc_reminder_7", true))
                     .put("3Days", prefs.getBoolean("cc_reminder_3", true))

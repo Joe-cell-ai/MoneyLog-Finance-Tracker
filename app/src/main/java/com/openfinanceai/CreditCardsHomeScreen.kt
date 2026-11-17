@@ -39,7 +39,32 @@ internal data class CCData(val cards:List<CCAccount>,val bills:List<CCStatement>
 internal object CreditCardBills {
  private const val P="open_finance_data"
  private fun array(c:Context,k:String)=runCatching{JSONArray(c.getSharedPreferences(P,0).getString(k,"[]")?:"[]")}.getOrElse{JSONArray()}
+ private fun migrateAmountsToPaise(c:Context){
+  val prefs=c.getSharedPreferences(P,0)
+  if(prefs.getBoolean("cc_amounts_are_paise",false))return
+  val bills=array(c,"cc_bills_v2")
+  for(i in 0 until bills.length()){
+   val bill=bills.optJSONObject(i)?:continue
+   listOf("total","minimum","paid").forEach{field->
+    if(bill.has(field)){
+     val value=bill.optLong(field)
+     bill.put(field,if(value<=0L)value else value.coerceAtMost(Long.MAX_VALUE/100L)*100L)
+    }
+   }
+  }
+  val payments=array(c,"cc_payments_v2")
+  for(i in 0 until payments.length()){
+   val payment=payments.optJSONObject(i)?:continue
+   if(payment.has("amount")){
+    val value=payment.optLong("amount")
+    payment.put("amount",if(value<=0L)value else value.coerceAtMost(Long.MAX_VALUE/100L)*100L)
+   }
+  }
+  prefs.edit().putString("cc_bills_v2",bills.toString()).putString("cc_payments_v2",payments.toString())
+   .putBoolean("cc_amounts_are_paise",true).apply()
+ }
  fun read(c:Context):CCData {
+  migrateAmountsToPaise(c)
   val a=array(c,"cc_cards_v2");val b=array(c,"cc_bills_v2");val p=array(c,"cc_payments_v2")
   val cards=(0 until a.length()).mapNotNull{a.optJSONObject(it)?.let{j->CCAccount(j.optString("id"),j.optString("bank"),j.optString("nickname"),j.optString("last4"),j.optString("network"))}}
   val bills=(0 until b.length()).mapNotNull{b.optJSONObject(it)?.let{j->CCStatement(j.optString("id"),j.optString("cardId"),j.optString("date"),j.optString("due"),j.optLong("total"),j.optLong("minimum"),j.optLong("paid"))}}
@@ -50,7 +75,7 @@ internal object CreditCardBills {
   val cards=JSONArray().apply{d.cards.forEach{put(JSONObject().put("id",it.id).put("bank",it.bank).put("nickname",it.nickname).put("last4",it.last4).put("network",it.network))}}
   val bills=JSONArray().apply{d.bills.forEach{put(JSONObject().put("id",it.id).put("cardId",it.cardId).put("date",it.date).put("due",it.due).put("total",it.total).put("minimum",it.minimum).put("paid",it.paid))}}
   val pays=JSONArray().apply{d.payments.forEach{put(JSONObject().put("id",it.id).put("statementId",it.statementId).put("amount",it.amount).put("date",it.date).put("method",it.method).put("source",it.source).put("reference",it.reference))}}
-  c.getSharedPreferences(P,0).edit().putString("cc_cards_v2",cards.toString()).putString("cc_bills_v2",bills.toString()).putString("cc_payments_v2",pays.toString()).apply()
+  c.getSharedPreferences(P,0).edit().putString("cc_cards_v2",cards.toString()).putString("cc_bills_v2",bills.toString()).putString("cc_payments_v2",pays.toString()).putBoolean("cc_amounts_are_paise",true).apply()
  }
  fun addCard(c:Context,bank:String,nick:String,last4:String,network:String){val d=read(c);if(d.cards.any{it.bank.equals(bank,true)&&it.last4==last4})return;save(c,d.copy(cards=d.cards+CCAccount(UUID.randomUUID().toString(),bank,nick,last4,network)))}
  fun addBill(c:Context,card:String,date:String,due:String,total:Long,min:Long):Boolean{
