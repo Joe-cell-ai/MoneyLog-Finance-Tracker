@@ -30,4 +30,12 @@ class CreditCardSmsParserTest {
         val sms = "Payment failed for Axis Bank Credit Card XX3810. INR 500.00"
         assertNull(CreditCardSmsParser.parsePayment(sms))
     }
+    @Test
+    fun parsesSuccessfulCreditCardPaymentWithoutLosingPaise() {
+        val sms = "Payment of INR 1,250.75 received for Axis Bank Credit Card XX3810"
+        val payment = CreditCardSmsParser.parsePayment(sms)
+        assertEquals("3810", payment?.last4)
+        assertEquals(125075L, payment?.amountPaise)
+    }
+
 }

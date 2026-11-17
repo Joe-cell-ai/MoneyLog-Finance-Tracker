@@ -58,7 +58,7 @@ internal object CreditCardBills {
   val d=read(c)
   val existing=d.bills.firstOrNull{it.cardId==card&&it.due==due}
   if(existing!=null){
-   if(existing.date==date&&existing.total==total&&existing.minimum==min)return false
+   if(existing.total==total&&existing.minimum==min)return false
    val updated=d.bills.map{if(it.id==existing.id)it.copy(date=date,total=total,minimum=min,paid=existing.paid.coerceAtMost(total))else it}
    save(c,d.copy(bills=updated));CreditCardReminderScheduler.schedule(c);return true
   }

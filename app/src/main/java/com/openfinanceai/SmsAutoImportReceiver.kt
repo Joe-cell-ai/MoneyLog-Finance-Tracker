@@ -14,8 +14,11 @@ class SmsAutoImportReceiver : BroadcastReceiver() {
   var changed=false
   groups.forEach{(key,parts)->
    val body=parts.sortedBy{it.indexOnIcc}.joinToString(""){it.messageBody.orEmpty()}
-   if(CreditCardBills.ingestSms(context,body))changed=true
-   else if(SmsTransactionImporter.import(context,key.first,key.second,body))changed=true
+   val isCreditCardMessage =
+    CreditCardSmsParser.parseStatement(body)!=null || CreditCardSmsParser.parsePayment(body)!=null
+   if(isCreditCardMessage){
+    if(CreditCardBills.ingestSms(context,body))changed=true
+   }else if(SmsTransactionImporter.import(context,key.first,key.second,body))changed=true
   }
   if(changed)context.sendBroadcast(Intent(ACTION_IMPORTED).setPackage(context.packageName))
  }
