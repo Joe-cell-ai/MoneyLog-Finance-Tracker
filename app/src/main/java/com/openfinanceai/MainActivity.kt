@@ -620,18 +620,30 @@ private fun scheduleAutomaticBackup(context: Context, updateExisting: Boolean = 
         return "Automatic backup is off."
     }
     val destination = prefs.getString("automatic_backup_destination", "device") ?: "device"
-    val folderKey = if (destination == "drive") "drive_backup_tree_uri" else "device_backup_tree_uri"
-    if (prefs.getString(folderKey, null).isNullOrBlank()) {
+    val connected = when (destination) {
+        "drive" -> !prefs.getString("drive_backup_tree_uri", null).isNullOrBlank()
+        "onedrive" -> OneDriveAuth.hasRefreshToken(context) && BuildConfig.MICROSOFT_CLIENT_ID.isNotBlank()
+        else -> !prefs.getString("device_backup_tree_uri", null).isNullOrBlank()
+    }
+    if (!connected) {
         workManager.cancelUniqueWork(workName)
-        return if (destination == "drive") "Connect a Google Drive folder to start automatic backup."
-            else "Choose a device backup folder to start automatic backup."
+        return when (destination) {
+            "drive" -> "Connect a Google Drive folder to start automatic backup."
+            "onedrive" -> "Connect OneDrive to start automatic backup."
+            else -> "Choose a device backup folder to start automatic backup."
+        }
     }
     val frequency = prefs.getString("automatic_backup_frequency", "daily") ?: "daily"
     val interval = when (frequency) { "weekly" -> 7L; "monthly" -> 30L; else -> 1L }
-    val request = androidx.work.PeriodicWorkRequestBuilder<GoogleDriveBackupWorker>(interval, java.util.concurrent.TimeUnit.DAYS).build()
+    val workerClass = if (destination == "onedrive") OneDriveBackupWorker::class.java else GoogleDriveBackupWorker::class.java
+    val request = androidx.work.PeriodicWorkRequest.Builder(workerClass, interval, java.util.concurrent.TimeUnit.DAYS).build()
     val policy = if (updateExisting) androidx.work.ExistingPeriodicWorkPolicy.UPDATE else androidx.work.ExistingPeriodicWorkPolicy.KEEP
     workManager.enqueueUniquePeriodicWork(workName, policy, request)
-    val destinationLabel = if (destination == "drive") "Google Drive" else "private device storage"
+    val destinationLabel = when (destination) {
+        "drive" -> "Google Drive"
+        "onedrive" -> "OneDrive"
+        else -> "private device storage"
+    }
     return "Automatic backup scheduled ${frequency} to $destinationLabel."
 }
 
@@ -761,7 +773,11 @@ private fun FinanceApp() {
         androidx.work.WorkManager.getInstance(context).cancelUniqueWork("moneylog_drive_backup_daily")
     }
     val drivePrefs = remember { context.getSharedPreferences("open_finance_data", Context.MODE_PRIVATE) }
-    var driveStatus by remember { mutableStateOf(drivePrefs.getString("drive_backup_status", "Google Drive backup is not connected") ?: "Google Drive backup is not connected") }
+    var driveStatus by remember { mutableStateOf(drivePrefs.getString("drive_backup_status", "No cloud backup connected yet.") ?: "No cloud backup connected yet.") }
+    var oneDriveConnected by remember { mutableStateOf(OneDriveAuth.hasRefreshToken(context)) }
+    var oneDriveDeviceCode by remember { mutableStateOf<OneDriveDeviceCode?>(null) }
+    var oneDriveBackupItems by remember { mutableStateOf<List<OneDriveBackupItem>>(emptyList()) }
+    var isLoadingOneDriveBackups by remember { mutableStateOf(false) }
     val driveFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) runCatching {
             val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -795,6 +811,59 @@ private fun FinanceApp() {
         } else {
             driveStatus = "Google Drive app is not installed. Choose a cloud folder using the available document picker."
             driveFolderPicker.launch(null)
+        }
+    }
+    fun beginOneDriveConnection() {
+        if (BuildConfig.MICROSOFT_CLIENT_ID.isBlank()) {
+            driveStatus = "OneDrive sign-in is ready, but this build still needs the Microsoft application Client ID."
+            return
+        }
+        financeScope.launch {
+            try {
+                val code = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    OneDriveAuth.requestDeviceCode(BuildConfig.MICROSOFT_CLIENT_ID)
+                }
+                oneDriveDeviceCode = code
+                driveStatus = "Enter the displayed code on Microsoft's sign-in page to connect OneDrive."
+            } catch (error: Exception) {
+                driveStatus = "Could not start OneDrive sign-in: " + (error.message ?: "unknown error")
+            }
+        }
+    }
+    LaunchedEffect(oneDriveDeviceCode) {
+        val pending = oneDriveDeviceCode ?: return@LaunchedEffect
+        var interval = pending.intervalSeconds.coerceAtLeast(5L)
+        val expiresAt = System.currentTimeMillis() + pending.expiresInSeconds * 1000L
+        while (System.currentTimeMillis() < expiresAt && oneDriveDeviceCode?.deviceCode == pending.deviceCode) {
+            kotlinx.coroutines.delay(interval * 1000L)
+            try {
+                val token = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    OneDriveAuth.pollForToken(BuildConfig.MICROSOFT_CLIENT_ID, pending.deviceCode)
+                }
+                if (token != null) {
+                    withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        OneDriveAuth.saveRefreshToken(context, token.refreshToken)
+                    }
+                    oneDriveConnected = true
+                    oneDriveDeviceCode = null
+                    driveStatus = "OneDrive connected. Your backup folder will be created automatically."
+                    drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
+                    scheduleAutomaticBackup(context, updateExisting = true)
+                    return@LaunchedEffect
+                }
+            } catch (error: Exception) {
+                if (error.message == "slow_down") {
+                    interval += 5L
+                } else {
+                    oneDriveDeviceCode = null
+                    driveStatus = "OneDrive sign-in failed: " + (error.message ?: "unknown error")
+                    return@LaunchedEffect
+                }
+            }
+        }
+        if (oneDriveDeviceCode?.deviceCode == pending.deviceCode) {
+            oneDriveDeviceCode = null
+            driveStatus = "The Microsoft sign-in code expired. Please connect OneDrive again."
         }
     }
     var transactions by remember {
@@ -1018,112 +1087,120 @@ private fun FinanceApp() {
                 ?: error("Could not write the backup file.")
         }.onFailure { importMessage = it.message ?: "Backup export failed." }
     }
+    fun restoreBackupJson(raw: String): Boolean {
+        val result = runCatching {
+        val root = JSONObject(raw)
+        require(root.optString("format") == "open-finance-backup") { "This file is not an Open Finance backup." }
+        val restoredTransactions = root.getJSONArray("transactions").let { a ->
+            (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
+                Transaction(j.getString("title"), j.optString("category", "Other"), j.optString("date", "Today"),
+                    j.getLong("amount"), j.optBoolean("income"), j.optString("source"), j.optString("notificationKey"),
+                    j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""), j.optString("loanLender", ""), j.optString("emiInstallmentDate", ""), j.optString("transactionKind", ""), j.optLong("loanPrincipalReduction", 0L),
+                    j.optLong("loanInterestPortion", 0L), j.optBoolean("loanPaymentCounted", false),
+                    j.optBoolean("loanAllocationRecorded", false), j.optLong("loanReceiptPrincipalAdded", 0L),
+                    j.optString("categoryOrigin", CategoryOrigin.UNKNOWN), j.optString("loanId", ""))
+            } }
+        }
+        val restoredLoans = root.optJSONArray("loans")?.let { a ->
+            (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
+                Loan(j.getString("lender"), j.getLong("balance"), j.getLong("emi"), j.optString("due", "Not set"), j.optDouble("annualRate", 0.0), j.optLong("originalPrincipal", j.getLong("balance")), j.optLong("paymentsMade", 0L), j.optLong("totalPayments", 0L), j.optString("borrowerName", ""), j.optString("agreementNumber", ""),
+                    j.optString("loanNumber", ""), j.optString("startDate", j.optString("due", "")), j.optString("id", ""))
+            } }
+        } ?: emptyList()
+        val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+        root.optJSONArray("moneyNotes")?.let { editor.putString("money_notes", it.toString()) }
+        root.optJSONArray("categories")?.let { editor.putString("custom_categories", it.toString()) }
+        root.optJSONArray("tags")?.let { editor.putString("custom_tags", it.toString()) }
+        root.optJSONArray("creditCards")?.let { editor.putString("cc_cards_v2", it.toString()) }
+        root.optJSONArray("creditCardBills")?.let { editor.putString("cc_bills_v2", it.toString()) }
+        root.optJSONArray("creditCardPayments")?.let { editor.putString("cc_payments_v2", it.toString()) }
+        if (root.has("creditCards") || root.has("creditCardBills") || root.has("creditCardPayments")) {
+            editor.putBoolean("cc_amounts_are_paise", root.optString("creditCardAmountUnit", "RUPEES") == "PAISE")
+        }
+        root.optJSONObject("creditCardReminders")?.let { reminders ->
+            if (reminders.has("7Days")) editor.putBoolean("cc_reminder_7", reminders.optBoolean("7Days", true))
+            if (reminders.has("3Days")) editor.putBoolean("cc_reminder_3", reminders.optBoolean("3Days", true))
+            if (reminders.has("1Day")) editor.putBoolean("cc_reminder_1", reminders.optBoolean("1Day", true))
+        }
+        if (root.has("appearanceTheme")) editor.putString("appearance_theme", root.optString("appearanceTheme", "Light"))
+        if (root.has("appearanceCurrency")) editor.putString("appearance_currency", root.optString("appearanceCurrency", "INR (₹)"))
+        if (root.has("appearanceAccent")) editor.putString("appearance_accent", root.optString("appearanceAccent", "Green"))
+        if (root.has("appearanceLayout")) editor.putString("appearance_layout", root.optString("appearanceLayout", "Comfortable"))
+        if (root.has("appearanceFontSize")) editor.putString("appearance_font_size", root.optString("appearanceFontSize", "Medium"))
+        if (root.has("appearanceCustomAccent")) editor.putString("appearance_custom_accent", root.optString("appearanceCustomAccent", "#9333EA"))
+        if (root.has("settingsBudgetAlerts")) editor.putBoolean("settings_budget_alerts", root.optBoolean("settingsBudgetAlerts", true))
+        if (root.has("settingsEmiReminders")) editor.putBoolean("settings_emi_reminders", root.optBoolean("settingsEmiReminders", true))
+        if (root.has("settingsMonthlySummary")) editor.putBoolean("settings_monthly_summary", root.optBoolean("settingsMonthlySummary", false))
+        if (root.has("userReportedCreditScore")) {
+            val restoredScore = root.optInt("userReportedCreditScore", 0)
+            if (restoredScore in 300..900) editor.putInt("user_reported_credit_score", restoredScore)
+            else editor.remove("user_reported_credit_score")
+        }
+        root.optJSONObject("monthlyCategoryBudgets")?.let { editor.putString("monthly_category_budgets", it.toString()) }
+        prefs.all.keys.filter { key -> key.startsWith("bank_schedule_") || key.startsWith("loan_document_metadata_") || key.startsWith("emi_status_") || key.startsWith("emi_amount_") || key.startsWith("emi_rescheduled_") }.forEach { editor.remove(it) }
+        root.optJSONObject("bankSchedules")?.let { schedules ->
+            val keys = schedules.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                if (key.startsWith("bank_schedule_")) editor.putString(key, schedules.optJSONArray(key)?.toString() ?: "[]")
+            }
+        }
+        root.optJSONObject("loanDocumentMetadata")?.let { metadata ->
+            val keys = metadata.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                if (key.startsWith("loan_document_metadata_")) editor.putString(key, metadata.optString(key, "{}"))
+            }
+        }
+        root.optJSONObject("emiPreferences")?.let { saved ->
+            val keys = saved.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val value = saved.opt(key)
+                when {
+                    key.startsWith("emi_amount_") && value is Number -> editor.putLong(key, value.toLong())
+                    (key.startsWith("emi_status_") || key.startsWith("emi_rescheduled_")) && value is String -> editor.putString(key, value)
+                }
+            }
+        }
+        editor.apply()
+        // The restored SharedPreferences schedule is the compatibility source of truth.
+        // Remove old Room rows so a pre-restore schedule cannot override restored loan data.
+        financeScope.launch {
+            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val dao = LoanScheduleDatabase.get(context).loanScheduleDao()
+                (loans.map { it.lender } + restoredLoans.map { it.lender }).distinctBy { it.lowercase(Locale.ROOT) }.forEach { lender ->
+                    dao.deleteLoanSchedules(lender)
+                    dao.deleteLoanDocuments(lender)
+                }
+            }
+        }
+        transactions = restoredTransactions
+        loans = restoredLoans
+        moneyNotes = loadMoneyNotes(context)
+        categoryRefreshToken++
+        applyAppearance(
+            prefs.getString("appearance_theme", "Light") ?: "Light",
+            prefs.getString("appearance_accent", "Green") ?: "Green",
+            prefs.getString("appearance_layout", "Comfortable") ?: "Comfortable",
+            prefs.getString("appearance_font_size", "Medium") ?: "Medium",
+            systemDark,
+            prefs.getString("appearance_custom_accent", "#9333EA") ?: "#9333EA"
+        )
+        saveTransactions(context, transactions)
+        saveLoans(context, loans)
+        importMessage = "Backup restored: ${transactions.size} transactions, ${loans.size} loans, ${moneyNotes.size} money notes, categories, tags and supported settings."
+
+        }
+        result.onFailure { importMessage = it.message ?: "Backup restore failed." }
+        return result.isSuccess
+    }
     val backupRestoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) runCatching {
             val raw = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                 ?: error("Could not read the selected backup.")
-            val root = JSONObject(raw)
-            require(root.optString("format") == "open-finance-backup") { "This file is not an Open Finance backup." }
-            val restoredTransactions = root.getJSONArray("transactions").let { a ->
-                (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
-                    Transaction(j.getString("title"), j.optString("category", "Other"), j.optString("date", "Today"),
-                        j.getLong("amount"), j.optBoolean("income"), j.optString("source"), j.optString("notificationKey"),
-                        j.optString("captureStatus"), j.optString("paymentMethod", "Not set"), j.optString("notes"), j.optString("tag", ""), j.optString("loanLender", ""), j.optString("emiInstallmentDate", ""), j.optString("transactionKind", ""), j.optLong("loanPrincipalReduction", 0L),
-                        j.optLong("loanInterestPortion", 0L), j.optBoolean("loanPaymentCounted", false),
-                        j.optBoolean("loanAllocationRecorded", false), j.optLong("loanReceiptPrincipalAdded", 0L),
-                        j.optString("categoryOrigin", CategoryOrigin.UNKNOWN), j.optString("loanId", ""))
-                } }
-            }
-            val restoredLoans = root.optJSONArray("loans")?.let { a ->
-                (0 until a.length()).map { i -> a.getJSONObject(i).let { j ->
-                    Loan(j.getString("lender"), j.getLong("balance"), j.getLong("emi"), j.optString("due", "Not set"), j.optDouble("annualRate", 0.0), j.optLong("originalPrincipal", j.getLong("balance")), j.optLong("paymentsMade", 0L), j.optLong("totalPayments", 0L), j.optString("borrowerName", ""), j.optString("agreementNumber", ""),
-                        j.optString("loanNumber", ""), j.optString("startDate", j.optString("due", "")), j.optString("id", ""))
-                } }
-            } ?: emptyList()
-            val prefs = context.getSharedPreferences("open_finance_data", android.content.Context.MODE_PRIVATE)
-            val editor = prefs.edit()
-            root.optJSONArray("moneyNotes")?.let { editor.putString("money_notes", it.toString()) }
-            root.optJSONArray("categories")?.let { editor.putString("custom_categories", it.toString()) }
-            root.optJSONArray("tags")?.let { editor.putString("custom_tags", it.toString()) }
-            root.optJSONArray("creditCards")?.let { editor.putString("cc_cards_v2", it.toString()) }
-            root.optJSONArray("creditCardBills")?.let { editor.putString("cc_bills_v2", it.toString()) }
-            root.optJSONArray("creditCardPayments")?.let { editor.putString("cc_payments_v2", it.toString()) }
-            if (root.has("creditCards") || root.has("creditCardBills") || root.has("creditCardPayments")) {
-                editor.putBoolean("cc_amounts_are_paise", root.optString("creditCardAmountUnit", "RUPEES") == "PAISE")
-            }
-            root.optJSONObject("creditCardReminders")?.let { reminders ->
-                if (reminders.has("7Days")) editor.putBoolean("cc_reminder_7", reminders.optBoolean("7Days", true))
-                if (reminders.has("3Days")) editor.putBoolean("cc_reminder_3", reminders.optBoolean("3Days", true))
-                if (reminders.has("1Day")) editor.putBoolean("cc_reminder_1", reminders.optBoolean("1Day", true))
-            }
-            if (root.has("appearanceTheme")) editor.putString("appearance_theme", root.optString("appearanceTheme", "Light"))
-            if (root.has("appearanceCurrency")) editor.putString("appearance_currency", root.optString("appearanceCurrency", "INR (₹)"))
-            if (root.has("appearanceAccent")) editor.putString("appearance_accent", root.optString("appearanceAccent", "Green"))
-            if (root.has("appearanceLayout")) editor.putString("appearance_layout", root.optString("appearanceLayout", "Comfortable"))
-            if (root.has("appearanceFontSize")) editor.putString("appearance_font_size", root.optString("appearanceFontSize", "Medium"))
-            if (root.has("appearanceCustomAccent")) editor.putString("appearance_custom_accent", root.optString("appearanceCustomAccent", "#9333EA"))
-            if (root.has("settingsBudgetAlerts")) editor.putBoolean("settings_budget_alerts", root.optBoolean("settingsBudgetAlerts", true))
-            if (root.has("settingsEmiReminders")) editor.putBoolean("settings_emi_reminders", root.optBoolean("settingsEmiReminders", true))
-            if (root.has("settingsMonthlySummary")) editor.putBoolean("settings_monthly_summary", root.optBoolean("settingsMonthlySummary", false))
-            if (root.has("userReportedCreditScore")) {
-                val restoredScore = root.optInt("userReportedCreditScore", 0)
-                if (restoredScore in 300..900) editor.putInt("user_reported_credit_score", restoredScore)
-                else editor.remove("user_reported_credit_score")
-            }
-            root.optJSONObject("monthlyCategoryBudgets")?.let { editor.putString("monthly_category_budgets", it.toString()) }
-            prefs.all.keys.filter { key -> key.startsWith("bank_schedule_") || key.startsWith("loan_document_metadata_") || key.startsWith("emi_status_") || key.startsWith("emi_amount_") || key.startsWith("emi_rescheduled_") }.forEach { editor.remove(it) }
-            root.optJSONObject("bankSchedules")?.let { schedules ->
-                val keys = schedules.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    if (key.startsWith("bank_schedule_")) editor.putString(key, schedules.optJSONArray(key)?.toString() ?: "[]")
-                }
-            }
-            root.optJSONObject("loanDocumentMetadata")?.let { metadata ->
-                val keys = metadata.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    if (key.startsWith("loan_document_metadata_")) editor.putString(key, metadata.optString(key, "{}"))
-                }
-            }
-            root.optJSONObject("emiPreferences")?.let { saved ->
-                val keys = saved.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    val value = saved.opt(key)
-                    when {
-                        key.startsWith("emi_amount_") && value is Number -> editor.putLong(key, value.toLong())
-                        (key.startsWith("emi_status_") || key.startsWith("emi_rescheduled_")) && value is String -> editor.putString(key, value)
-                    }
-                }
-            }
-            editor.apply()
-            // The restored SharedPreferences schedule is the compatibility source of truth.
-            // Remove old Room rows so a pre-restore schedule cannot override restored loan data.
-            financeScope.launch {
-                withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val dao = LoanScheduleDatabase.get(context).loanScheduleDao()
-                    (loans.map { it.lender } + restoredLoans.map { it.lender }).distinctBy { it.lowercase(Locale.ROOT) }.forEach { lender ->
-                        dao.deleteLoanSchedules(lender)
-                        dao.deleteLoanDocuments(lender)
-                    }
-                }
-            }
-            transactions = restoredTransactions
-            loans = restoredLoans
-            moneyNotes = loadMoneyNotes(context)
-            categoryRefreshToken++
-            applyAppearance(
-                prefs.getString("appearance_theme", "Light") ?: "Light",
-                prefs.getString("appearance_accent", "Green") ?: "Green",
-                prefs.getString("appearance_layout", "Comfortable") ?: "Comfortable",
-                prefs.getString("appearance_font_size", "Medium") ?: "Medium",
-                systemDark,
-                prefs.getString("appearance_custom_accent", "#9333EA") ?: "#9333EA"
-            )
-            saveTransactions(context, transactions)
-            saveLoans(context, loans)
-            importMessage = "Backup restored: ${transactions.size} transactions, ${loans.size} loans, ${moneyNotes.size} money notes, categories, tags and supported settings."
+            restoreBackupJson(raw)
         }.onFailure { importMessage = it.message ?: "Backup restore failed." }
     }
     val income = transactions.filter { it.income }.sumOf { it.amount }
@@ -1232,15 +1309,76 @@ private fun FinanceApp() {
                     "Backup & Export" -> BackupSecurityScreen(
                         onExportBackup = { backupExportLauncher.launch("open-finance-backup.json") },
                         onConnectDrive = { openGoogleDriveForConnection() },
+                        onConnectOneDrive = { beginOneDriveConnection() },
+                        onDisconnectOneDrive = {
+                            OneDriveAuth.disconnect(context)
+                            oneDriveConnected = false
+                            driveStatus = "OneDrive disconnected."
+                            drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
+                            scheduleAutomaticBackup(context, updateExisting = true)
+                        },
+                        oneDriveConnected = oneDriveConnected,
+                        oneDriveDeviceCode = oneDriveDeviceCode,
+                        oneDriveBackupItems = oneDriveBackupItems,
+                        isLoadingOneDriveBackups = isLoadingOneDriveBackups,
+                        onLoadOneDriveBackups = {
+                            financeScope.launch {
+                                isLoadingOneDriveBackups = true
+                                try {
+                                    oneDriveBackupItems = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        OneDriveGraph.listBackups(context)
+                                    }
+                                    if (oneDriveBackupItems.isEmpty()) driveStatus = "No OneDrive backups found yet."
+                                } catch (error: Exception) {
+                                    driveStatus = "Could not load OneDrive backups: " + (error.message ?: "unknown error")
+                                } finally {
+                                    isLoadingOneDriveBackups = false
+                                }
+                            }
+                        },
+                        onRestoreOneDriveBackup = { item ->
+                            financeScope.launch {
+                                driveStatus = "Downloading " + item.name + " from OneDrive..."
+                                try {
+                                    val raw = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        OneDriveGraph.downloadBackup(context, item.id)
+                                    }
+                                    if (restoreBackupJson(raw)) {
+                                        driveStatus = "OneDrive backup restored: " + item.name
+                                        drivePrefs.edit().putString("drive_backup_status", driveStatus).apply()
+                                    } else {
+                                        driveStatus = "The OneDrive file was downloaded, but MoneyLog could not restore it. Check the restore message."
+                                    }
+                                } catch (error: Exception) {
+                                    driveStatus = "OneDrive restore failed: " + (error.message ?: "unknown error")
+                                }
+                            }
+                        },
+                        onOpenOneDriveSignIn = {
+                            oneDriveDeviceCode?.let { code ->
+                                context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(code.verificationUri)))
+                            }
+                        },
+                        onCancelOneDriveSignIn = { oneDriveDeviceCode = null },
                         onChooseDeviceFolder = { deviceFolderPicker.launch(null) },
                         onBackupNow = {
                             val destination = drivePrefs.getString("automatic_backup_destination", "device") ?: "device"
                             val folderKey = if (destination == "drive") "drive_backup_tree_uri" else "device_backup_tree_uri"
-                            if (drivePrefs.getString(folderKey, null).isNullOrBlank()) {
-                                driveStatus = if (destination == "drive") "Connect a Google Drive folder first." else "Choose a device backup folder first."
+                            val connected = when (destination) {
+                                "drive" -> !drivePrefs.getString(folderKey, null).isNullOrBlank()
+                                "onedrive" -> oneDriveConnected && BuildConfig.MICROSOFT_CLIENT_ID.isNotBlank()
+                                else -> !drivePrefs.getString(folderKey, null).isNullOrBlank()
+                            }
+                            if (!connected) {
+                                driveStatus = when (destination) {
+                                    "drive" -> "Connect a Google Drive folder first."
+                                    "onedrive" -> "Connect OneDrive first."
+                                    else -> "Choose a device backup folder first."
+                                }
                             } else {
                                 val workManager = androidx.work.WorkManager.getInstance(context)
-                                val request = androidx.work.OneTimeWorkRequestBuilder<GoogleDriveBackupWorker>().build()
+                                val workerClass = if (destination == "onedrive") OneDriveBackupWorker::class.java else GoogleDriveBackupWorker::class.java
+                                val request = androidx.work.OneTimeWorkRequest.Builder(workerClass).build()
                                 workManager.enqueueUniqueWork(
                                     "moneylog_manual_backup",
                                     androidx.work.ExistingWorkPolicy.REPLACE,
@@ -4564,6 +4702,16 @@ private fun CreditHealthScreen() {
 private fun BackupSecurityScreen(
     onExportBackup: () -> Unit,
     onConnectDrive: () -> Unit,
+    onConnectOneDrive: () -> Unit,
+    onDisconnectOneDrive: () -> Unit,
+    oneDriveConnected: Boolean,
+    oneDriveDeviceCode: OneDriveDeviceCode?,
+    oneDriveBackupItems: List<OneDriveBackupItem>,
+    isLoadingOneDriveBackups: Boolean,
+    onLoadOneDriveBackups: () -> Unit,
+    onRestoreOneDriveBackup: (OneDriveBackupItem) -> Unit,
+    onOpenOneDriveSignIn: () -> Unit,
+    onCancelOneDriveSignIn: () -> Unit,
     onChooseDeviceFolder: () -> Unit,
     onBackupNow: () -> Unit,
     driveStatus: String,
@@ -4578,6 +4726,7 @@ private fun BackupSecurityScreen(
     var backupDestination by remember { mutableStateOf(backupPreferences.getString("automatic_backup_destination", "device") ?: "device") }
     var backupScheduleMessage by remember { mutableStateOf("") }
     var backupDisplayStatus by remember { mutableStateOf(driveStatus) }
+    var showOneDriveRestoreDialog by remember { mutableStateOf(false) }
     LaunchedEffect(driveStatus) { backupDisplayStatus = driveStatus }
     LaunchedEffect(Unit) {
         backupDisplayStatus = backupPreferences.getString("drive_backup_status", driveStatus) ?: driveStatus
@@ -4622,17 +4771,20 @@ private fun BackupSecurityScreen(
                     }
                     Text("Destination", color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("device" to "Device", "drive" to "Google Drive").forEach { (value, label) ->
+                        listOf("device" to "Device", "drive" to "Google Drive", "onedrive" to "OneDrive").forEach { (value, label) ->
                             val selected = backupDestination == value
-                            Surface(onClick = { backupDestination = value; backupPreferences.edit().putString("automatic_backup_destination", value).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext, updateExisting = true) },
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                onClick = { backupDestination = value; backupPreferences.edit().putString("automatic_backup_destination", value).apply(); backupScheduleMessage = scheduleAutomaticBackup(backupContext, updateExisting = true) },
                                 color = if (selected) Green else Page, shape = RoundedCornerShape(12.dp),
                                 border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Muted.copy(alpha = .25f))) {
-                                Text(label, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp),
-                                    color = if (selected) Color.White else Ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(label, modifier = Modifier.padding(horizontal = 5.dp, vertical = 10.dp),
+                                    color = if (selected) Color.White else Ink, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
                             }
                         }
                     }
-                    Text(if (!automaticBackup) "Automatic backup is off." else "Enabled: ${backupFrequency} · ${if (backupDestination == "device") "Local device" else "Google Drive"}",
+                    val destinationLabel = when (backupDestination) { "drive" -> "Google Drive"; "onedrive" -> "OneDrive"; else -> "Local device" }
+                    Text(if (!automaticBackup) "Automatic backup is off." else "Enabled: ${backupFrequency} · $destinationLabel",
                         color = Muted, fontSize = 11.sp)
                     Text(backupScheduleMessage.ifBlank { if (automaticBackup) "Automatic backup schedule is active." else "Enable automatic backup to create recurring backups." }, color = Muted, fontSize = 11.sp)
                 }
@@ -4645,15 +4797,29 @@ private fun BackupSecurityScreen(
                         Icon(Icons.Default.CloudSync, null, tint = IncomeGreen, modifier = Modifier.size(26.dp))
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(if (backupDestination == "drive") "Google Drive automatic backup" else "Device automatic backup", color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(when (backupDestination) { "drive" -> "Google Drive automatic backup"; "onedrive" -> "OneDrive automatic backup"; else -> "Device automatic backup" }, color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             Text(backupDisplayStatus, color = Muted, fontSize = 12.sp)
                         }
                     }
-                    Text(if (backupDestination == "drive") "Choose a private Google Drive folder for cloud backups. The frequency selected above controls the schedule; MoneyLog keeps up to 30 recent backup files in that folder." else "Choose a folder on this device. MoneyLog creates dated JSON backups there using your selected schedule and keeps up to 30 recent files.", color = Muted, fontSize = 12.sp)
-                    if (backupDestination == "device") {
-                        OutlinedButton(onClick = onChooseDeviceFolder, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Choose device backup folder") }
-                    } else {
-                        OutlinedButton(onClick = onConnectDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Connect Google Drive folder") }
+                    Text(when (backupDestination) {
+                        "drive" -> "Google Drive backups use the folder you select. MoneyLog keeps the latest 30 backup files."
+                        "onedrive" -> "OneDrive backups are saved in a private MoneyLog Backups folder. MoneyLog keeps the latest 30 backup files."
+                        else -> "Choose a folder on this device. MoneyLog creates dated JSON backups there and keeps the latest 30 files."
+                    }, color = Muted, fontSize = 12.sp)
+                    when (backupDestination) {
+                        "device" -> OutlinedButton(onClick = onChooseDeviceFolder, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Choose device backup folder") }
+                        "drive" -> OutlinedButton(onClick = onConnectDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Connect Google Drive folder") }
+                        else -> {
+                            if (oneDriveConnected) {
+                                OutlinedButton(onClick = onDisconnectOneDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.CloudDone, null); Spacer(Modifier.width(8.dp)); Text("Disconnect OneDrive") }
+                                OutlinedButton(onClick = { showOneDriveRestoreDialog = true; onLoadOneDriveBackups() }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Restore, null); Spacer(Modifier.width(8.dp)); Text("Restore from OneDrive") }
+                            } else {
+                                OutlinedButton(onClick = onConnectOneDrive, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Cloud, null); Spacer(Modifier.width(8.dp)); Text("Connect OneDrive") }
+                            }
+                            if (BuildConfig.MICROSOFT_CLIENT_ID.isBlank()) {
+                                Text("OneDrive sign-in requires the Microsoft application Client ID to be added to the build configuration.", color = Muted, fontSize = 11.sp)
+                            }
+                        }
                     }
                     Button(onClick = onBackupNow, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Green)) { Icon(Icons.Default.CloudUpload, null); Spacer(Modifier.width(8.dp)); Text("Back up now") }
                 }
@@ -4725,11 +4891,62 @@ private fun BackupSecurityScreen(
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text("Your data stays on your device", color = Teal, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text("Google Drive backups are saved only after you connect a folder and grant access. Exported files contain sensitive financial information—store them somewhere private.", color = Ink, fontSize = 12.sp)
+                        Text("Cloud backups are uploaded only after you connect the selected account. Backup files contain sensitive financial information and are not encrypted by MoneyLog; keep your cloud account protected.", color = Ink, fontSize = 12.sp)
                     }
                 }
             }
         }
+    }
+    if (showOneDriveRestoreDialog) {
+        AlertDialog(
+            onDismissRequest = { showOneDriveRestoreDialog = false },
+            title = { Text("Restore from OneDrive") },
+            text = {
+                Column(
+                    modifier = Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (isLoadingOneDriveBackups) {
+                        CircularProgressIndicator()
+                        Text("Loading your OneDrive backups...")
+                    } else if (oneDriveBackupItems.isEmpty()) {
+                        Text("No MoneyLog backups were found in your OneDrive backup folder.")
+                    } else {
+                        oneDriveBackupItems.forEach { item ->
+                            TextButton(
+                                onClick = {
+                                    showOneDriveRestoreDialog = false
+                                    onRestoreOneDriveBackup(item)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(Modifier.fillMaxWidth()) {
+                                    Text(item.name, color = Ink, fontWeight = FontWeight.SemiBold)
+                                    Text(item.modified, color = Muted, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { onLoadOneDriveBackups() }) { Text("Refresh") } },
+            dismissButton = { TextButton(onClick = { showOneDriveRestoreDialog = false }) { Text("Close") } }
+        )
+    }
+    if (oneDriveDeviceCode != null) {
+        AlertDialog(
+            onDismissRequest = onCancelOneDriveSignIn,
+            title = { Text("Connect OneDrive") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Open Microsoft's sign-in page and enter this one-time code:")
+                    Text(oneDriveDeviceCode.userCode, color = Green, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text(oneDriveDeviceCode.message, color = Muted, fontSize = 12.sp)
+                }
+            },
+            confirmButton = { TextButton(onClick = onOpenOneDriveSignIn) { Text("Open Microsoft sign-in") } },
+            dismissButton = { TextButton(onClick = onCancelOneDriveSignIn) { Text("Cancel") } }
+        )
     }
 }
 @Composable
