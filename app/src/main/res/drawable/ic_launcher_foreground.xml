@@ -4,10 +4,10 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Compact adaptive-icon artwork: keep the full mark within the launcher safe area. -->
+    <!-- Slightly enlarged adaptive-icon artwork, kept inside the Android launcher safe area. -->
     <group
-        android:scaleX="0.86"
-        android:scaleY="0.86"
+        android:scaleX="0.90"
+        android:scaleY="0.90"
         android:pivotX="54"
         android:pivotY="54">
 
