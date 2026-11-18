@@ -6706,20 +6706,42 @@ private fun TransactionNoteDialog(
     onSave: (String) -> Unit
 ) {
     var note by remember(initialNote) { mutableStateOf(initialNote) }
+    val remaining = 500 - note.length
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add note") },
-        text = {
-            OutlinedTextField(
-                value = note,
-                onValueChange = { note = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Enter a note for this transaction") },
-                minLines = 3,
-                maxLines = 5
-            )
+        shape = RoundedCornerShape(26.dp),
+        containerColor = appGlassSurface(),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.size(42.dp).clip(CircleShape).background(SkyTint), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.EditNote, contentDescription = null, tint = Blue)
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(if (initialNote.isBlank()) "Add transaction note" else "Edit transaction note", color = Ink, fontWeight = FontWeight.Bold)
+                    Text("Keep a private reminder with this transaction", color = Muted, fontSize = 11.sp)
+                }
+            }
         },
-        confirmButton = { TextButton(onClick = { onSave(note.trim()) }) { Text("Save note") } },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { if (it.length <= 500) note = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("e.g. Paid back for dinner, receipt number…") },
+                    minLines = 4,
+                    maxLines = 6,
+                    shape = RoundedCornerShape(16.dp),
+                    leadingIcon = { Icon(Icons.Default.Notes, null, tint = Muted) }
+                )
+                Text("$remaining characters remaining", color = Muted, fontSize = 11.sp, modifier = Modifier.align(Alignment.End))
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(note.trim()) }, shape = RoundedCornerShape(12.dp)) {
+                Icon(Icons.Default.Check, null); Spacer(Modifier.width(6.dp)); Text("Save note")
+            }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
@@ -6744,81 +6766,122 @@ private fun TransactionTagDialog(
             .filter { it.isNotBlank() }
             .distinctBy { it.lowercase(Locale.ROOT) }
     }
-    var options by remember(initialTags) {
-        mutableStateOf(
-            (store.loadTags() + initialSelected)
-                .filter { it.isNotBlank() }
-                .distinctBy { it.trim().lowercase(Locale.ROOT) }
-        )
+    val savedOptions = remember(initialTags) {
+        store.loadTags().filter { it.isNotBlank() }.distinctBy { it.trim().lowercase(Locale.ROOT) }
     }
     var selected by remember(initialTags) { mutableStateOf(initialSelected) }
-    var temporaryTag by remember { mutableStateOf("") }
+    var search by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
+    val query = search.trim().removePrefix("#").trim()
+    val filtered = savedOptions.filter { query.isBlank() || it.contains(query, ignoreCase = true) }
+    val exactSaved = savedOptions.firstOrNull { it.equals(query, ignoreCase = true) }
+    val alreadySelected = selected.any { it.equals(query, ignoreCase = true) }
+    val canCreateTemporary = query.isNotBlank() && exactSaved == null && !alreadySelected
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select tags") },
-        text = {
-            Column(
-                Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(9.dp)
-            ) {
-                Text("Choose existing tags", color = Muted, fontSize = 12.sp)
-                Column(
-                    Modifier.fillMaxWidth().heightIn(max = 230.dp).verticalScroll(rememberScrollState())
-                ) {
-                    options.forEach { option ->
-                        Row(
-                            Modifier.fillMaxWidth().clickable {
-                                selected = if (option in selected) selected - option else selected + option
-                            }.padding(vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = option in selected,
-                                onCheckedChange = { checked ->
-                                    selected = if (checked) (selected + option).distinct() else selected - option
-                                }
-                            )
-                            Text(option, color = Ink, fontSize = 14.sp)
-                        }
-                    }
-                    if (options.isEmpty()) Text("No saved tags yet. Create a temporary tag below.", color = Muted, fontSize = 12.sp)
+        shape = RoundedCornerShape(26.dp),
+        containerColor = appGlassSurface(),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.size(42.dp).clip(CircleShape).background(LavenderTint), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.LocalOffer, contentDescription = null, tint = Purple)
                 }
-                OutlinedTextField(
-                    value = temporaryTag,
-                    onValueChange = { temporaryTag = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Temporary tag name") },
-                    singleLine = true
-                )
-                TextButton(
-                    onClick = {
-                        val name = temporaryTag.trim().removePrefix("#").trim()
-                        if (name.isBlank()) {
-                            error = "Enter a tag name."
-                        } else {
-                            val existing = options.firstOrNull { it.equals(name, ignoreCase = true) }
-                            if (existing != null) {
-                                selected = (selected + existing).distinct()
-                            } else {
-                                options = options + name
-                                selected = (selected + name).distinct()
-                            }
-                            temporaryTag = ""
-                            error = ""
-                        }
-                    }
-                ) { Text("+ Add temporary tag") }
-                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
-                Text(
-                    "Temporary tags are saved only on this transaction. They are not added to Tag Management.",
-                    color = Muted,
-                    fontSize = 11.sp
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Add tags", color = Ink, fontWeight = FontWeight.Bold)
+                    Text("Choose saved tags or create one for this transaction", color = Muted, fontSize = 11.sp)
+                }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(selected.joinToString(", ")) }) { Text("Apply tags") } },
+        text = {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = search,
+                    onValueChange = { search = it; error = "" },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Search or type a tag name") },
+                    placeholder = { Text("e.g. Family, Travel, Reimbursement") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(15.dp),
+                    leadingIcon = { Icon(Icons.Default.Search, null, tint = Muted) },
+                    trailingIcon = {
+                        if (search.isNotBlank()) IconButton(onClick = { search = "" }) {
+                            Icon(Icons.Default.Close, "Clear search", tint = Muted)
+                        }
+                    }
+                )
+                if (selected.isNotEmpty()) {
+                    Text("SELECTED · ${selected.size}", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        selected.forEach { tag ->
+                            Surface(shape = RoundedCornerShape(50), color = LavenderTint) {
+                                Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Icon(Icons.Default.LocalOffer, null, tint = Purple, modifier = Modifier.size(13.dp))
+                                    Text(tag, color = Ink, fontSize = 11.sp)
+                                    Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(13.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+                Text("AVAILABLE TAGS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Column(Modifier.fillMaxWidth().heightIn(max = 210.dp).verticalScroll(rememberScrollState())) {
+                    filtered.forEach { option ->
+                        val checked = selected.any { it.equals(option, ignoreCase = true) }
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable {
+                                selected = if (checked) selected.filterNot { it.equals(option, ignoreCase = true) }
+                                    else (selected + option).distinctBy { it.lowercase(Locale.ROOT) }
+                            }.padding(horizontal = 7.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(9.dp)
+                        ) {
+                            Box(Modifier.size(34.dp).clip(CircleShape).background(categoryTint(option)), contentAlignment = Alignment.Center) {
+                                Icon(financeIcon(financeIconKeyForName(option)), contentDescription = option, tint = categoryColor(option), modifier = Modifier.size(18.dp))
+                            }
+                            Text(option, color = Ink, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Checkbox(checked = checked, onCheckedChange = { value ->
+                                selected = if (value) (selected + option).distinctBy { it.lowercase(Locale.ROOT) }
+                                    else selected.filterNot { it.equals(option, ignoreCase = true) }
+                            })
+                        }
+                    }
+                    if (filtered.isEmpty() && !canCreateTemporary) {
+                        Text("No matching saved tags.", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
+                    }
+                }
+                if (canCreateTemporary) {
+                    OutlinedButton(
+                        onClick = {
+                            selected = (selected + query).distinctBy { it.lowercase(Locale.ROOT) }
+                            search = ""
+                            error = ""
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(13.dp)
+                    ) {
+                        Icon(financeIcon(financeIconKeyForName(query)), null, tint = Purple)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Create and select “$query”")
+                    }
+                    Text("This tag will be attached only to this transaction. It will not be added to Tag Management.", color = Muted, fontSize = 10.sp)
+                }
+                if (exactSaved != null && !alreadySelected) {
+                    TextButton(onClick = {
+                        selected = (selected + exactSaved).distinctBy { it.lowercase(Locale.ROOT) }
+                        search = ""
+                    }) {
+                        Icon(Icons.Default.LocalOffer, null); Spacer(Modifier.width(5.dp)); Text("Select $exactSaved")
+                    }
+                }
+                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(selected.joinToString(", ")) }, shape = RoundedCornerShape(12.dp)) {
+                Icon(Icons.Default.Check, null); Spacer(Modifier.width(6.dp)); Text("Apply tags")
+            }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
