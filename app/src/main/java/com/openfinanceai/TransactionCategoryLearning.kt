@@ -40,14 +40,40 @@ internal object TransactionCategoryLearning {
         }
     }
 
+    /** Pure exact-title lookup. Manual choices and income are never overwritten. */
+    internal fun categoryFor(
+        title: String,
+        automaticCategory: String,
+        learnedCategories: Map<String, String>,
+        categoryOrigin: String = CategoryOrigin.AUTO,
+        income: Boolean = false
+    ): String {
+        if (income || categoryOrigin == CategoryOrigin.MANUAL) return automaticCategory
+        return learnedCategories[normalize(title)]?.takeIf { it.isNotBlank() } ?: automaticCategory
+    }
+
+    private fun mappingMap(context: Context): Map<String, String> {
+        val json = mappings(context)
+        return buildMap {
+            val keys = json.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                json.optString(key).takeIf { it.isNotBlank() }?.let { put(key, it) }
+            }
+        }
+    }
+
+    /** Resolves a new row's automatic category using the user's saved exact-title preference. */
+    fun categoryFor(context: Context, title: String, automaticCategory: String, income: Boolean): String =
+        categoryFor(title, automaticCategory, mappingMap(context), CategoryOrigin.AUTO, income)
+
     /** Applies previously learned exact-title categories to newly imported transactions. */
     fun apply(context: Context, transactions: List<Transaction>): List<Transaction> {
-        val learned = mappings(context)
-        if (learned.length() == 0) return transactions
+        val learned = mappingMap(context)
+        if (learned.isEmpty()) return transactions
         return transactions.map { row ->
-            if (row.income) row else learned.optString(normalize(row.title)).takeIf { it.isNotBlank() }?.let { category ->
-                if (row.category == category) row else row.copy(category = category, categoryOrigin = CategoryOrigin.MANUAL)
-            } ?: row
+            val category = categoryFor(row.title, row.category, learned, row.categoryOrigin, row.income)
+            if (category == row.category) row else row.copy(category = category, categoryOrigin = CategoryOrigin.MANUAL)
         }
     }
 }
