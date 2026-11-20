@@ -76,7 +76,9 @@ internal object SmsTransactionImporter {
         }
         val newRow = JSONObject()
             .put("title", title)
-            .put("category", categorize(context, sender, body, parsed).category)
+            .put("category", TransactionCategoryLearning.categoryFor(
+                context, title, categorize(context, sender, body, parsed).category, parsed.income
+            ))
             .put("date", parsed.date)
             .put("amount", parsed.amount)
             .put("income", parsed.income)
